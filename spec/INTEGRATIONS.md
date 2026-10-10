@@ -93,9 +93,26 @@ Central stores each authorized operation in Resource Action before dispatch. Atl
 
 Scoped regional reads confirm VM state and repair interrupted local finalization. A failed read does not prove deletion. A scoped not-found response can confirm deletion and trigger local credential and billing cleanup.
 
-Central builds the automatic management address itself. The regional proxy decodes a VM's mesh address from its hostname label, so Central encodes the same label from the observed mesh address and the region's proxy domain. The tenant API does not publish the regional zone, so an operator sets `proxy_domain` on [Region](../central/infrastructure/doctype/region/SPEC.md). A management address alone does not prove Pilot readiness. Pilot creation also receives credential-bound `pilot-central` metadata and `pilot-telemetry` metadata when the region has a telemetry host. The region's host refuses guest metadata with more than 64 entries, a key longer than 128 bytes, or a value longer than 1024 bytes. `AtlasClient.create_vm` refuses the same metadata before it calls Atlas, because Atlas saves a draft machine before the host rejects the request.
+Central builds the automatic management address itself. The regional proxy decodes a VM's mesh address from its hostname label, so Central encodes the same label from the observed mesh address and the region's proxy domain. The tenant API does not publish the regional zone, so an operator sets `proxy_domain` on [Region](../central/infrastructure/doctype/region/SPEC.md). A management address alone does not prove Pilot readiness. Pilot creation also receives credential-bound `pilot-central` metadata and `pilot-common-config` metadata with the telemetry settings when the region has a telemetry host. When Central Settings has a **Common Site Config**, every server also gets it as `pilot-common-site-config`, which Pilot merges into `sites/common_site_config.json` at bootstrap, such as an app's relay URL. The customer can read it, so it never holds a secret. When the region links an enabled **FrappeMail Service**, Central takes a ready mailbox from that service's pool, records it as a **User Mail Account** for the creation, and adds its SMTP settings to `pilot-common-site-config`: the SMTP server on port 587 with STARTTLS, the mailbox as login and sender, and `always_use_account_email_id_as_sender`. Pilot and every site then send mail through it. The password belongs to that one server. An empty pool fails the creation. A job every 5 minutes fills the pool to the service's minimum with send-only mailboxes, named `notifications-<hash>@<domain>`, through the Suite site's admin API. It adds at most 50 in one run. Central removes a server's mailbox from the Suite site when the server is terminated. Atlas refuses guest metadata with more than 16 entries or more than 48 KiB as compact JSON, and the region's host refuses a key longer than 128 bytes. `AtlasClient.create_vm` refuses the same metadata before it calls Atlas, because Atlas saves a draft machine before the host rejects a key.
 
 See [Resource Action](../central/infrastructure/doctype/resource_action/SPEC.md) for states, authorization, recovery, accepted quotes, and customer responses.
+
+## How does a site prove its team to an outside service?
+
+An app on a site, such as Raven, asks Central for a token through Pilot's Central proxy: `central.api.pilot.get_team_identity_token(audience)`. Pilot's credential names the team, so a site cannot get a token for another team.
+
+`get_team_identity_token` returns a token that Central signs with its Pilot key. The token is valid for 5 minutes. Central stores no account and no secret for the outside service.
+
+| Claim | Value |
+|---|---|
+| `iss` | Central's issuer URL |
+| `aud` | The service URL that the site gave as `audience` |
+| `sub` | The team, such as `TEAM-00042` |
+| `team_name` | The team's name |
+| `scope` | `team-identity` |
+| `hosts` | The hostnames of the team's sites on the Pilot's server: each site's own address and its active Site Domain records. Empty when the credential has no server. |
+
+The service gets Central's public keys from `central.api.jwks.get_jwks` and verifies the signature, `iss`, `aud`, `exp` and `scope`. Then the service decides what access the team gets, for example a team account and its API keys. The Pilot credential names the team and its server, so a site cannot get a token for another team or for a hostname that the team does not serve. A service uses `hosts` to accept a site's hostname as the team's. A Pilot refuses a `team-identity` token as a login token.
 
 ## How does the trial flow work?
 
@@ -141,7 +158,7 @@ Record each operation separately from observed state and show a useful error on 
 
 An explicit stop sets the desired state to stopped. It is different from idle sleep, where desired state stays running. Customer traffic must not undo an explicit stop.
 
-A repeated running event cannot prove that a restart finished. Resource Action waits for one observed state change away from Running before Running can complete a restart. The region publishes no restart counter. An upstream restart-completion contract is open work. Do not mark false success.
+A restart completes when the region accepts it and Central then reads the server as Running. The host stores the restart before Atlas replies, and the region never reports a state other than running during a restart. A failed restart shows as an error on the server, which Central records as Failed.
 
 Opening Pilot uses a short-lived audience-bound token and the automatic admin name. Deny another Team's access.
 
@@ -155,7 +172,7 @@ Delete only after the customer confirms the action. Confirm remote absence, revo
 
 The current creation flow requires the Atlas VM API and automatic management hostname. Staging also needs current schema, key trust, a healthy host, available images, and wildcard DNS.
 
-Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size.
+Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size. When no host in the region can fit the new size, Atlas keeps the old size. Central then starts the server again if it was running, and fails the resize with `REGION_AT_CAPACITY`.
 
 Central verifies domain ownership and owns the proxy route through [Site Domain](../central/infrastructure/doctype/site_domain/SPEC.md). The regional proxy terminates TLS for a regional name. For a custom domain, the proxy passes TLS to the VM, and Pilot holds the certificate. Central does not issue or store certificates.
 

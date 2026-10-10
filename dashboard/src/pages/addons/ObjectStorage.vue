@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from 'frappe-ui'
+import { Button, Skeleton } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import BucketCard from '@/components/addons/storage/BucketCard.vue'
 import CreateBucketDialog from '@/components/addons/storage/CreateBucketDialog.vue'
@@ -14,7 +14,7 @@ import { regionLabel } from '@/lib/serverMap'
 import type { BucketCredentials } from '@/types/storage'
 
 const { setBreadcrumbs } = useBreadcrumbs()
-setBreadcrumbs([{ label: 'Object storage' }])
+setBreadcrumbs([{ label: 'Object Storage' }])
 
 const { canManageServices } = useCapabilities()
 const { regions, buckets, loading, error, reload } = useObjectStorage()
@@ -46,11 +46,7 @@ const canCreate = computed(
 
 		<div class="mx-auto w-full max-w-5xl p-3 md:p-4 lg:pt-8">
 			<div v-if="loading" class="grid gap-3 md:grid-cols-2" aria-busy="true">
-				<div
-					v-for="index in 4"
-					:key="index"
-					class="h-32 animate-pulse rounded-6 bg-surface-gray-2"
-				/>
+				<Skeleton v-for="index in 4" :key="index" class="h-32 rounded-6" />
 			</div>
 
 			<EmptyState
@@ -71,7 +67,7 @@ const canCreate = computed(
 				:description="
 					regions.length
 						? 'Create a bucket in a region near your servers. You get an S3 endpoint and a key that opens only that bucket.'
-						: 'Object storage is not available in any region yet.'
+						: 'Object Storage is not available in any region yet.'
 				"
 			>
 				<template v-if="canCreate" #action>

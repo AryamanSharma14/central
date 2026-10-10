@@ -1,10 +1,16 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
+from frappe.tests import IntegrationTestCase, set_user
 
 from central.api.identity import my_teams
-from central.api.teams import create_team, set_onboarding_step, skip_onboarding
+from central.api.teams import (
+	accept_invitation,
+	create_team,
+	invite_team_member,
+	set_onboarding_step,
+	skip_onboarding,
+)
 from central.site_provisioning import create_trial_team
 
 
@@ -94,6 +100,67 @@ class TestTeamCreation(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("Team", team, "owner_user"), self.owner)
 		self.assertIsNone(create_trial_team(self.owner))
 		self.assertEqual(frappe.db.count("Team", {"owner_user": self.owner}), 1)
+
+	@patch("frappe.sendmail")
+	def test_invited_member_reuses_the_team_without_another_welcome_grant(self, _sendmail):
+		team = create_team("Inviting Team")["name"]
+		with set_user("Administrator"):
+			member = create_user("invitee")
+		invitation = invite_team_member(team, member, "Admin")
+		credits_before = frappe.get_all("Credit Ledger Entry", filters={"team": team}, pluck="name")
+
+		with set_user(member):
+			self.assertEqual(accept_invitation(invitation)["team"], team)
+			self.assertIsNone(create_trial_team(member))
+
+		self.assertFalse(frappe.db.exists("Team", {"owner_user": member}))
+		self.assertCountEqual(
+			frappe.get_all("Credit Ledger Entry", filters={"team": team}, pluck="name"), credits_before
+		)
+
+	@patch("frappe.sendmail")
+	def test_invited_member_can_get_welcome_credits_for_their_own_first_team(self, _sendmail):
+		team = create_team("Inviting Team")["name"]
+		with set_user("Administrator"):
+			member = create_user("invitee")
+		invitation = invite_team_member(team, member, "Admin")
+
+		with set_user(member):
+			accept_invitation(invitation)
+			personal_team = create_team("Personal Team")["name"]
+
+		self.assertTrue(
+			frappe.db.exists("Credit Ledger Entry", {"team": personal_team, "reference_type": "Promotion"})
+		)
+
+	def test_the_trial_team_keeps_how_the_signup_first_arrived(self):
+		with set_user("Administrator"):
+			frappe.get_doc(
+				{"doctype": "Product", "product_key": "raven-touch", "title": "Raven", "signup_app": "raven"}
+			).insert()
+
+		team = create_trial_team(
+			self.owner,
+			{
+				"utm_source": " linkedin ",
+				"utm_campaign": "x" * 300,
+				"referrer": "https://frappe.io/raven",
+				"product": "raven-touch",
+			},
+		)
+
+		values = frappe.db.get_value(
+			"Team", team, ["utm_source", "utm_campaign", "referrer", "landing_product"], as_dict=True
+		)
+		self.assertEqual(values.utm_source, "linkedin")
+		self.assertEqual(len(values.utm_campaign), 140)
+		self.assertEqual(values.referrer, "https://frappe.io/raven")
+		self.assertEqual(values.landing_product, "raven-touch")
+
+	def test_an_unknown_landing_product_does_not_stop_the_team(self):
+		team = create_trial_team(self.owner, {"product": "no-such-product"})
+
+		self.assertIsNone(frappe.db.get_value("Team", team, "landing_product"))
 
 
 class TestOnboardingSteps(IntegrationTestCase):

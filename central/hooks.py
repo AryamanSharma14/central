@@ -180,6 +180,7 @@ after_install = [
 
 doc_events = {
 	"User": {
+		"validate": "central.users.validate_user_image",
 		"after_insert": "central.users.grant_central_user_role",
 	},
 	"Team": {
@@ -216,6 +217,7 @@ scheduler_events = {
 			"central.infrastructure.doctype.site_domain.site_domain.retry_failed",
 			# Snapshots have no region event, so Central reads each one until it settles.
 			"central.infrastructure.doctype.vm_snapshot.vm_snapshot.sync_pending_snapshots",
+			"central.infrastructure.doctype.frappemail_service.frappemail_service.refill_mailboxes",
 		],
 	},
 	# Maintenance jobs run once per period at a time Frappe spreads across sites.
@@ -244,6 +246,12 @@ scheduler_events = {
 		# today's invoice before it is swept, so the customer gets the full benefit
 		# of the last day they were given.
 		"central.billing.revenue.credits.run_credit_expiry",
+		# Keep stored GSTIN statuses fresh for invoicing, a paced and capped batch a day.
+		"central.billing.revenue.gst_status.run_gst_status_refresh",
+		# Retry billing profiles whose customer records never finished syncing.
+		"central.billing.ingester.customer.sync_pending_profiles",
+		# Retry wallet top-ups whose advance never reached the accounting system.
+		"central.billing.ingester.advance.sync_pending_advances",
 		# Assert the money invariants that no DB constraint can hold (they span
 		# tables): wallet == its ledger, invoice == its lines, captured == amount_paid.
 		# Silence is the success case; a violation is logged with its team and amount.
@@ -252,7 +260,7 @@ scheduler_events = {
 	],
 	"hourly": [
 		# Billing: ERPNext sync retries whose backoff window has elapsed.
-		"central.billing.revenue.erpnext_sync.retry_failed_syncs",
+		"central.billing.ingester.erpnext_sync.retry_failed_syncs",
 		# A charge whose outcome we don't know is money in the air: ask the gateway and
 		# settle it. It waits 30 minutes for the webhook first, so a daily sweep left it
 		# hanging for up to a day — and the key it needs to re-send safely expires in
