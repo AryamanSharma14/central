@@ -439,7 +439,7 @@ export interface CollectionStatus {
 	currency: Currency
 }
 
-export type NotificationCategory = 'Billing' | 'Server' | 'Team'
+export type NotificationCategory = 'Billing' | 'Server' | 'Team' | 'Trial'
 export type NotificationSeverity = 'Info' | 'Success' | 'Warning' | 'Error'
 
 /** A Team Notification — one item in the console's unified in-app feed. */

@@ -223,6 +223,8 @@ scheduler_events = {
 	],
 	"daily": [
 		"central.identity.doctype.team_invitation.team_invitation.expire_pending_invitations",
+		# Warn, stop and terminate trial sites by their dates.
+		"central.signups.trial.run_trials",
 		# Billing (module): retry/dunning + staged suspension for unpaid invoices,
 		# and pruning Payment Attempt / Webhook Event logs.
 		"central.billing.revenue.dunning.run_dunning",

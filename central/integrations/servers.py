@@ -137,6 +137,15 @@ def resize_server(server: VirtualMachine, shape: dict) -> None:
 	observe_server(server)
 
 
+def hold_server_stopped(server: VirtualMachine) -> None:
+	"""Stop a server so that traffic does not wake it. Atlas refuses to stop a sleeping VM,
+	and only an explicit stop keeps a VM down, so the server is started first. Safe to repeat."""
+	client = get_client(server)
+	wait_for_power_state(client, server.atlas_vm_id, "start", "running")
+	wait_for_power_state(client, server.atlas_vm_id, "stop", "stopped")
+	observe_server(server)
+
+
 def wait_for_power_state(client: AtlasClient, vm_id: str, action: str, state: str) -> None:
 	"""Wait until Atlas observes the VM in `state`, sending the power action once the VM is in
 	a stable state. A `migrating` or `pending` VM is left to settle first — Atlas may be moving

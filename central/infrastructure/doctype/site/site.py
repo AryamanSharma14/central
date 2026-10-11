@@ -116,6 +116,9 @@ class Site(Document):
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
 		self.capture_ready()
+		from central.signups.trial import start_trial
+
+		start_trial(self)
 		from central.notification.engine import queue_event
 
 		queue_event(

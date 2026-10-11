@@ -30,7 +30,8 @@
   "trials_section",
   "trial_servers_per_team",
   "trial_days",
-  "trial_deletion_days"
+  "trial_deletion_days",
+  "trial_notice_days"
  ],
  "fields": [
   {
@@ -199,6 +200,14 @@
    "fieldname": "trial_deletion_days",
    "fieldtype": "Int",
    "label": "Trial Deletion Days",
+   "non_negative": 1
+  },
+  {
+   "default": "3",
+   "description": "Days before a trial ends, and before an ended trial is deleted, that Central sends the warning email. A second warning goes out on the last day.",
+   "fieldname": "trial_notice_days",
+   "fieldtype": "Int",
+   "label": "Trial Notice Days",
    "non_negative": 1
   }
  ],

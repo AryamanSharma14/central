@@ -36,6 +36,7 @@ class CentralSettings(Document):
 		trial_days: DF.Int
 		trial_deletion_days: DF.Int
 		trial_idle_shutdown_minutes: DF.Int
+		trial_notice_days: DF.Int
 		trial_servers_per_team: DF.Int
 		wildcard_domain: DF.Data | None
 	# end: auto-generated types
