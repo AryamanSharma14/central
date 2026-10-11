@@ -3,7 +3,7 @@ import { Button, Skeleton } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import BucketQuotaDialog from '@/components/addons/storage/BucketQuotaDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import CopyButton from '@/components/common/CopyButton.vue'
+import CopyableValue from '@/components/common/CopyableValue.vue'
 import SettingsSection from '@/components/common/SettingsSection.vue'
 import UsageCard from '@/components/common/UsageCard.vue'
 import { bucketLabel, useObjectStorage } from '@/composables/useObjectStorage'
@@ -158,11 +158,9 @@ const remove = async (target: StorageBucket): Promise<void> => {
 				>
 					<dt class="w-24 shrink-0 text-sm text-ink-gray-5">{{ row.label }}</dt>
 
-					<dd class="min-w-0 truncate font-mono text-sm text-ink-gray-8">
-						{{ row.value }}
+					<dd class="min-w-0">
+						<CopyableValue :value="row.value" :label="row.label" />
 					</dd>
-
-					<CopyButton :text="row.value" />
 				</div>
 			</dl>
 		</SettingsSection>
