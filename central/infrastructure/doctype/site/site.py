@@ -34,6 +34,13 @@ class Site(Document):
 		site_name: DF.Data
 		subdomain: DF.Data | None
 		team: DF.Link
+		trial_cost: DF.Currency
+		trial_currency: DF.Link | None
+		trial_deletes_on: DF.Date | None
+		trial_ends_on: DF.Date | None
+		trial_error: DF.SmallText | None
+		trial_last_notice: DF.Data | None
+		trial_state: DF.Literal["", "Active", "Ended", "Converted", "Deleted"]
 	# end: auto-generated types
 
 	@property
@@ -109,6 +116,9 @@ class Site(Document):
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
 		self.capture_ready()
+		from central.signups.trial import start_trial
+
+		start_trial(self)
 		from central.notification.engine import queue_event
 
 		queue_event(
@@ -192,6 +202,36 @@ class Site(Document):
 
 		self.db_set({"rename_error": None, "rename_error_log": None})
 		self.enqueue_subdomain_rename()
+
+	@frappe.whitelist(methods=["POST"])
+	def extend_trial(self, days: int) -> None:
+		"""Operator action: give the trial more days, and start an ended trial again."""
+		from central.signups.trial import extend_trial
+
+		frappe.only_for("System Manager")
+		extend_trial(self, days)
+		self.add_comment("Info", _("{0} extended the trial by {1} days.").format(frappe.session.user, days))
+
+	@frappe.whitelist(methods=["POST"])
+	def end_trial_now(self) -> None:
+		"""Operator action: end an active trial today. Its server stops."""
+		from central.signups.trial import end_trial
+
+		frappe.only_for("System Manager")
+		if self.trial_state != "Active":
+			frappe.throw(_("Only an active trial can be ended."))
+
+		end_trial(self, frappe.utils.getdate())
+		self.add_comment("Info", _("{0} ended the trial.").format(frappe.session.user))
+
+	@frappe.whitelist(methods=["POST"])
+	def retry_trial_step(self) -> None:
+		"""Operator action: run today's trial step again after a failure."""
+		from central.signups.trial import advance_trial
+
+		frappe.only_for("System Manager")
+		self.db_set("trial_error", None)
+		advance_trial(self, frappe.utils.getdate())
 
 	@frappe.whitelist(methods=["POST"])
 	def open_as_administrator(self) -> str | None:
@@ -298,3 +338,5 @@ def on_doctype_update():
 	# The fleet reads a team's sites, then drops the machine each one already stands for.
 	frappe.db.add_index("Site", ["team", "server"])
 	frappe.db.add_index("Site", ["product"])
+	# The daily trial job reads trials by state and the day they end.
+	frappe.db.add_index("Site", ["trial_state", "trial_ends_on"])

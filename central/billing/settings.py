@@ -64,7 +64,7 @@ _MISSING = _Missing()
 
 # The launch grant, seeded once onto a Billing Settings nobody has saved yet. It is
 # a starting point for the accounts team to edit, not a value the code depends on.
-LAUNCH_WELCOME_CREDITS = {"INR": 2500.0, "USD": 25.0}
+LAUNCH_WELCOME_CREDITS = {"INR": 1000.0, "USD": 10.0}
 
 
 def _settings():
@@ -72,7 +72,7 @@ def _settings():
 
 
 def welcome_credit_amount(currency: str) -> float:
-	"""What a team billed in `currency` is granted on completing its profile.
+	"""What a team billed in `currency` is granted when its first payment method is active.
 
 	Zero when grants are switched off or the currency has no configured amount —
 	callers treat both the same way, by not granting."""

@@ -190,7 +190,12 @@ class VirtualMachine(Document):
 			self.disable_active_subscription()
 
 	def ensure_subscription_enabled(self):
-		"""Create the subscription if missing, else enable it if disabled."""
+		"""Create the subscription if missing, else enable it if disabled. A free trial has none."""
+		from central.signups.trial import is_billing_deferred
+
+		if is_billing_deferred(self.name):
+			return
+
 		existing = frappe.db.get_value(
 			"Subscription", {"team": self.team, "server_id": self.name}, "name", order_by="creation desc"
 		)

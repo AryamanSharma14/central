@@ -187,6 +187,9 @@ doc_events = {
 		# Its email is the alert address of the team's Grove user when set.
 		"on_update": "central.services.ai.on_alert_address_update",
 	},
+	"Payment Method": {
+		"on_update": "central.signups.credit.on_payment_method_update",
+	},
 }
 
 # Scheduled Tasks
@@ -220,6 +223,8 @@ scheduler_events = {
 	],
 	"daily": [
 		"central.identity.doctype.team_invitation.team_invitation.expire_pending_invitations",
+		# Warn, stop and terminate trial sites by their dates.
+		"central.signups.trial.run_trials",
 		# Billing (module): retry/dunning + staged suspension for unpaid invoices,
 		# and pruning Payment Attempt / Webhook Event logs.
 		"central.billing.revenue.dunning.run_dunning",

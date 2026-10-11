@@ -1,0 +1,254 @@
+import frappe
+from frappe import _
+from frappe.utils import add_days, date_diff, flt, formatdate, get_datetime, getdate, now_datetime, nowdate
+
+from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.site.site import Site
+from central.notification.engine import queue_event
+
+
+def start_trial(site: Site) -> None:
+	"""Start the trial clock when a trial site is first ready. A team that already pays has no trial."""
+	if site.trial_state or not site.is_trial():
+		return
+
+	if has_active_payment_method(site.team):
+		site.db_set("trial_state", "Converted")
+		return
+
+	ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
+	site.db_set({"trial_state": "Active", "trial_ends_on": ends_on})
+
+
+def is_billing_deferred(server: str) -> bool:
+	"""Whether the server runs a free trial site, so it has no subscription yet. Before the
+	site is ready, a signup's server counts as a trial unless its team already pays."""
+	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
+	if state:
+		return state in ("Active", "Ended", "Deleted")
+
+	team, resource_type = frappe.db.get_value(
+		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"]
+	) or (None, None)
+	return resource_type == "Site" and not has_active_payment_method(team)
+
+
+def convert_team(team: str) -> None:
+	"""Turn the team's open trials into paid sites once it has an active payment method."""
+	for name in frappe.get_all(
+		"Site", filters={"team": team, "trial_state": ["in", ("Active", "Ended")]}, pluck="name"
+	):
+		convert_site(frappe.get_doc("Site", name, for_update=True))
+
+
+def convert_site(site: Site) -> None:
+	"""Start billing the site's server, keep it awake, and start it again if the trial stopped it."""
+	was_stopped = site.trial_state == "Ended"
+	site.db_set({"trial_state": "Converted", "trial_error": None, **get_trial_cost(site)})
+
+	server = frappe.get_doc("Virtual Machine", site.server)
+	if server.status == "Running":
+		server.ensure_subscription_enabled()
+
+	frappe.enqueue(
+		"central.integrations.servers.convert_trial_server",
+		server=server.name,
+		start=was_stopped,
+		queue="long",
+		enqueue_after_commit=True,
+		job_id=f"trial-convert:{server.name}",
+		deduplicate=True,
+	)
+
+
+def get_trial_cost(site: Site, until=None) -> dict:
+	"""The plan's monthly rate for the days the trial ran, from its creation request."""
+	request = site.get_creation_request()
+	if not request or not site.ready_at:
+		return {}
+
+	days = (get_datetime(until or now_datetime()) - get_datetime(site.ready_at)).total_seconds() / 86400
+	cost = flt(request.reserved_monthly_rate) * max(days, 0) / 30
+	currency = frappe.parse_json(request.request_payload or "{}").get("currency")
+	return {"trial_cost": cost, "trial_currency": currency}
+
+
+def has_active_payment_method(team: str) -> bool:
+	return bool(frappe.db.exists("Payment Method", {"team": team, "status": "Active"}))
+
+
+def get_trial_days(product: str | None, fieldname: str) -> int:
+	"""The product's `trial_days` or `trial_deletion_days`, or the Central Settings default for 0."""
+	days = frappe.db.get_value("Product", product, fieldname) if product else 0
+	return days or frappe.get_cached_value("Central Settings", "Central Settings", fieldname)
+
+
+def get_status(server: str, site: str | None = None) -> dict | None:
+	"""The open trial of the site on `server`, for the in-app billing panel, or None.
+	A server with several sites must name one."""
+	filters = {"server": server, "name": site} if site else {"server": server}
+	sites = frappe.get_all(
+		"Site", filters=filters, fields=["trial_state", "trial_ends_on", "trial_deletes_on"]
+	)
+	if len(sites) > 1:
+		frappe.throw(_("This server has several sites. Name the site whose trial to show."))
+	if not sites or sites[0].trial_state not in ("Active", "Ended"):
+		return None
+
+	trial = sites[0]
+	return {
+		"state": trial.trial_state,
+		"ends_on": trial.trial_ends_on,
+		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
+		"deletes_on": trial.trial_deletes_on,
+	}
+
+
+def run_trials() -> None:
+	"""Daily job: warn before a trial ends, stop it on its end date, and terminate it on its deletion date."""
+	today = getdate(nowdate())
+	for name in frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name"):
+		try:
+			advance_trial(frappe.get_doc("Site", name, for_update=True), today)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's step if a later one fails
+		except Exception:
+			frappe.db.rollback()
+			record_trial_error(name, _("The daily trial job failed. It retries tomorrow."))
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- leave the reason where the operator looks
+
+
+def advance_trial(site: Site, today) -> None:
+	notice_days = frappe.get_cached_value("Central Settings", "Central Settings", "trial_notice_days")
+	if site.trial_state == "Active":
+		days_left = date_diff(site.trial_ends_on, today)
+		if days_left <= 0:
+			end_trial(site, today)
+		elif days_left <= notice_days:
+			# A second warning goes out on the last day.
+			send_notice(site, "trial_expiring", "last day" if days_left == 1 else "ending")
+		return
+
+	days_left = date_diff(site.trial_deletes_on, today)
+	if days_left <= 0:
+		delete_trial(site)
+	elif frappe.db.get_value("Virtual Machine", site.server, "status") != "Stopped":
+		enqueue_stop(site)
+	if 0 < days_left <= notice_days:
+		send_notice(site, "trial_deletion_soon", "deletion")
+
+
+def extend_trial(site: Site, days: int) -> None:
+	"""Give a trial `days` more from today, or from its end date when that is later. An ended
+	trial runs again and its server starts."""
+	if site.trial_state not in ("Active", "Ended"):
+		frappe.throw(_("Only an active or ended trial can be extended."))
+	if days <= 0:
+		frappe.throw(_("Enter a positive number of days."))
+
+	ends_on = add_days(max(getdate(site.trial_ends_on), getdate(nowdate())), days)
+	was_ended = site.trial_state == "Ended"
+	site.db_set(
+		{
+			"trial_state": "Active",
+			"trial_ends_on": ends_on,
+			"trial_deletes_on": None,
+			"trial_last_notice": None,
+			"trial_error": None,
+		}
+	)
+	if was_ended:
+		queue_server_action(site, "start")
+
+
+def end_trial(site: Site, today) -> None:
+	"""Stop the trial's server and set the day it is terminated."""
+	deletes_on = add_days(today, get_trial_days(site.product, "trial_deletion_days"))
+	site.db_set({"trial_state": "Ended", "trial_deletes_on": deletes_on, "trial_error": None})
+	enqueue_stop(site)
+	send_notice(site, "trial_ended", "ended")
+
+
+def enqueue_stop(site: Site) -> None:
+	frappe.enqueue(
+		stop_trial_server,
+		site=site.name,
+		queue="long",
+		enqueue_after_commit=True,
+		job_id=f"trial-stop:{site.name}",
+		deduplicate=True,
+	)
+
+
+def stop_trial_server(site: str) -> None:
+	"""Background job: stop an ended trial's server, unless the team paid in the meantime."""
+	from central.integrations.servers import hold_server_stopped
+
+	document = frappe.get_doc("Site", site)
+	if document.trial_state != "Ended":
+		return
+
+	try:
+		hold_server_stopped(frappe.get_doc("Virtual Machine", document.server))
+	# This worker boundary records every failure, and the daily job sends the stop again.
+	except Exception:
+		frappe.db.rollback()
+		record_trial_error(site, _("Central could not stop this trial's server. It retries tomorrow."))
+		return
+
+	document.db_set("trial_error", None)
+
+
+def delete_trial(site: Site) -> None:
+	"""Terminate the ended trial's server through the normal terminate action."""
+	if frappe.db.get_value("Virtual Machine", site.server, "status") != "Terminated":
+		queue_server_action(site, "terminate")
+
+	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
+	send_notice(site, "trial_deleted", "deleted")
+
+
+def queue_server_action(site: Site, action: str) -> None:
+	"""Run a start or terminate on the trial's server through the normal action, as the system."""
+	server = frappe.get_doc("Virtual Machine", site.server)
+	if ResourceAction.get_pending(server.name, action):
+		return
+
+	ResourceAction.queue(
+		action,
+		server.team,
+		server.region,
+		server.title or server.name,
+		server=server.name,
+		remote_vm_id=server.atlas_vm_id,
+		requested_by="Administrator",
+	)
+
+
+def send_notice(site: Site, event_type: str, notice: str) -> None:
+	if site.trial_last_notice == notice:
+		return
+
+	queue_event(
+		site.team,
+		event_type,
+		context=get_notice_context(site),
+		reference_doctype="Site",
+		reference_name=site.name,
+	)
+	site.db_set("trial_last_notice", notice)
+
+
+def get_notice_context(site: Site) -> dict:
+	product = frappe.db.get_value("Product", site.product, "title") if site.product else None
+	return {
+		"address": site.rename_target if site.subdomain else site.name,
+		"product": product or "Frappe Cloud",
+		"ends_on": formatdate(site.trial_ends_on),
+		"deletes_on": formatdate(site.trial_deletes_on) if site.trial_deletes_on else "",
+		"days_left": date_diff(site.trial_ends_on, nowdate()),
+	}
+
+
+def record_trial_error(site: str, reason: str) -> None:
+	frappe.log_error(title="Trial step failed", reference_doctype="Site", reference_name=site)
+	frappe.db.set_value("Site", site, "trial_error", reason)

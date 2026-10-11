@@ -51,6 +51,7 @@ const CATEGORIES = [
 	{ label: 'Billing', value: 'Billing', icon: 'lucide-credit-card' },
 	{ label: 'Server', value: 'Server', icon: 'lucide-server' },
 	{ label: 'Team', value: 'Team', icon: 'lucide-users' },
+	{ label: 'Trial', value: 'Trial', icon: 'lucide-hourglass' },
 ]
 
 const badge = computed(() =>

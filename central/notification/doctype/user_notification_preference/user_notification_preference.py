@@ -17,7 +17,7 @@ class UserNotificationPreference(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		category: DF.Literal["Billing", "Server", "Team"]
+		category: DF.Literal["Billing", "Server", "Team", "Trial"]
 		email_enabled: DF.Check
 		in_app_enabled: DF.Check
 		team: DF.Link

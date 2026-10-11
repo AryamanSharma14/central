@@ -19,6 +19,8 @@ System Managers create and edit products in Desk. Nobody else can read the DocTy
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
+| Trial Days | Days a trial site of this product runs from when it is first ready. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
+| Trial Deletion Days | Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings, Trial Deletion Days. |
 
 Example: Product Key `raven`, Title `Raven`, Signup App `raven`. The signup link is `/dashboard/signup?product=raven`.
 
@@ -37,9 +39,9 @@ The trial request saves a `site` part in the Resource Action payload with the pr
 
 A returning customer can start another product on the selected Team. Product signup links remain accessible after the customer has claimed a site. Onboarding reads only the selected product's site or creation. A claimed site opens the existing resource list with its address in the search field. An unfinished creation resumes its wait. A terminated site does not prevent a new signup. The browser stores a separate request key for each user, Team, and product.
 
-Another product signup reuses the Team's billing profile and credit balance. It grants no additional welcome credits and does not extend their expiry.
+Another product signup reuses the Team's billing profile and credit balance. It grants no additional welcome credit and does not extend its expiry.
 
-An accepted invitation lets the member use the selected Team's balance when their role permits site creation. It grants no additional welcome credits. Membership does not consume the member's welcome-credit eligibility as an owner. If the member creates their own first Team, that Team can receive the configured welcome credits.
+An accepted invitation lets the member use the selected Team's balance when their role permits site creation. It grants no additional welcome credits. Membership does not consume the member's welcome-credit eligibility as an owner. If the member creates their own first Team, that Team can receive the [welcome credit](../../SPEC.md#welcome-credit).
 
 A Product needs a Cargo image of type Apps for its signup app in the region. Without one, the signup stops with "No trial image is available right now."
 

@@ -700,14 +700,16 @@ def save_billing_profile(**fields) -> dict:
 # nosemgrep: guest-whitelisted-method -- pilot_credential_auth verifies the caller below.
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 @pilot_credential_auth
-def get_billing_summary() -> dict:
+def get_billing_summary(site: str | None = None) -> dict:
 	"""Everything the in-app Billing tab renders for this bench's server: current plan
 	(+ spec labels for the usage meters), the cycle estimate, the credit balance (with
-	an insufficient-balance flag) and whether a payment method / profile exist. Usage
+	an insufficient-balance flag), whether a payment method / profile exist, and the
+	site's open trial. `site` names the site on a server with several. Usage
 	percentages are filled in by the bench (host-local)."""
 	from central.billing.api.dashboard._shared import _profile_complete
 	from central.billing.api.dashboard.invoices import get_forecast
 	from central.billing.revenue import credits
+	from central.signups.trial import get_status
 
 	team, server = _team(), _server()
 	with _as_operator():  # team + server fixed by credential
@@ -737,6 +739,7 @@ def get_billing_summary() -> dict:
 		},
 		"payment_method": {"label": default["label"], "name": default["name"]} if default else None,
 		"profile_complete": _profile_complete(team),
+		"trial": get_status(server, site),
 	}
 
 

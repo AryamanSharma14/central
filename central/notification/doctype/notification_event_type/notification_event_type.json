@@ -24,7 +24,7 @@
  ],
  "fields": [
   {"fieldname": "event_type", "fieldtype": "Data", "in_global_search": 1, "in_list_view": 1, "label": "Event Type", "reqd": 1, "unique": 1},
-  {"default": "Billing", "fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Category", "options": "Billing\nServer\nTeam", "reqd": 1},
+  {"default": "Billing", "fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Category", "options": "Billing\nServer\nTeam\nTrial", "reqd": 1},
   {"default": "Info", "fieldname": "severity", "fieldtype": "Select", "in_list_view": 1, "label": "Severity", "options": "Info\nSuccess\nWarning\nError", "reqd": 1},
   {"fieldname": "required_cap", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Required Capability", "options": "Capability", "reqd": 1},
   {"fieldname": "column_break_meta", "fieldtype": "Column Break"},

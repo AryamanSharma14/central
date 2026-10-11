@@ -23,4 +23,8 @@ export interface Product {
 	signup_app: string
 	/**	Landing Route : Data - Where the owner lands after signing in to a trial site, such as /raven, so the app can run its own setup. Leave empty to open Desk.	*/
 	landing_route?: string
+	/**	Trial Days : Int - Days a trial site of this product runs from when it is first ready. 0 uses Central Settings.	*/
+	trial_days?: number
+	/**	Trial Deletion Days : Int - Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings.	*/
+	trial_deletion_days?: number
 }

@@ -117,7 +117,7 @@ class TestCancelUnpaid(WalletDrawTestCase):
 			{"team": TEAM, "reference_name": inv.name, "entry_type": "Credit"},
 			["amount", "paid_in", "expires_on"],
 		)
-		expires = credits.promotional_expiry_date()
+		expires = frappe.utils.getdate(credits.promotional_expiry_date())
 		self.assertEqual([(b.amount, b.paid_in, b.expires_on) for b in back], [(590, 0, expires)])
 
 	def test_a_paid_invoice_is_refused(self):

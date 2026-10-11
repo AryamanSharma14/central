@@ -47,6 +47,8 @@ const {
 	summary,
 	canSubmit,
 	submit,
+	paymentMethodRequired,
+	welcomeCredit,
 	source,
 	snapshotName,
 	snapshotOptions,
@@ -130,6 +132,21 @@ watch(
 				</p>
 
 				<div v-else class="space-y-8">
+					<Alert
+						v-if="paymentMethodRequired"
+						title="Add a payment method to create servers"
+						icon="lucide-credit-card"
+						:description="
+							welcomeCredit
+								? `Servers are billed monthly. Add a payment method to get ${welcomeCredit}.`
+								: 'Servers are billed monthly to your payment method.'
+						"
+						:primary-action="{
+							label: 'Add payment method',
+							onClick: () => router.push('/billing'),
+						}"
+					/>
+
 					<section class="grid gap-3 md:grid-cols-2">
 						<TextInput
 							v-focus
