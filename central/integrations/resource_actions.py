@@ -19,6 +19,7 @@ from central.errors import (
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, TERMINAL_STATES
 from central.infrastructure.doctype.user_mail_account.user_mail_account import UserMailAccount
+from central.infrastructure.doctype.virtual_machine import firewall
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations import servers
 from central.integrations.atlas import AtlasClient
@@ -33,10 +34,6 @@ SERVER_PAGE_SIZE = 100
 # the stop before a final snapshot. A resize waits for a stop and a start.
 JOB_TIMEOUT_SECONDS = servers.POWER_WAIT_SECONDS + 5 * 60
 RESIZE_JOB_TIMEOUT_SECONDS = 2 * servers.POWER_WAIT_SECONDS + 5 * 60
-ANYWHERE = ["0.0.0.0/0", "::/0"]
-# Atlas addresses every machine on its WireGuard mesh from this prefix, and an enabled
-# firewall filters mesh traffic too.
-MESH_NETWORK = "fdaa::/16"
 
 
 def get_job_timeout_seconds(action: str | None) -> int:
@@ -230,7 +227,7 @@ def _create_payload(request) -> dict:
 		"disk_mib": configuration.disk_mib,
 		"hostname": configuration.hostname or "",
 		"ssh_keys": configuration.ssh_keys,
-		"firewall": firewall_configuration(configuration),
+		"firewall": firewall.get_new_server_firewall(configuration.is_firewall_enabled),
 		"sleep_after_idle_seconds": idle_shutdown_seconds(request.team),
 		"metadata": {"central_action_id": request.name},
 	}
@@ -240,27 +237,6 @@ def _create_payload(request) -> dict:
 		payload["metadata"].update(get_bootstrap_metadata(request))
 
 	return payload
-
-
-def firewall_configuration(configuration) -> dict:
-	"""The Atlas firewall for a new machine. A disabled firewall permits all traffic.
-
-	1. Allow the region's mesh, which the regional gateway and console use.
-	2. Allow ICMP, which IPv6 neighbour discovery and path MTU need.
-	3. Allow SSH, HTTP, and HTTPS from anywhere.
-	4. Allow all outbound traffic."""
-	if not configuration.is_firewall_enabled:
-		return {"enabled": False}
-
-	return {
-		"enabled": True,
-		"inbound": [
-			{"protocol": "any", "cidrs": [MESH_NETWORK]},
-			{"protocol": "icmp", "cidrs": ANYWHERE},
-			*({"protocol": "tcp", "ports": port, "cidrs": ANYWHERE} for port in ("22", "80", "443")),
-		],
-		"outbound": [{"protocol": "any", "cidrs": ANYWHERE}],
-	}
 
 
 def idle_shutdown_seconds(team: str) -> int:

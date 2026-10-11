@@ -299,7 +299,7 @@ class TestResourceActions(IntegrationTestCase):
 		self.assertTrue(action.server)
 		payload = self.client.return_value.create_vm.call_args.args[0]
 		self.assertEqual(payload["cpu_millicores"], 1000)
-		self.assertEqual(payload["firewall"], {"enabled": False})
+		self.assertFalse(payload["firewall"]["enabled"])
 		credentials = json.loads(payload["metadata"]["pilot-central"])
 		self.assertEqual(payload["metadata"]["central_action_id"], name)
 		self.assertEqual(credentials["jwks_audience_id"], action.credential)

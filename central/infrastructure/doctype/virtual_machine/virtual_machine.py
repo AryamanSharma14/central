@@ -1,4 +1,4 @@
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import frappe
 from frappe import _
@@ -10,6 +10,9 @@ from central.infrastructure.doctype.pilot_credential.pilot_credential import Pil
 from central.infrastructure.doctype.user_mail_account.user_mail_account import UserMailAccount
 from central.sso import mint_bench_login
 from central.utils.units import mebibytes_to_gigabytes, millicores_to_vcpus
+
+if TYPE_CHECKING:
+	from central.server_models import FirewallChange
 
 
 class VirtualMachine(Document):
@@ -29,6 +32,7 @@ class VirtualMachine(Document):
 		atlas_image_id: DF.Data | None
 		atlas_vm_id: DF.Data | None
 		disk_gigabytes: DF.Float
+		firewall_rules: DF.JSON | None
 		frappe_version: DF.Data | None
 		gateway_url: DF.Data | None
 		has_public_ipv6: DF.Check
@@ -232,6 +236,8 @@ class VirtualMachine(Document):
 		"public_ipv4",
 		"public_ipv6",
 		"gateway_url",
+		"is_firewall_enabled",
+		"firewall_rules",
 	)
 
 	@classmethod
@@ -320,6 +326,12 @@ class VirtualMachine(Document):
 
 		self.require_live()
 		set_termination_protection(self, enabled)
+
+	def update_firewall(self, change: FirewallChange) -> None:
+		from central.integrations.servers import update_firewall
+
+		self.require_live()
+		update_firewall(self, change)
 
 	def require_live(self) -> None:
 		if self.status == "Terminated":
