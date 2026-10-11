@@ -132,6 +132,8 @@ def submit_command(
 		frappe.throw(_("This server has no verified regional identity."))
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
+	if action == "terminate" and server.is_termination_protected:
+		frappe.throw(_("Turn off termination protection before you terminate this server."))
 
 	document = ResourceAction.get_pending(server.name, action) or ResourceAction.queue(
 		action,

@@ -1,7 +1,9 @@
 import frappe
 from frappe import _
 
+from central.errors import handle_resource_operation
 from central.iam import can_on_any_server
+from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 
 
 def require_access(team: str, capability: str) -> None:
@@ -85,3 +87,12 @@ def delete_team_ssh_key(team: str, name: str) -> None:
 	if key.team != team:
 		frappe.throw(_("This SSH key does not belong to the team."), frappe.PermissionError)
 	key.delete()
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+def set_server_ssh_keys(team: str, resource_id: str, ssh_keys: list[str] | str) -> None:
+	"""Replace the team keys that can sign in to one server."""
+	require_access(team, "server:ssh-key")
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	server.set_ssh_keys(frappe.parse_json(ssh_keys) or [])

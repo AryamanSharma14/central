@@ -87,6 +87,10 @@ Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the addre
 
 A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
 
+## Termination protection
+
+A member with `server:terminate` can turn termination protection on or off with the lock button in the server header. Central sends `PATCH /virtual-machines/{id}/termination-protection` and stores the `is_termination_protected` value that Atlas returns on the Virtual Machine. Atlas does not report this value in a VM read, so the stored value changes only through this request. Central refuses a terminate request for a protected server before it queues a Resource Action, and Atlas also refuses to delete a protected VM.
+
 ## Server operation contract
 
 Central stores each authorized operation in Resource Action before dispatch. Atlas receives one create or power request. Central saves the accepted VM identity before local finalization. A lost mutation response remains uncertain and must not trigger another remote mutation.

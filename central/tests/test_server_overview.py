@@ -101,7 +101,7 @@ class TestServerOverview(IntegrationTestCase):
 		finally:
 			frappe.set_user("Administrator")
 
-		self.assertEqual(keys, [{"title": "Laptop", "fingerprint": key.fingerprint}])
+		self.assertEqual(keys, [{"name": key.name, "title": "Laptop", "fingerprint": key.fingerprint}])
 
 	def test_viewer_gets_region_metrics(self):
 		metrics = {"available": True, "points": [], "sample_interval_seconds": 300}
