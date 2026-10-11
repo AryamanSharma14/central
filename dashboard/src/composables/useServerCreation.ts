@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { API } from '@/api/methods'
+import { useBillingSetup } from '@/composables/useBillingSetup'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { useMyProfile } from '@/composables/useMyProfile'
 import { usePlans } from '@/composables/usePlans'
@@ -33,6 +34,7 @@ export function useServerCreation() {
 	const route = useRoute()
 	const { regions, loading } = useRegions()
 	const { activeTeam } = useSession()
+	const { paymentMethodRequired, welcomeCredit } = useBillingSetup()
 	const { profile } = useMyProfile()
 	const fleet = useServerMapData()
 
@@ -364,6 +366,7 @@ export function useServerCreation() {
 			!name.value.trim()
 		)
 			return false
+		if (paymentMethodRequired.value) return false // the page asks for one instead
 		if (regionFull.value) return false // the region can't seat a new server right now
 		if (bracketExhausted.value) return false // nothing here fits the budget
 		return isCustom.value ? !!composedConfig.value : !!selectedPlanObj.value
@@ -467,6 +470,8 @@ export function useServerCreation() {
 		summary,
 		canSubmit,
 		submit,
+		paymentMethodRequired,
+		welcomeCredit,
 		offering,
 		offeringOptions,
 		imageId,

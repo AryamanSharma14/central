@@ -178,11 +178,12 @@ def grant_welcome_credits(team: str) -> None:
 	credits.grant_promotional_credits(team, amount, currency)
 
 
-def has_owner_received_welcome_credits(team: str) -> bool:
+def has_owner_received_welcome_credits(team: str, lock: bool = True) -> bool:
 	"""Whether any team of this team's owner already holds a Promotion grant."""
 	owner = frappe.db.get_value("Team", team, "owner_user")
-	# Lock the owner so two of their teams provisioning at once cannot both pass this check.
-	frappe.db.get_value("User", owner, "name", for_update=True)
+	if lock:
+		# Lock the owner so two of their teams provisioning at once cannot both pass this check.
+		frappe.db.get_value("User", owner, "name", for_update=True)
 	owned_teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name")
 	return bool(
 		frappe.db.exists("Credit Ledger Entry", {"team": ["in", owned_teams], "reference_type": "Promotion"})

@@ -1,9 +1,10 @@
 import frappe
 from frappe import _
 
-from central.billing.payments.provisioning import grant_welcome_credits
-from central.billing.revenue.credits import grant_promotional_credits
-from central.signups.trial import convert_team
+from central.billing import settings
+from central.billing.payments.provisioning import grant_welcome_credits, has_owner_received_welcome_credits
+from central.billing.revenue.credits import get_balance, grant_promotional_credits
+from central.signups.trial import convert_team, has_active_payment_method
 
 
 def on_payment_method_update(doc, method: str | None = None) -> None:
@@ -32,3 +33,30 @@ def grant_credit(team: str, amount: float, validity_days: int, note: str) -> dic
 
 	expires_on = frappe.utils.add_days(frappe.utils.nowdate(), validity_days)
 	return grant_promotional_credits(team, amount, currency, note=note, expires_on=expires_on)
+
+
+def get_purchase_state(team: str) -> dict:
+	"""What the console shows before a server is bought: whether a payment method is needed,
+	and the welcome credit the first one adds. The server checks again on create."""
+	collection_mode = frappe.db.get_value("Billing Profile", team, "collection_mode")
+	is_required = bool(
+		frappe.get_cached_value("Central Settings", "Central Settings", "require_payment_method")
+		and collection_mode != "Manual Checkout"
+		and not has_active_payment_method(team)
+		and get_balance(team)["balance"] <= 0
+	)
+	return {"payment_method_required": is_required, "welcome_credit": get_welcome_credit_offer(team)}
+
+
+def get_welcome_credit_offer(team: str) -> dict | None:
+	"""The welcome credit the team's first active payment method adds, or None."""
+	currency = frappe.db.get_value("Billing Profile", team, "currency")
+	amount = settings.welcome_credit_amount(currency) if currency else 0
+	if not amount or has_owner_received_welcome_credits(team, lock=False):
+		return None
+
+	return {
+		"amount": amount,
+		"currency": currency,
+		"validity_days": settings.promotional_credit_validity_days(),
+	}

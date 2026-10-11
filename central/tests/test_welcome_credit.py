@@ -5,7 +5,7 @@ from central.billing.revenue import credits
 from central.billing.states import transition
 from central.billing.tests.test_stripe_adapter import make_stripe_gateway
 from central.billing.tests.utils import billing_settings, complete_billing_profile, ensure_team, make_user
-from central.signups.credit import grant_credit
+from central.signups.credit import get_purchase_state, grant_credit
 
 OWNER = "welcome-credit-owner@example.com"
 TEAM = "team-welcome-credit"
@@ -77,3 +77,21 @@ class TestWelcomeCredit(IntegrationTestCase):
 	def test_only_an_operator_grants_credit(self):
 		with self.set_user(OWNER), self.assertRaises(frappe.PermissionError):
 			grant_credit(TEAM, 100, 30, "Beta credit")
+
+	def test_the_console_asks_for_a_payment_method_and_offers_the_credit(self):
+		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
+			state = get_purchase_state(TEAM)
+
+		self.assertTrue(state["payment_method_required"])
+		self.assertEqual(state["welcome_credit"]["amount"], 10)
+
+		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
+			self.activate_payment_method(TEAM)
+			state = get_purchase_state(TEAM)
+
+		self.assertFalse(state["payment_method_required"])
+		self.assertIsNone(state["welcome_credit"])
+
+	@IntegrationTestCase.change_settings("Central Settings", require_payment_method=0)
+	def test_no_payment_method_is_asked_for_when_the_requirement_is_off(self):
+		self.assertFalse(get_purchase_state(TEAM)["payment_method_required"])

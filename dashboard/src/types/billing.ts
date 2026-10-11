@@ -402,6 +402,16 @@ export interface BillingProfile {
 	supported_currencies: Currency[]
 	/** GSTIN on file but not Active: invoices go out as unregistered. */
 	gst_lapsed?: boolean
+	/** A new server needs a payment method first: no credit covers it. */
+	payment_method_required?: boolean
+	/** What the team's first payment method adds, while the owner has not had it. */
+	welcome_credit?: WelcomeCredit | null
+}
+
+export interface WelcomeCredit {
+	amount: number
+	currency: Currency
+	validity_days: number
 }
 
 export type GstStatus =

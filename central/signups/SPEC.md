@@ -64,6 +64,10 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
 
+### Console
+
+`central.billing.api.dashboard.account.get_billing_profile` returns `payment_method_required` and `welcome_credit` (`amount`, `currency`, `validity_days`, or null when the owner already had it). When a payment method is required, the New Server page shows a note with a link to Billing and disables Create. The onboarding billing step says that servers need a payment method, and names the welcome credit.
+
 ### Billing and conversion
 
 A trial server has no subscription, so a trial creates no invoice. Before the site is ready, a server from the signup flow counts as a trial unless its Team already has an active payment method. The daily backfill of missing subscriptions skips these servers too.
