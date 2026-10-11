@@ -137,6 +137,29 @@ def advance_trial(site: Site, today) -> None:
 		send_notice(site, "trial_deletion_soon", "deletion")
 
 
+def extend_trial(site: Site, days: int) -> None:
+	"""Give a trial `days` more from today, or from its end date when that is later. An ended
+	trial runs again and its server starts."""
+	if site.trial_state not in ("Active", "Ended"):
+		frappe.throw(_("Only an active or ended trial can be extended."))
+	if days <= 0:
+		frappe.throw(_("Enter a positive number of days."))
+
+	ends_on = add_days(max(getdate(site.trial_ends_on), getdate(nowdate())), days)
+	was_ended = site.trial_state == "Ended"
+	site.db_set(
+		{
+			"trial_state": "Active",
+			"trial_ends_on": ends_on,
+			"trial_deletes_on": None,
+			"trial_last_notice": None,
+			"trial_error": None,
+		}
+	)
+	if was_ended:
+		queue_server_action(site, "start")
+
+
 def end_trial(site: Site, today) -> None:
 	"""Stop the trial's server and set the day it is terminated."""
 	deletes_on = add_days(today, get_trial_days(site.product, "trial_deletion_days"))
@@ -177,20 +200,28 @@ def stop_trial_server(site: str) -> None:
 
 def delete_trial(site: Site) -> None:
 	"""Terminate the ended trial's server through the normal terminate action."""
-	server = frappe.get_doc("Virtual Machine", site.server)
-	if server.status != "Terminated" and not ResourceAction.get_pending(server.name, "terminate"):
-		ResourceAction.queue(
-			"terminate",
-			server.team,
-			server.region,
-			server.title or server.name,
-			server=server.name,
-			remote_vm_id=server.atlas_vm_id,
-			requested_by="Administrator",
-		)
+	if frappe.db.get_value("Virtual Machine", site.server, "status") != "Terminated":
+		queue_server_action(site, "terminate")
 
 	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
 	send_notice(site, "trial_deleted", "deleted")
+
+
+def queue_server_action(site: Site, action: str) -> None:
+	"""Run a start or terminate on the trial's server through the normal action, as the system."""
+	server = frappe.get_doc("Virtual Machine", site.server)
+	if ResourceAction.get_pending(server.name, action):
+		return
+
+	ResourceAction.queue(
+		action,
+		server.team,
+		server.region,
+		server.title or server.name,
+		server=server.name,
+		remote_vm_id=server.atlas_vm_id,
+		requested_by="Administrator",
+	)
 
 
 def send_notice(site: Site, event_type: str, notice: str) -> None:

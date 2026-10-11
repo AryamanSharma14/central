@@ -188,3 +188,29 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		self.site().db_set("trial_state", "Converted")
 		self.assertIsNone(trial.get_status(self.server.name))
+
+	def test_an_operator_extends_an_ended_trial_and_its_server_starts(self):
+		self.ready_site()
+		self.site().db_set(
+			{"trial_state": "Ended", "trial_ends_on": nowdate(), "trial_deletes_on": nowdate()}
+		)
+
+		self.site().extend_trial(7)
+
+		site = self.site()
+		self.assertEqual(site.trial_state, "Active")
+		self.assertEqual(getdate(site.trial_ends_on), getdate(add_days(nowdate(), 7)))
+		self.assertIsNone(site.trial_deletes_on)
+		self.assertTrue(frappe.db.exists("Resource Action", {"server": self.server.name, "action": "start"}))
+
+	def test_an_operator_ends_an_active_trial_now(self):
+		self.ready_site()
+		with patch("central.signups.trial.enqueue_stop"):
+			self.site().end_trial_now()
+
+		self.assertEqual(self.site().trial_state, "Ended")
+
+	def test_only_an_operator_changes_a_trial(self):
+		self.ready_site()
+		with self.set_user("Guest"), self.assertRaises(frappe.PermissionError):
+			self.site().extend_trial(7)

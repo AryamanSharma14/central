@@ -22,6 +22,8 @@ Each module specification below describes current behavior. Update it in the sam
 - [Proxy routes](../central/infrastructure/doctype/site_domain/SPEC.md): site and custom-domain routes on the regional proxy, with retry and delete.
 - [Trial sites](../central/infrastructure/doctype/site/SPEC.md): the site a Pilot image carries, its predictable address, and the signup handoff.
 - [Products](../central/signups/doctype/product/SPEC.md): apps customers sign up for from their own page, and the image their trial starts.
+- [Signups](../central/signups/SPEC.md): welcome credit, the trial clock, its emails, and conversion to paid.
+- [Trials operator guide](TRIALS_OPERATOR_GUIDE.md): settings to check and Desk tasks for trials and credit, in plain words.
 - [VM snapshots](../central/infrastructure/doctype/vm_snapshot/SPEC.md): the free-snapshot pricing rule, daily snapshots, terminate with a snapshot, and restore.
 
 ## Cross-cutting specifications

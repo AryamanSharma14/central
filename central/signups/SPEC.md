@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Signups module holds what a new customer gets: the [Product](doctype/product/SPEC.md) they sign up for and the welcome credit.
+The Signups module holds what a new customer gets: the [Product](doctype/product/SPEC.md) they sign up for, the free trial and the welcome credit. Operators start with the [Trials operator guide](../../spec/TRIALS_OPERATOR_GUIDE.md).
 
 ## Welcome credit
 
@@ -83,6 +83,10 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 ### In-app status
 
 `central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+
+### Desk
+
+On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Trial** adds days and starts an Ended trial again, **End Trial Now** ends an Active trial today, and **Retry Trial Step** runs today's step again after a Trial Error. Each action leaves a comment on the Site. The **Trial Sites** report counts trial sites and their cost by product, month and state.
 
 ### Failure
 
