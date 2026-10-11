@@ -27,6 +27,9 @@ class TestTrialLifecycle(SiteOnAMachine):
 			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": None}},
 		)
 		self.enroll()
+		self.enterContext(
+			patch("central.integrations.pilot.rename_admin_domain", return_value={"task_id": "task-1"})
+		)
 		observe_server(self.server)
 		self.notices = self.enterContext(patch("central.signups.trial.queue_event"))
 		self.enterContext(patch.object(frappe.db, "commit"))
