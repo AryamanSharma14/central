@@ -89,21 +89,21 @@ function overAllowance(s: ServiceRow): boolean {
 </script>
 
 <template>
-	<div class="flex items-center justify-between gap-3 py-3">
+	<tr class="transition-colors hover:bg-surface-gray-1">
 		<!-- Server -->
 		<template v-if="row.kind === 'server'">
-			<component
-				:is="row.sub.gateway_url ? 'button' : 'div'"
-				class="group min-w-0 text-left"
-				@click="$emit('open', row.sub)"
-			>
-				<div class="flex items-center gap-2">
+			<td class="py-3 pl-5 pr-3">
+				<component
+					:is="row.sub.gateway_url ? 'button' : 'div'"
+					class="group flex min-w-0 items-center gap-2.5 text-left"
+					@click="$emit('open', row.sub)"
+				>
 					<span
-						class="lucide-server mt-0.5 size-4 shrink-0 text-ink-gray-5"
+						class="lucide-server size-4 shrink-0 text-ink-gray-5"
 						aria-hidden="true"
 					/>
 					<span
-						class="truncate text-base-medium text-ink-gray-9"
+						class="truncate text-base text-ink-gray-9"
 						:class="row.sub.gateway_url ? 'transition-colors group-hover:text-ink-gray-7' : ''"
 					>
 						{{ subscriptionTitle(row.sub) }}
@@ -113,26 +113,23 @@ function overAllowance(s: ServiceRow): boolean {
 						:theme="statusInfo(row.sub)!.theme"
 						:label="statusInfo(row.sub)!.label"
 					/>
-				</div>
-				<div class="truncate pl-6 text-p-sm text-ink-gray-5">
-					{{ serverSubtitle(row.sub) }}
-				</div>
-			</component>
-			<div class="flex shrink-0 items-center gap-2">
-				<div class="text-right">
-					<span
-						class="block text-sm-medium tabular-nums"
-						:class="isTerminated(row.sub) ? 'text-ink-gray-4' : 'text-ink-gray-9'"
-					>
-						{{ row.cost != null ? money(row.cost, currency) : '—' }}
-					</span>
-					<span
-						v-if="showRate(row)"
-						class="block text-p-sm tabular-nums text-ink-gray-5"
-					>
-						{{ money(row.sub.monthly_rate, currency, { trimTrailingZeros: true }) }}/mo
-					</span>
-				</div>
+				</component>
+			</td>
+			<td class="px-3 py-3 text-sm text-ink-gray-5">
+				<span class="block truncate">{{ serverSubtitle(row.sub) }}</span>
+			</td>
+			<td class="px-3 py-3 text-right tabular-nums">
+				<span
+					class="block text-base"
+					:class="isTerminated(row.sub) ? 'text-ink-gray-4' : 'text-ink-gray-9'"
+				>
+					{{ row.cost != null ? money(row.cost, currency) : '—' }}
+				</span>
+				<span v-if="showRate(row)" class="block text-sm text-ink-gray-5">
+					{{ money(row.sub.monthly_rate, currency, { trimTrailingZeros: true }) }}/mo
+				</span>
+			</td>
+			<td class="w-10 py-3 pr-3">
 				<SubscriptionRowActions
 					:subscription="row.sub"
 					:can-manage="canManage"
@@ -142,21 +139,25 @@ function overAllowance(s: ServiceRow): boolean {
 					@resume="$emit('resume', $event)"
 					@assign-project="$emit('assignProject', $event)"
 				/>
-			</div>
+			</td>
 		</template>
 
 		<!-- Metered service -->
 		<template v-else>
-			<div class="min-w-0 flex-1">
-				<div class="flex items-center gap-2">
+			<td class="py-3 pl-5 pr-3">
+				<div class="flex min-w-0 items-center gap-2.5">
 					<span
-						class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+						class="size-4 shrink-0 text-ink-gray-5"
 						:class="serviceIcon(row.service)"
 						aria-hidden="true"
 					/>
-					<span class="truncate text-base-medium text-ink-gray-9">
+					<span class="truncate text-base text-ink-gray-9">
 						{{ row.service.title || row.service.plan }}
 					</span>
+					<Badge
+						v-if="row.service.settlement_mode !== 'Prepaid Pack'"
+						label="Metered"
+					/>
 					<Badge
 						v-if="exhausted(row.service)"
 						theme="amber"
@@ -168,27 +169,28 @@ function overAllowance(s: ServiceRow): boolean {
 						label="Over"
 					/>
 				</div>
-				<div class="pl-6">
-					<div class="truncate text-p-sm text-ink-gray-5">
-						{{ usageLabel(row.service) }}
-					</div>
+			</td>
+			<td class="px-3 py-3">
+				<div class="flex items-center gap-2.5">
 					<div
 						v-if="row.service.allowance > 0"
-						class="mt-1.5 h-1 w-full max-w-56 overflow-hidden rounded-full bg-surface-gray-2"
+						class="h-1 flex-1 overflow-hidden rounded-1 bg-surface-gray-2"
 					>
 						<span
-							class="block h-full rounded-full"
-							:class="overAllowance(row.service) ? 'bg-surface-amber-7' : 'bg-surface-gray-10'"
+							class="block h-full"
+							:class="overAllowance(row.service) ? 'bg-surface-amber-5' : 'bg-surface-gray-7'"
 							:style="{ width: `${overAllowance(row.service) ? 100 : usagePct(row.service)}%` }"
 						/>
 					</div>
+					<span class="whitespace-nowrap text-sm tabular-nums text-ink-gray-5">
+						{{ usageLabel(row.service) }}
+					</span>
 				</div>
-			</div>
-			<span
-				class="block shrink-0 text-right text-sm-medium tabular-nums text-ink-gray-9"
-			>
+			</td>
+			<td class="px-3 py-3 text-right text-base tabular-nums text-ink-gray-9">
 				{{ money(row.cost ?? 0, currency) }}
-			</span>
+			</td>
+			<td class="w-10 py-3 pr-3" />
 		</template>
-	</div>
+	</tr>
 </template>

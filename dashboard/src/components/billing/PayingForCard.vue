@@ -1,24 +1,27 @@
 <script setup lang="ts">
-import { Button, Skeleton } from 'frappe-ui'
+import { Button, LoadingText } from 'frappe-ui'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AssignProjectDialog from '@/components/billing/AssignProjectDialog.vue'
-import BillingCard from '@/components/billing/BillingCard.vue'
 import PayingForRow from '@/components/billing/PayingForRow.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
+import ProjectsRow from '@/components/billing/ProjectsRow.vue'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { usePayingFor } from '@/composables/usePayingFor'
+import { money } from '@/lib/format'
 import { subscriptionTitle } from '@/lib/subscriptions'
 
 const VISIBLE = 5
 
-defineEmits<{ open: [] }>()
+defineEmits<{ open: []; openProjects: [] }>()
+
 const router = useRouter()
 const { canManageBilling } = useCapabilities()
+
 const {
 	rows,
 	loading,
 	currency,
+	total,
 	busy,
 	pendingPause,
 	pendingAssignProject,
@@ -32,62 +35,90 @@ const {
 
 const visible = computed(() => rows.value.slice(0, VISIBLE))
 const hidden = computed(() => Math.max(0, rows.value.length - VISIBLE))
-
-function goToObjectStorage(): void {
-	router.push({ name: 'ObjectStorage' })
-}
+const goToObjectStorage = () => router.push({ name: 'ObjectStorage' })
 </script>
 
 <template>
-	<BillingCard title="Subscriptions">
-		<div v-if="loading" class="space-y-3 py-1">
-			<div v-for="i in 3" :key="i" class="flex items-center gap-3">
-				<Skeleton class="size-4 shrink-0 rounded-4" />
-				<div class="flex-1 space-y-1.5">
-					<Skeleton class="h-3.5 w-40 rounded-4" />
-					<Skeleton class="h-3 w-28 rounded-4" />
-				</div>
-			</div>
-		</div>
+	<section
+		aria-labelledby="subscriptions-heading"
+		class="overflow-hidden rounded-6 border border-outline-gray-1 bg-surface-base"
+	>
+		<header class="flex min-h-14 items-center justify-between gap-3 px-5 py-3">
+			<h2 id="subscriptions-heading" class="text-base-semibold text-ink-gray-8">
+				Subscriptions
+				<span
+					v-if="rows.length"
+					class="ml-1 text-base tabular-nums text-ink-gray-4"
+				>
+					{{ rows.length }}
+				</span>
+			</h2>
+			<span class="text-sm tabular-nums text-ink-gray-5">
+				{{ money(total, currency) }}
+				this cycle
+			</span>
+		</header>
 
-		<template v-else-if="rows.length">
-			<div class="divide-y divide-outline-gray-1">
-				<PayingForRow
-					v-for="row in visible"
-					:key="row.id"
-					:row="row"
-					:currency="currency"
-					:can-manage="canManageBilling"
-					:busy="busy"
-					@open="openServer"
-					@pause="askPause"
-					@resume="onResume"
-					@assign-project="askAssignProject"
-				/>
-			</div>
-			<Button
+		<LoadingText v-if="loading" :lines="3" class="px-5 pb-5" />
+
+		<div v-else-if="rows.length" class="overflow-x-auto">
+			<table class="w-full min-w-max border-collapse">
+				<thead>
+					<tr class="text-left text-sm text-ink-gray-5">
+						<th class="border-y border-outline-gray-1 py-2 pl-5 pr-3">Name</th>
+						<th class="w-2/5 border-y border-outline-gray-1 px-3 py-2">
+							Usage
+						</th>
+						<th class="border-y border-outline-gray-1 px-3 py-2 text-right">
+							Cost
+						</th>
+						<th class="w-10 border-y border-outline-gray-1">
+							<span class="sr-only">Actions</span>
+						</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-outline-gray-1">
+					<PayingForRow
+						v-for="row in visible"
+						:key="row.id"
+						:row="row"
+						:currency="currency"
+						:can-manage="canManageBilling"
+						:busy="busy"
+						@open="openServer"
+						@pause="askPause"
+						@resume="onResume"
+						@assign-project="askAssignProject"
+					/>
+				</tbody>
+			</table>
+			<button
 				v-if="hidden"
-				variant="ghost"
-				class="-mb-2 -ml-2 mt-2"
-				:label="`View all ${rows.length}`"
+				type="button"
+				class="flex w-full items-center gap-1 border-t border-outline-gray-1 px-5 py-2.5 text-sm text-ink-gray-5 transition-colors hover:bg-surface-gray-1 hover:text-ink-gray-8"
 				@click="$emit('open')"
 			>
-				<template #suffix>
-					<span class="lucide-chevron-right size-4" aria-hidden="true" />
-				</template>
-			</Button>
-		</template>
+				View all {{ rows.length }}
+				<span class="lucide-arrow-right size-3.5" aria-hidden="true" />
+			</button>
+		</div>
 
-		<EmptyState
+		<div
 			v-else
-			icon="lucide-server"
-			title="Nothing being billed"
-			description="Servers and metered services you're subscribed to will show here with what they cost."
+			class="flex flex-wrap items-center justify-between gap-3 border-t border-outline-gray-1 px-5 py-4"
 		>
-			<template v-if="canManageBilling" #action>
-				<Button label="Open Object Storage" @click="goToObjectStorage" />
-			</template>
-		</EmptyState>
+			<p class="text-p-sm text-ink-gray-5">
+				Servers and metered services you subscribe to show here with what they
+				cost.
+			</p>
+			<Button
+				v-if="canManageBilling"
+				label="Open Object Storage"
+				@click="goToObjectStorage"
+			/>
+		</div>
+
+		<ProjectsRow @open="$emit('openProjects')" />
 
 		<ConfirmDialog
 			v-model:target="pendingPause"
@@ -101,5 +132,5 @@ function goToObjectStorage(): void {
 			v-model:subscription="pendingAssignProject"
 			@assigned="onAssignedProject"
 		/>
-	</BillingCard>
+	</section>
 </template>

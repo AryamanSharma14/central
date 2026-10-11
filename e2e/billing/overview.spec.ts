@@ -25,5 +25,5 @@ test('Shows the wallet balance', async ({ page, users, billing }) => {
 	await page.goto('/dashboard/billing')
 
 	await expect(page.getByText('Prepaid credits')).toBeVisible()
-	await expect(page.getByText('Balance ₹500.00')).toBeVisible()
+	await expect(page.getByText('₹500.00 balance')).toBeVisible()
 })
