@@ -62,6 +62,8 @@ const {
 	imagesError,
 	reloadImages,
 	sshKeyIds,
+	hasPublicIpv4,
+	ipv4PriceLabel,
 	hasPublicIpv6,
 	isFirewallEnabled,
 	action,
@@ -223,6 +225,8 @@ watch(
 					<section v-if="image">
 						<h2 class="mb-3 text-base-semibold text-ink-gray-8">Network</h2>
 						<ServerNetworkOptions
+							v-model:has-public-ipv4="hasPublicIpv4"
+							:ipv4-price-label="ipv4PriceLabel"
 							v-model:has-public-ipv6="hasPublicIpv6"
 							v-model:is-firewall-enabled="isFirewallEnabled"
 						/>

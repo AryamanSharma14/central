@@ -32,7 +32,7 @@ export interface ServerActions {
 	/** Sign in to the server's bench or site, which is an Administrator session. */
 	open: boolean
 	power: boolean
-	/** Change the firewall. */
+	/** Change the firewall and public addresses. */
 	network?: boolean
 	resize: boolean
 	snapshot: boolean
