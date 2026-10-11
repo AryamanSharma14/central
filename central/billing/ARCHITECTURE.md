@@ -124,7 +124,8 @@ Plan Configurator ─→ Category, Sub-Category, [C]base_rates, [C]rungs(─→P
 ```
 Subscription ──team, ──project─→ Project, ──plan, ──sub_category, ──includes─→ [C]Plan Includes,
              ──default_payment_method, ──gateway, ──server_id─→ Virtual Machine,
-             ──vm_snapshot─→ VM Snapshot, cluster (read-only, from server_id.region), service_subject
+             ──vm_snapshot─→ VM Snapshot, ──public_ip_server─→ Virtual Machine (its public IPv4),
+             cluster (read-only, from server_id.region), service_subject
 Subscription Change ──subscription, ──team, ──currency      (append-only history + locked_rate)
 Project ──team, ──title, ──enabled, ──spending_limit          (cost-tag + run-rate cap; see §2.1)
 ```
