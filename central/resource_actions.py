@@ -51,6 +51,7 @@ def submit_request(
 	hostname: str | None = None,
 	ssh_keys: list[str] | None = None,
 	ssh_key_ids: list[str] | None = None,
+	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
 	resource_type: str = "Server",
@@ -78,11 +79,16 @@ def submit_request(
 		hostname=hostname,
 		ssh_keys=ssh_keys,
 		ssh_key_ids=ssh_key_ids,
+		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
 	)
 	if not can(frappe.session.user, server_input.team, "server:create"):
 		frappe.throw(_("You cannot create servers for this Team."), frappe.PermissionError)
+	if server_input.has_public_ipv4:
+		from central.billing.catalog.public_ips import require_public_ipv4_rate
+
+		require_public_ipv4_rate(server_input.team, server_input.region)
 
 	digest = _request_digest(server_input, resource_type, subdomain)
 	# Serialize budget reservations and repeated submissions within one Team.
@@ -249,6 +255,7 @@ def _build_server_configuration(
 		hostname=server_input.hostname,
 		ssh_keys=server_input.ssh_keys,
 		ssh_key_ids=server_input.ssh_key_ids,
+		has_public_ipv4=server_input.has_public_ipv4,
 		has_public_ipv6=server_input.has_public_ipv6,
 		is_firewall_enabled=server_input.is_firewall_enabled,
 		image_tags=image["tags"],

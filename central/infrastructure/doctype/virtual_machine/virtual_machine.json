@@ -36,6 +36,7 @@
   "has_public_ipv6",
   "is_firewall_enabled",
   "firewall_rules",
+  "has_ipv4_internet",
   "ssh_keys_section",
   "ssh_keys",
   "diagnostics_tab",
@@ -247,6 +248,14 @@
    "fieldname": "is_firewall_enabled",
    "fieldtype": "Check",
    "label": "Firewall Enabled",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Whether the server reaches the IPv4 internet through host NAT, as Atlas last reported. A public IPv4 needs it.",
+   "fieldname": "has_ipv4_internet",
+   "fieldtype": "Check",
+   "label": "IPv4 Internet Access",
    "read_only": 1
   },
   {
