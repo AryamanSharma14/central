@@ -76,6 +76,10 @@ When a payment method of the Team becomes active, every Active or Ended trial si
 
 A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
 
+### In-app status
+
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+
 ### Failure
 
 When a stop or a terminate fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.

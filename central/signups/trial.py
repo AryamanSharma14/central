@@ -83,6 +83,27 @@ def get_trial_days(product: str | None, fieldname: str) -> int:
 	return days or frappe.get_cached_value("Central Settings", "Central Settings", fieldname)
 
 
+def get_status(server: str, site: str | None = None) -> dict | None:
+	"""The open trial of the site on `server`, for the in-app billing panel, or None.
+	A server with several sites must name one."""
+	filters = {"server": server, "name": site} if site else {"server": server}
+	sites = frappe.get_all(
+		"Site", filters=filters, fields=["trial_state", "trial_ends_on", "trial_deletes_on"]
+	)
+	if len(sites) > 1:
+		frappe.throw(_("This server has several sites. Name the site whose trial to show."))
+	if not sites or sites[0].trial_state not in ("Active", "Ended"):
+		return None
+
+	trial = sites[0]
+	return {
+		"state": trial.trial_state,
+		"ends_on": trial.trial_ends_on,
+		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
+		"deletes_on": trial.trial_deletes_on,
+	}
+
+
 def run_trials() -> None:
 	"""Daily job: warn before a trial ends, stop it on its end date, and terminate it on its deletion date."""
 	today = getdate(nowdate())

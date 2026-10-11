@@ -177,3 +177,14 @@ class TestTrialLifecycle(SiteOnAMachine):
 		with self.change_settings("Central Settings", trial_servers_per_team=1):
 			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
 				validate_trial_site(self.team.name)
+
+	def test_the_billing_panel_reads_the_open_trial_of_the_server(self):
+		self.ready_site()
+
+		status = trial.get_status(self.server.name)
+		self.assertEqual(status["state"], "Active")
+		self.assertEqual(status["days_left"], 14)
+		self.assertIsNone(trial.get_status(self.server.name, site="other.example.test"))
+
+		self.site().db_set("trial_state", "Converted")
+		self.assertIsNone(trial.get_status(self.server.name))
