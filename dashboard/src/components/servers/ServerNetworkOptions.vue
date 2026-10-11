@@ -27,7 +27,8 @@ const isFirewallEnabled = defineModel<boolean>('isFirewallEnabled', {
 					Enable firewall
 				</span>
 				<span class="mt-1 block text-p-sm text-ink-gray-5">
-					Allow only SSH, HTTP, and HTTPS from the internet.
+					Allow only SSH, HTTP, and HTTPS from the internet. You can change the
+					rules later in Networking.
 				</span>
 			</template>
 		</Switch>

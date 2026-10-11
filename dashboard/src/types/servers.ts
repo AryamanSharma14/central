@@ -1,4 +1,5 @@
 import type { VirtualMachineRow } from '@/composables/useServers'
+import type { FirewallRules } from '@/lib/firewall'
 
 export interface MetricPoint {
 	time: number
@@ -45,6 +46,8 @@ export interface ServerOverview {
 		has_public_ipv6: 0 | 1
 		is_firewall_enabled: 0 | 1
 		is_termination_protected: 0 | 1
+		/** Null until Central first reads the firewall from the region. */
+		firewall_rules: FirewallRules | null
 		region_details: {
 			display_name: string | null
 			provider: string | null
