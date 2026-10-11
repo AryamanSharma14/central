@@ -141,8 +141,9 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 			"public_ipv6": row.public_ipv6,
 			"has_public_ipv6": row.has_public_ipv6,
 			"is_firewall_enabled": row.is_firewall_enabled,
+			"is_termination_protected": row.is_termination_protected,
 			"ssh_command": _ssh_command(row),
-			"ssh_keys": _server_ssh_keys(resource_id, team),
+			"ssh_keys": _server_ssh_keys(row.resource_id),
 			"gateway_url": row.gateway_url,
 			"creation": row.creation,
 		}
@@ -239,21 +240,18 @@ def server_hostnames(team: str | None = None, resource_id: str | None = None) ->
 	return hostnames
 
 
-def _server_ssh_keys(resource_id: str, team: str) -> list[dict]:
-	"""The team keys a server was created with, by title."""
-	server = frappe.qb.DocType("Virtual Machine")
+def _server_ssh_keys(server: str) -> list[dict]:
+	"""The team keys that can sign in to one server, in the order the server holds them."""
 	link = frappe.qb.DocType("Server SSH Key")
 	key = frappe.qb.DocType("Team SSH Key")
 
 	return (
 		frappe.qb.from_(link)
-		.join(server)
-		.on((server.name == link.parent) & (link.parenttype == "Virtual Machine"))
 		.join(key)
 		.on(key.name == link.team_ssh_key)
-		.select(key.title, key.fingerprint)
-		.where((server.resource_id == resource_id) & (server.team == team))
-		.orderby(key.title)
+		.select(key.name, key.title, key.fingerprint)
+		.where((link.parent == server) & (link.parenttype == "Virtual Machine"))
+		.orderby(link.idx)
 		.run(as_dict=True)
 	)
 
@@ -287,6 +285,7 @@ def _overview_server_row(resource_id: str, team: str):
 			server.public_ipv6,
 			server.has_public_ipv6,
 			server.is_firewall_enabled,
+			server.is_termination_protected,
 			server.gateway_url,
 			server.creation,
 			region.display_name.as_("region_display_name"),
@@ -459,6 +458,19 @@ def rename_server(team: str | None = None, resource_id: str | None = None, title
 	server.save(ignore_permissions=True)
 
 	return {"title": server.title}
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability(
+	"server:terminate", _lt("You can't change termination protection on this server."), server="resource_id"
+)
+def set_termination_protection(
+	team: str | None = None, resource_id: str | None = None, enabled: bool | int | str = False
+) -> None:
+	"""Turn termination protection on or off. Gated on `server:terminate`."""
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	server.set_termination_protection(bool(frappe.utils.cint(enabled)))
 
 
 @frappe.whitelist(methods=["POST"])

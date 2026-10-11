@@ -60,6 +60,7 @@ export const API = {
 	openConsole: 'central.api.servers.open_console',
 	resizeServer: 'central.api.servers.resize_server',
 	renameServer: 'central.api.servers.rename_server',
+	setTerminationProtection: 'central.api.servers.set_termination_protection',
 	terminateServer: 'central.api.servers.terminate_server',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',
@@ -72,6 +73,7 @@ export const API = {
 	rotateTeamSSHKey: 'central.api.ssh_keys.rotate_team_ssh_key',
 	retryTeamSSHKeySync: 'central.api.ssh_keys.retry_team_ssh_key_sync',
 	deleteTeamSSHKey: 'central.api.ssh_keys.delete_team_ssh_key',
+	setServerSSHKeys: 'central.api.ssh_keys.set_server_ssh_keys',
 
 	// ── Snapshots (central.api.snapshots) ──
 	// server:view reads them and their price; server:snapshot takes, keeps and deletes.

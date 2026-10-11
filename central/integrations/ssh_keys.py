@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import frappe
 from frappe import _
 
 from central.errors import AtlasConnectionError
 from central.integrations.atlas import AtlasClient
+from central.integrations.servers import get_client
+
+if TYPE_CHECKING:
+	from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 
 
 def sync_team_ssh_key(name: str) -> None:
@@ -33,6 +39,15 @@ def sync_team_ssh_key(name: str) -> None:
 		"last_sync_error",
 		_("Could not update {0}. Retry synchronization.").format(", ".join(errors)) if errors else None,
 	)
+
+
+def replace_server_ssh_keys(server: VirtualMachine, key_names: list[str], public_keys: list[str]) -> None:
+	"""Send a new key list to the region, then save it on the server."""
+	with frappe.cache.lock(f"server-ssh-keys:{server.name}", timeout=60):
+		get_client(server).replace_vm_ssh_keys(server.atlas_vm_id, public_keys)
+		server.set("ssh_keys", [{"team_ssh_key": name} for name in key_names])
+		# Customers cannot write a Virtual Machine; the route checks server:ssh-key.
+		server.save(ignore_permissions=True)
 
 
 def _sync_server(server) -> None:

@@ -206,6 +206,15 @@ def get_client(server: VirtualMachine) -> AtlasClient:
 	return AtlasClient(instance, tenant_id)
 
 
+def set_termination_protection(server: VirtualMachine, enabled: bool) -> None:
+	"""Change termination protection on Atlas, then record the state Atlas reports."""
+	remote = get_client(server).set_termination_protection(server.atlas_vm_id, enabled)
+	if type(remote.get("is_termination_protected")) is not bool:
+		raise AtlasConnectionError(_("Atlas returned an invalid termination protection state."))
+
+	server.db_set("is_termination_protected", remote["is_termination_protected"])
+
+
 def mark_terminated(server: VirtualMachine) -> None:
 	"""Record a server as gone. Its on_update revokes its Pilot and removes its mailbox."""
 	server.status = "Terminated"

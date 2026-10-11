@@ -21,7 +21,8 @@ export type ServerMenuVerb =
 export interface ServerMenuOptions {
 	/** This machine carries a site. Open goes to that site, not the bench. */
 	opensSite?: boolean
-	/** The caller shows Overview and Open itself, as on the server page. */
+	/** The caller shows Overview and Open itself, and its Settings tab offers Resize
+	 *  and Terminate, as on the server page. */
 	isOnServerPage?: boolean
 }
 
@@ -49,7 +50,7 @@ export function getServerMenuGroups(
 	const groups: DropdownOption[][] = [
 		getViewItems(server, allowed, entry, options),
 		isBusy ? [] : getPowerItems(server, allowed, entry),
-		isChangeable ? getChangeItems(allowed, entry) : [],
+		isChangeable ? getChangeItems(allowed, entry, options) : [],
 		[
 			// Renaming is rare, so it lives on the server page only.
 			...(options.isOnServerPage && allowed.resize
@@ -61,7 +62,7 @@ export function getServerMenuGroups(
 				onClick: () => copyServerId(server),
 			},
 		],
-		isChangeable && allowed.terminate
+		isChangeable && allowed.terminate && !options.isOnServerPage
 			? [{ ...entry('terminate', 'Terminate', 'lucide-trash-2'), theme: 'red' }]
 			: [],
 	]
@@ -147,10 +148,11 @@ function getPowerItems(
 function getChangeItems(
 	allowed: ServerActions,
 	entry: Entry,
+	{ isOnServerPage }: ServerMenuOptions,
 ): DropdownOption[] {
 	const items: DropdownOption[] = []
 
-	if (allowed.resize)
+	if (allowed.resize && !isOnServerPage)
 		items.push(entry('resize', 'Resize', 'lucide-sliders-horizontal'))
 
 	if (allowed.snapshot)

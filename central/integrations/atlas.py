@@ -187,6 +187,14 @@ class AtlasClient:
 			payload={"ssh_keys": public_keys},
 		)
 
+	def set_termination_protection(self, name: str, enabled: bool) -> dict:
+		"""Turn termination protection on or off. Atlas refuses to delete a protected VM."""
+		return self._request(
+			"PATCH",
+			f"virtual-machines/{quote(name, safe='')}/termination-protection",
+			payload={"enabled": enabled},
+		)
+
 	def get_console_url(self, name: str, mode: str) -> str:
 		"""Return the Atlas console page for a single-use token. The token expires in 30 seconds.
 

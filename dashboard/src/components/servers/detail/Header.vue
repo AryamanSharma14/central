@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { Badge, Button, Dropdown } from 'frappe-ui'
+import { Badge, Button, Dropdown, Tooltip } from 'frappe-ui'
 import { computed } from 'vue'
+import CopyableValue from '@/components/common/CopyableValue.vue'
 import ProviderAvatar from '@/components/servers/ProviderAvatar.vue'
 import type { ServerCommand, VirtualMachineRow } from '@/composables/useServers'
 import type { ServerActions } from '@/lib/capabilities'
-import { copyToClipboard } from '@/lib/clipboard'
-import { reportError, successToast } from '@/lib/feedback'
 import { formatPlanLabel } from '@/lib/planLabel'
 import { statusVisual } from '@/lib/serverMap'
 import { getServerMenu, type ServerMenuVerb } from '@/lib/serverMenu'
@@ -19,6 +18,7 @@ interface Props {
 	siteUrl: string | null
 	opening: boolean
 	busy: boolean
+	isSavingProtection: boolean
 }
 
 const props = defineProps<Props>()
@@ -32,6 +32,7 @@ const emit = defineEmits<{
 	snapshot: []
 	resize: []
 	terminate: []
+	protect: [enabled: boolean]
 }>()
 
 const visual = computed(() => statusVisual(props.server))
@@ -39,18 +40,35 @@ const isLocked = computed(() => !!props.server.pending_action)
 const isRunning = computed(() => props.server.status === 'Running')
 const isUbuntu = computed(() => props.server.image_offering === 'ubuntu')
 
-const address = computed(
-	() => props.server.public_ipv6 || props.server.public_ipv4,
+const addresses = computed(() =>
+	[
+		{
+			label: 'Public IPv4 address',
+			value: props.server.public_ipv4,
+			icon: 'lucide-globe',
+			help: 'Public IPv4',
+		},
+		{
+			label: 'Public IPv6 address',
+			value: props.server.public_ipv6,
+			icon: 'lucide-globe',
+			help: 'Public IPv6',
+		},
+		{
+			label: 'Private address',
+			value: props.server.ipv6_address,
+			icon: 'lucide-lock',
+			help: 'Private, this region only',
+		},
+	].filter((row): row is typeof row & { value: string } => !!row.value),
 )
 
-const copy = async (value: string, label: string): Promise<void> => {
-	if (await copyToClipboard(value)) {
-		successToast(`${label} copied`)
-		return
-	}
-
-	reportError(`${label} could not be copied. Select it and copy by hand.`)
-}
+const isProtected = computed(() => !!props.details?.is_termination_protected)
+const protectionLabel = computed(() =>
+	isProtected.value
+		? 'Turn off termination protection'
+		: 'Turn on termination protection',
+)
 
 const facts = computed(() => {
 	const server = props.server
@@ -147,23 +165,31 @@ const menu = computed(() =>
 						{{ fact.label }}
 					</li>
 
-					<li v-if="address" class="min-w-0">
-						<button
-							type="button"
-							class="flex min-w-0 items-center gap-1.5 rounded-2 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
-							:aria-label="`Copy address ${address}`"
-							title="Copy address"
-							@click="copy(address, 'Address')"
-						>
-							<span class="lucide-globe size-3.5 shrink-0" />
-							<span class="truncate">{{ address }}</span>
-						</button>
+					<li
+						v-for="row in addresses"
+						:key="row.label"
+						class="flex min-w-0 items-center gap-1.5"
+					>
+						<Tooltip :text="row.help">
+							<span :class="row.icon" class="size-3.5 shrink-0" />
+						</Tooltip>
+						<CopyableValue :value="row.value" :label="row.label" />
 					</li>
 				</ul>
 			</div>
 		</div>
 
 		<div class="flex shrink-0 gap-2">
+			<Button
+				v-if="details && actions.terminate"
+				variant="ghost"
+				:icon="isProtected ? 'lucide-lock' : 'lucide-lock-open'"
+				:label="protectionLabel"
+				:tooltip="protectionLabel"
+				:loading="isSavingProtection"
+				@click="emit('protect', !isProtected)"
+			/>
+
 			<Dropdown :options="menu" align="end">
 				<Button
 					label="Actions"

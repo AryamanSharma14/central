@@ -24,7 +24,9 @@ import {
 	type VirtualMachineRow,
 } from '@/composables/useServers'
 import { useTerminateServer } from '@/composables/useTerminateServer'
+import { useTerminationProtection } from '@/composables/useTerminationProtection'
 import { getServerActions } from '@/lib/capabilities'
+import { successToast } from '@/lib/feedback'
 import { METRIC_PERIODS } from '@/lib/serverMetrics'
 import type { MetricsRange } from '@/types/servers'
 
@@ -48,6 +50,7 @@ const {
 	canSnapshotServer,
 	canTerminateServer,
 	canOpenConsole,
+	canManageSSHKeys,
 } = useCapabilities()
 
 const { servers, sites, loaded, error: fleetError, reload } = useServerMapData()
@@ -103,6 +106,18 @@ const details = computed(() =>
 		? overview.value
 		: null,
 )
+
+const { setTerminationProtection, isSavingProtection } =
+	useTerminationProtection(resourceId)
+
+const protect = async (enabled: boolean): Promise<void> => {
+	if (!(await setTerminationProtection(enabled))) return
+
+	successToast(
+		enabled ? 'Termination protection is on' : 'Termination protection is off',
+	)
+	reloadOverview()
+}
 
 const site = computed(() =>
 	sites.value.find((row) => row.server === server.value?.name),
@@ -263,6 +278,7 @@ watch(
 					:site-url="site?.url ?? null"
 					:opening="isOpening"
 					:busy="busy === server.resource_id"
+					:is-saving-protection="isSavingProtection"
 					@open="open"
 					@pilot="openBench(server)"
 					@command="command"
@@ -271,6 +287,7 @@ watch(
 					@snapshot="pendingSnapshot = server"
 					@resize="resizing = true"
 					@terminate="pendingTerminate = server"
+					@protect="protect"
 				/>
 
 				<Tabs v-model="activeTab" class="mt-4">
@@ -335,7 +352,13 @@ watch(
 					class="mt-6"
 				/>
 
-				<AccessTab v-else :overview="details" class="mt-6" />
+				<AccessTab
+					v-else
+					:overview="details"
+					:can-manage-keys="canManageSSHKeys"
+					class="mt-6"
+					@changed="reloadOverview"
+				/>
 			</template>
 		</div>
 
@@ -354,6 +377,7 @@ watch(
 			:loading="busy === pendingTerminate?.resource_id"
 			:error="terminateError"
 			:can-snapshot="actions.snapshot"
+			:is-protected="!!details?.server.is_termination_protected"
 			@confirm="terminate"
 		/>
 

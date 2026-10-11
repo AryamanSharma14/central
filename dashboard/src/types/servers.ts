@@ -25,6 +25,13 @@ export interface MetricsRange {
 	end: string | null
 }
 
+/** A team key that can sign in to one server. */
+export interface ServerSSHKey {
+	name: string
+	title: string
+	fingerprint: string
+}
+
 export interface ServerOverview {
 	server: VirtualMachineRow & {
 		creation: string
@@ -34,9 +41,10 @@ export interface ServerOverview {
 		plan_billing_cycle: string | null
 		team_name: string
 		ssh_command: string | null
-		ssh_keys: { title: string; fingerprint: string }[]
+		ssh_keys: ServerSSHKey[]
 		has_public_ipv6: 0 | 1
 		is_firewall_enabled: 0 | 1
+		is_termination_protected: 0 | 1
 		region_details: {
 			display_name: string | null
 			provider: string | null

@@ -36,6 +36,7 @@ class VirtualMachine(Document):
 		image_offering: DF.Link | None
 		ipv6_address: DF.Data | None
 		is_firewall_enabled: DF.Check
+		is_termination_protected: DF.Check
 		last_reported_at: DF.Datetime | None
 		memory_megabytes: DF.Int
 		plan: DF.Link | None
@@ -304,6 +305,25 @@ class VirtualMachine(Document):
 			frappe.throw(_("This server's pilot hasn't enrolled yet."), frappe.ValidationError)
 
 		return f"{gateway}/?sid={mint_bench_login(audience)}"
+
+	def set_ssh_keys(self, key_names: list[str]) -> None:
+		"""Replace the team keys that can sign in to this server."""
+		from central.integrations.ssh_keys import replace_server_ssh_keys
+		from central.resource_actions import resolve_team_ssh_keys
+
+		self.require_live()
+		replace_server_ssh_keys(self, key_names, resolve_team_ssh_keys(self.team, key_names))
+
+	def set_termination_protection(self, enabled: bool) -> None:
+		"""Turn termination protection on or off. The region refuses to terminate a protected server."""
+		from central.integrations.servers import set_termination_protection
+
+		self.require_live()
+		set_termination_protection(self, enabled)
+
+	def require_live(self) -> None:
+		if self.status == "Terminated":
+			frappe.throw(_("This server is terminated."))
 
 	def publish_state_change(self) -> None:
 		"""Tell this team's consoles that one of its servers changed. The payload is identity only,

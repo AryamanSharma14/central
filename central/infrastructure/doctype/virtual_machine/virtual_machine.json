@@ -25,6 +25,7 @@
   "image_offering",
   "has_site",
   "skip_automatic_snapshot",
+  "is_termination_protected",
   "access_tab",
   "network_section",
   "ipv6_address",
@@ -180,6 +181,14 @@
    "fieldname": "skip_automatic_snapshot",
    "fieldtype": "Check",
    "label": "Skip Automatic Snapshot"
+  },
+  {
+   "default": "0",
+   "description": "Atlas refuses to terminate this server while this is on. The customer changes it from the server page.",
+   "fieldname": "is_termination_protected",
+   "fieldtype": "Check",
+   "label": "Termination Protection",
+   "read_only": 1
   },
   {
    "fieldname": "access_tab",
@@ -346,7 +355,7 @@
    "link_fieldname": "server"
   }
  ],
- "modified": "2026-10-11 10:00:00.000000",
+ "modified": "2026-10-11 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Infrastructure",
  "name": "Virtual Machine",

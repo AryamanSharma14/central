@@ -13,6 +13,8 @@ interface TerminateServerDialogProps {
 	error?: string
 	/** The viewer holds server:snapshot, so a final snapshot can be offered. */
 	canSnapshot?: boolean
+	/** The server has termination protection on, so the region would refuse. */
+	isProtected?: boolean
 }
 
 // Lists what stops working before the customer confirms. The list is advice: a failed
@@ -60,10 +62,17 @@ const snapshotNote = computed(() => {
 		theme="red"
 		size="md"
 		:loading="loading"
+		:disabled="isProtected"
 		:error="error"
 		@confirm="emit('confirm', $event, takeSnapshot)"
 	>
-		<div class="space-y-3">
+		<p v-if="isProtected" class="text-p-base text-ink-gray-7">
+			<span class="font-semibold text-ink-gray-9">{{ name }}</span>
+			has termination protection on. Turn it off with the lock button next to
+			Actions, then terminate the server.
+		</p>
+
+		<div v-else class="space-y-3">
 			<p class="text-p-base text-ink-gray-7">
 				Permanently destroy
 				<span class="font-semibold text-ink-gray-9">{{ name }}</span>? This
