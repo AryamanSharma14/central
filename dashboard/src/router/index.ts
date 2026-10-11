@@ -112,18 +112,6 @@ const routes = [
 				meta: { title: 'Invoices' },
 			},
 			{
-				path: 'billing/reports',
-				name: 'BillingReports',
-				component: () => import('@/pages/billing/BillingReportsPage.vue'),
-				meta: { title: 'Reports' },
-			},
-			{
-				path: 'billing/limits',
-				name: 'SpendingLimits',
-				component: () => import('@/pages/billing/SpendingLimitsPage.vue'),
-				meta: { title: 'Limit tiers' },
-			},
-			{
 				path: 'settings',
 				name: 'Settings',
 				component: () => import('@/pages/settings/SettingsPage.vue'),

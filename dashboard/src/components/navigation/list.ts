@@ -108,18 +108,6 @@ export const sidebarSections = computed<SidebarSection[]>(() => {
 					to: '/billing/invoices',
 					condition: canViewBilling.value,
 				},
-				{
-					label: 'Reports',
-					icon: 'lucide-chart-no-axes-column',
-					to: '/billing/reports',
-					condition: canViewBilling.value,
-				},
-				{
-					label: 'Limit tiers',
-					icon: 'lucide-layers',
-					to: '/billing/limits',
-					condition: canViewBilling.value,
-				},
 			],
 		},
 	]
