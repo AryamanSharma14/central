@@ -187,6 +187,9 @@ doc_events = {
 		# Its email is the alert address of the team's Grove user when set.
 		"on_update": "central.services.ai.on_alert_address_update",
 	},
+	"Payment Method": {
+		"on_update": "central.signups.credit.on_payment_method_update",
+	},
 }
 
 # Scheduled Tasks

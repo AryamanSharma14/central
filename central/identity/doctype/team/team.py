@@ -60,7 +60,7 @@ class Team(Document):
 		return team
 
 	def provision_billing(self) -> None:
-		"""Seed the billing currency from the request IP and grant the welcome credits.
+		"""Seed the billing currency from the request IP.
 
 		A failure is logged and is not fatal. The owner can still complete the billing
 		profile in the console, which provisions the same way."""
