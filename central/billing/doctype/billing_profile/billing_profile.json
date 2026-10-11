@@ -46,6 +46,7 @@
   "manual_override",
   "column_break_trust",
   "override_max_spend",
+  "override_max_ai_spend",
   "promoted_at",
   "promotion_basis"
  ],
@@ -224,6 +225,13 @@
    "fieldtype": "Currency",
    "label": "Override Max Spend",
    "options": "currency"
+  },
+  {
+   "depends_on": "manual_override",
+   "description": "Bespoke monthly AI spend limit in USD for Manual Override; blank uses the level's Max AI Spend. Sent to Grove on save.",
+   "fieldname": "override_max_ai_spend",
+   "fieldtype": "Float",
+   "label": "Override Max AI Spend (USD / month)"
   },
   {
    "fieldname": "promoted_at",

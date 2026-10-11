@@ -3,7 +3,7 @@
 
 import frappe
 
-from central.billing.catalog.entitlements import evaluate_tier, get_ladder, recompute_trust_tier
+from central.billing.catalog.entitlements import evaluate_tier, get_ladder, get_team_caps, recompute_trust_tier
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
 from central.billing.tests.utils import clear_team_tier, complete_billing_profile, ensure_team
 
@@ -61,6 +61,7 @@ def make_ladder():
 				"sequence": level["sequence"],
 				"is_default": level.get("is_default", 0),
 				"max_resource_count": level["max_resource_count"],
+				"max_ai_spend": level["max_spend"] / 10,
 				"min_paid_invoices": level["min_paid_invoices"],
 				"thresholds": [
 					{
@@ -124,3 +125,11 @@ class TestRecomputeTrustTier(IntegrationTestCase):
 		# (no suspend is issued here — that is a non-payment directive on the token).
 		self.assertEqual(tier.tier, "t0")
 		self.assertEqual(tier.max_spend, 100)
+
+	def test_a_manual_override_pins_the_ai_spend_limit_and_blank_keeps_the_levels(self):
+		recompute_trust_tier("team-entitle", paid_invoice_count=3, cumulative_paid=300)  # t1
+		self.assertEqual(get_team_caps("team-entitle").max_ai_spend, 30)
+		frappe.db.set_value("Billing Profile", "team-entitle", {"manual_override": 1, "override_max_ai_spend": 75})
+		self.assertEqual(get_team_caps("team-entitle").max_ai_spend, 75)
+		frappe.db.set_value("Billing Profile", "team-entitle", "override_max_ai_spend", 0)
+		self.assertEqual(get_team_caps("team-entitle").max_ai_spend, 30)

@@ -11,7 +11,7 @@ import {
 	TextInput,
 	Tooltip,
 } from 'frappe-ui'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -36,10 +36,11 @@ const {
 	busyKey,
 	loadApiKeys,
 	createApiKey,
-	setCap,
-	keyModels,
-	keyModelsLoading,
-	loadKeyModels,
+	setCaps,
+	capsSaving,
+	models,
+	modelsLoading,
+	loadModels,
 	revokeApiKey,
 } = useAI()
 
@@ -47,9 +48,26 @@ loadApiKeys()
 
 // A free team is never charged: caps mean nothing to it, so they stay off the page.
 const prepaid = computed(
-	() => !!ai.value?.balance && !ai.value.balance.is_free_user,
+	() => !!ai.value?.spend && !ai.value.spend.is_free_user,
 )
-const unallocated = computed(() => ai.value?.balance?.unallocated ?? 0)
+const spend = computed(() => ai.value?.spend)
+const activeKeys = computed(() =>
+	apiKeys.value.filter((key) => key.status === 'active'),
+)
+const atKeyLimit = computed(
+	() => !!spend.value && activeKeys.value.length >= spend.value.max_keys,
+)
+const isCapReached = (key: AIApiKey): boolean =>
+	key.cap > 0 && key.month_spent >= key.cap
+const capPercent = (key: AIApiKey): number =>
+	Math.min(100, (key.month_spent / key.cap) * 100)
+// Gray while there is room, amber from 80%, red once the gateway refuses it.
+const capBarClass = (key: AIApiKey): string =>
+	isCapReached(key)
+		? 'bg-surface-red-5'
+		: capPercent(key) >= 80
+			? 'bg-surface-amber-7'
+			: 'bg-surface-gray-10'
 const geographies = computed(() => ai.value?.geographies ?? [])
 const geographyLabel = (name: string): string =>
 	geographies.value.find((g) => g.name === name)?.label ?? name
@@ -61,15 +79,6 @@ const revocableFrom = (key: AIApiKey): string =>
 	dayjs(key.revocable_at).format('MMM D, h:mm A')
 
 const rowActions = (key: AIApiKey): DropdownOptions => [
-	...(prepaid.value
-		? [
-				{
-					label: 'Set spend limit',
-					icon: 'lucide-wallet',
-					onClick: () => openCap(key),
-				},
-			]
-		: []),
 	{
 		label: 'Revoke',
 		icon: 'lucide-trash-2',
@@ -165,39 +174,74 @@ const create = async (): Promise<void> => {
 // The one time the secret is shown.
 const minted = ref<MintedKey | null>(null)
 
-// ── Cap ──
-const capTarget = ref<AIApiKey | null>(null)
-const capValue = ref('')
-const capError = ref('')
+// ── Caps: every live key's in one dialog, saved in one call ──
+const capsOpen = ref(false)
+const capValues = ref<Record<string, string>>({})
+const capsError = ref('')
+const capsTotal = computed(() =>
+	activeKeys.value.reduce(
+		(sum, key) => sum + (Number(capValues.value[key.name]) || 0),
+		0,
+	),
+)
+// Grove checks only a raise, so a team past a lowered limit may still save lowers.
+const capsOverLimit = computed(
+	() =>
+		capsTotal.value > (spend.value?.spend_limit ?? 0) &&
+		capsTotal.value > (spend.value?.capped ?? 0),
+)
+const capsInvalid = computed(() =>
+	activeKeys.value.some((key) => !(Number(capValues.value[key.name]) >= 0)),
+)
 
-const openCap = (key: AIApiKey): void => {
-	capTarget.value = key
-	capValue.value = String(key.cap)
-	capError.value = ''
+const openCaps = (): void => {
+	capValues.value = Object.fromEntries(
+		activeKeys.value.map((key) => [key.name, String(key.cap)]),
+	)
+	capsError.value = ''
+	capsOpen.value = true
 }
 
-const saveCap = async (): Promise<void> => {
-	if (!capTarget.value) return
-	capError.value = ''
+const saveCaps = async (): Promise<void> => {
+	capsError.value = ''
+	const changed = Object.fromEntries(
+		activeKeys.value
+			.filter((key) => Number(capValues.value[key.name]) !== key.cap)
+			.map((key) => [key.name, Number(capValues.value[key.name])]),
+	)
 	try {
-		await setCap(capTarget.value.name, Number(capValue.value))
-		capTarget.value = null
+		if (Object.keys(changed).length) await setCaps(changed)
+		capsOpen.value = false
 	} catch (e) {
-		capError.value = getErrorMessage(e)
+		capsError.value = getErrorMessage(e)
 	}
 }
 
-// ── How to call: the key's own gateway and the models it reaches ──
-const helpTarget = ref<AIApiKey | null>(null)
+// ── How to call: a geography's gateway and what a key there starts with ──
+const helpOpen = ref(false)
+const helpGeography = ref('')
+const helpGatewayUrl = computed(
+	() =>
+		geographies.value.find((g) => g.name === helpGeography.value)?.endpoint ??
+		'',
+)
 
-const openHelp = async (key: AIApiKey): Promise<void> => {
-	helpTarget.value = key
+const openHelp = (): void => {
+	helpGeography.value ||=
+		geographies.value.find((g) => g.is_default)?.name ??
+		geographies.value[0]?.name ??
+		''
+	helpOpen.value = true
+}
+
+watch(helpGeography, async (name) => {
+	if (!name) return
 	try {
-		await loadKeyModels(key.name)
+		await loadModels(name)
 	} catch (e) {
 		reportError(e)
 	}
-}
+})
 
 // ── Revoke ──
 const revokeTarget = ref<AIApiKey | null>(null)
@@ -223,27 +267,58 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					Keys for use in your own apps. A key's secret is shown once, when it
 					is created. Each key works in one geography and has its own rate
 					limits<template v-if="prepaid">
-						and spend limit: the part of the balance it may spend</template
+						and monthly cap: what it may spend each month, refused once reached
+						until the next</template
 					>.
 				</p>
 
+				<div class="flex shrink-0 items-center gap-2">
+					<Button
+						label="How to call"
+						icon-left="lucide-circle-help"
+						@click="openHelp"
+					/>
+					<Tooltip
+						v-if="canManage"
+						:text="
+							atKeyLimit
+								? `Your plan allows ${spend?.max_keys} live keys. Revoke one to create another.`
+								: ''
+						"
+					>
+						<Button
+							class="shrink-0"
+							label="Create key"
+							icon-left="lucide-plus"
+							:disabled="atKeyLimit"
+							@click="openCreate"
+						/>
+					</Tooltip>
+				</div>
+			</div>
+			<Alert
+				v-if="spend?.suspended"
+				class="mt-4"
+				theme="red"
+				title="Keys are paused"
+				description="An invoice is unpaid. Every key is refused until it is settled."
+			/>
+			<div v-if="prepaid" class="mt-4 flex items-center justify-between gap-4">
+				<p class="text-p-xs text-ink-gray-5" aria-live="polite">
+					Caps add up to {{ usd(spend?.capped ?? 0) }} of your plan's
+					{{ usd(spend?.spend_limit ?? 0) }}
+					a month ·
+					{{ activeKeys.length }}
+					of {{ spend?.max_keys }} keys.
+				</p>
 				<Button
-					v-if="canManage"
+					v-if="canManage && activeKeys.length"
 					class="shrink-0"
-					label="Create key"
-					icon-left="lucide-plus"
-					@click="openCreate"
+					label="Set monthly caps"
+					icon-left="lucide-wallet"
+					@click="openCaps"
 				/>
 			</div>
-			<br />
-			<p
-				v-if="prepaid"
-				class="mt-2 text-p-xs text-ink-gray-5"
-				aria-live="polite"
-			>
-				{{ usd(unallocated) }}
-				of the balance is not yet handed to any key's spend limit.
-			</p>
 
 			<div
 				v-if="apiKeysLoading && !apiKeys.length"
@@ -298,42 +373,61 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 							</Tooltip>
 						</div>
 						<div
-							class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-gray-5"
+							class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-p-sm text-ink-gray-5"
 						>
-							<span class="truncate font-mono">{{ key.masked }}</span>
-							<Tooltip
-								v-if="prepaid && !key.cap"
-								text="Refused until it gets a spend limit. A top-up passes it by until then."
-							>
-								<Badge size="sm" theme="orange" label="No spend limit yet" />
-							</Tooltip>
-							<span v-else-if="prepaid">
-								{{ usd(key.spent) }}
-								of {{ usd(key.cap) }} spend limit
-							</span>
-							<Tooltip
-								v-for="chip in limitChips(key.limits)"
-								:key="chip.key"
-								:text="chip.text"
-							>
-								<Badge
-									:label="chip.label"
-									theme="gray"
-									size="sm"
-									class="font-mono"
-								/>
-							</Tooltip>
+							<span>{{ key.masked }}</span>
+							<template v-if="key.status === 'active'">
+								<template
+									v-for="chip in limitChips(key.limits)"
+									:key="chip.key"
+								>
+									<span aria-hidden="true">·</span>
+									<Tooltip :text="chip.text">
+										<span class="tabular-nums">{{ chip.label }}</span>
+									</Tooltip>
+								</template>
+							</template>
 						</div>
 					</div>
 
-					<Button
-						v-if="key.status === 'active'"
-						variant="ghost"
-						icon="lucide-circle-help"
-						label="How to call the models"
-						tooltip="How to call the models with this key"
-						@click="openHelp(key)"
-					/>
+					<template v-if="prepaid && key.status === 'active'">
+						<Tooltip
+							v-if="!key.cap"
+							text="Refused until it gets a monthly cap."
+						>
+							<Badge theme="orange" label="No cap yet" />
+						</Tooltip>
+						<Tooltip
+							v-else
+							:text="
+								isCapReached(key)
+									? 'Cap reached: refused until the month ends or the cap is raised.'
+									: `Spent this month of its ${usd(key.cap)} monthly cap.`
+							"
+						>
+							<div class="w-32 shrink-0 text-right">
+								<div class="text-xs tabular-nums text-ink-gray-7">
+									<span class="font-medium text-ink-gray-9"
+										>{{ usd(key.month_spent) }}</span
+									>
+									/ {{ usd(key.cap) }}
+								</div>
+								<div
+									class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-gray-2"
+									role="meter"
+									:aria-valuenow="key.month_spent"
+									:aria-valuemax="key.cap"
+									:aria-label="`${key.title}: spent this month of its cap`"
+								>
+									<span
+										class="block h-full rounded-full"
+										:class="capBarClass(key)"
+										:style="{ width: `${capPercent(key)}%` }"
+									/>
+								</div>
+							</div>
+						</Tooltip>
+					</template>
 
 					<RowActionsMenu
 						v-if="canManage && key.status === 'active'"
@@ -363,28 +457,31 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 		</div>
 	</div>
 
-	<Dialog
-		:model-value="!!helpTarget"
-		:title="helpTarget ? `Calling the models - ${helpTarget.title}` : ''"
-		size="2xl"
-		@update:model-value="(open: boolean) => !open && (helpTarget = null)"
-	>
+	<Dialog v-model="helpOpen" title="How to call the models" size="2xl">
 		<template #default>
-			<div v-if="helpTarget" class="space-y-4">
-				<p class="text-p-sm text-ink-gray-6">
-					One key works on both surfaces: point the OpenAI or the Anthropic SDK
-					at the base URL below and use it as you would with the vendor. The
-					models are what this key may call in
-					{{ geographyLabel(helpTarget.geography) }}.
-				</p>
-				<div v-if="keyModelsLoading" class="flex justify-center py-8">
+			<div class="space-y-4">
+				<div class="flex items-start justify-between gap-4">
+					<p class="text-p-sm text-ink-gray-6">
+						A key works in its own geography, on both surfaces: point the OpenAI
+						or the Anthropic SDK at that geography's base URL and use it as you
+						would with the vendor.
+					</p>
+					<Select
+						v-if="geographyOptions.length > 1"
+						v-model="helpGeography"
+						class="w-fit shrink-0"
+						:options="geographyOptions"
+						aria-label="Geography"
+					>
+						<template #prefix>
+							<span class="text-ink-gray-5">Geography</span>
+						</template>
+					</Select>
+				</div>
+				<div v-if="modelsLoading" class="flex justify-center py-8">
 					<Spinner class="size-5 text-ink-gray-5" />
 				</div>
-				<AIQuickstart
-					v-else
-					:gateway-url="helpTarget.gateway_url"
-					:models="keyModels"
-				/>
+				<AIQuickstart v-else :gateway-url="helpGatewayUrl" :models="models" />
 			</div>
 		</template>
 	</Dialog>
@@ -423,9 +520,9 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					type="number"
 					min="0"
 					step="0.01"
-					label="Spend limit (USD)"
+					label="Monthly cap (USD)"
 					placeholder="0"
-					:description="`What this key may spend. Leave it at 0 to set it later: the key is refused until it has a limit. ${usd(unallocated)} of the balance is not yet handed to any key.`"
+					:description="`What this key may spend each month. Leave it at 0 to set it later: the key is refused until it has a cap.`"
 					@keyup.enter="create"
 				/>
 			</div>
@@ -435,37 +532,81 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 		</template>
 	</Dialog>
 
-	<Dialog
-		:model-value="!!capTarget"
-		:title="capTarget ? `Spend limit - ${capTarget.title}` : ''"
-		:actions="[
-			{
-				label: 'Save',
-				variant: 'solid',
-				loading: busyKey === capTarget?.name,
-				disabled: !(Number(capValue) > 0),
-				onClick: saveCap,
-			},
-		]"
-		@update:model-value="(open: boolean) => !open && (capTarget = null)"
-	>
+	<Dialog v-model="capsOpen" title="Set monthly caps" size="2xl">
 		<template #default>
-			<TextInput
-				v-model="capValue"
-				type="number"
-				min="0"
-				step="0.01"
-				label="Spend limit (USD)"
-				:description="`What this key may spend in total; it has spent ${usd(capTarget?.spent ?? 0)}.`"
-				@keyup.enter="saveCap"
-			/>
-			<p class="mt-1 text-p-sm text-ink-gray-5">
-				{{ usd(unallocated) }}
-				of the balance is free to hand out.
+			<Alert v-if="capsError" class="mb-4" theme="red" :title="capsError" />
+			<div
+				class="mb-2 flex gap-3 text-sm-medium text-ink-gray-6"
+				aria-hidden="true"
+			>
+				<span class="min-w-0 flex-1">Key</span>
+				<span class="w-32 shrink-0 text-right">Spent this month</span>
+				<span class="w-36 shrink-0">Monthly cap (USD)</span>
+			</div>
+			<div class="space-y-3">
+				<div
+					v-for="(key, index) in activeKeys"
+					:key="key.name"
+					class="flex items-center gap-3"
+				>
+					<div class="min-w-0 flex-1">
+						<div class="truncate text-base text-ink-gray-8">
+							{{ key.title }}
+						</div>
+						<div class="text-p-xs text-ink-gray-5">
+							{{ geographyLabel(key.geography) }}
+						</div>
+					</div>
+					<span
+						class="w-32 shrink-0 text-right text-base tabular-nums text-ink-gray-7"
+					>
+						{{ usd(key.month_spent) }}
+					</span>
+					<TextInput
+						v-model="capValues[key.name]"
+						class="w-36 shrink-0"
+						type="number"
+						min="0"
+						step="0.01"
+						placeholder="0"
+						:autofocus="index === 0"
+						:aria-label="`Monthly cap for ${key.title} (USD)`"
+						:disabled="capsSaving"
+						@keyup.enter="saveCaps"
+					/>
+				</div>
+			</div>
+			<p class="mt-4 text-p-sm text-ink-gray-5">
+				A key at 0 is refused until it gets a cap.
 			</p>
-			<p v-if="capError" class="mt-2 text-p-sm text-ink-red-6">
-				{{ capError }}
-			</p>
+		</template>
+		<template #actions>
+			<div class="flex items-center justify-between gap-3">
+				<p
+					class="text-p-sm"
+					:class="capsOverLimit ? 'text-ink-red-6' : 'text-ink-gray-5'"
+					aria-live="polite"
+				>
+					{{ usd(capsTotal) }}
+					of your plan's
+					{{ usd(spend?.spend_limit ?? 0) }}
+					a month
+				</p>
+				<div class="flex items-center gap-2">
+					<Button
+						label="Cancel"
+						:disabled="capsSaving"
+						@click="capsOpen = false"
+					/>
+					<Button
+						variant="solid"
+						label="Save caps"
+						:loading="capsSaving"
+						:disabled="capsInvalid || capsOverLimit"
+						@click="saveCaps"
+					/>
+				</div>
+			</div>
 		</template>
 	</Dialog>
 
@@ -526,7 +667,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				>? Any app using it stops working within a few minutes<template
 					v-if="prepaid"
 				>
-					and its unspent limit returns to the balance</template
+					and its cap frees room for another key</template
 				>. This can't be undone.
 			</p>
 		</template>

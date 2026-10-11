@@ -39,9 +39,9 @@ const { ai, aiLoading, models, modelsLoading, modelsError, loadModels } =
 	useAI()
 
 const usage = computed(() => ai.value?.usage ?? null)
-const balance = computed(() => ai.value?.balance ?? null)
-// A free team is never charged: the balance card says so instead of hinting at caps.
-const prepaid = computed(() => !!balance.value && !balance.value.is_free_user)
+const spend = computed(() => ai.value?.spend ?? null)
+// A free team is never charged: the limit card says so instead of hinting at caps.
+const prepaid = computed(() => !!spend.value && !spend.value.is_free_user)
 
 // A model call often costs a fraction of a cent, so small amounts keep 4 places.
 const usdPrecision = (value: number): number => (value > 0 && value < 1 ? 4 : 2)
@@ -99,22 +99,22 @@ const shownModels = computed(() =>
 
 				<div class="mt-3 grid grid-cols-2 gap-4 md:grid-cols-4">
 					<NumberCard
-						title="Balance"
-						:value="balance?.balance ?? null"
+						title="Monthly limit"
+						:value="prepaid ? (spend?.spend_limit ?? null) : null"
 						prefix="$"
-						:precision="usdPrecision(balance?.balance ?? 0)"
+						:precision="2"
 					>
 						<template #actions>
 							<Tooltip
 								:text="
 									prepaid
-										? `$${(balance?.unallocated ?? 0).toFixed(2)} not yet handed to any key's spend limit. A top-up is spread over the keys' spend limits in proportion; raise a limit on the API keys tab to hand out the rest.`
-										: 'This is a free team: usage is counted but never charged, so no balance is needed.'
+										? `What your plan lets your keys spend a month; their caps add up to $${(spend?.capped ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
+										: 'This is a free team: usage is counted but never charged.'
 								"
 							>
 								<lucide-circle-help
 									class="size-4 text-ink-gray-5"
-									aria-label="What the balance is for"
+									aria-label="What the monthly limit is"
 								/>
 							</Tooltip>
 						</template>
@@ -141,10 +141,16 @@ const shownModels = computed(() =>
 				</div>
 
 				<div class="mt-8 border-t border-outline-gray-2 pt-8">
-					<div class="flex items-center justify-between gap-3">
-						<h2 class="text-base font-semibold text-ink-gray-8">
-							Available models
-						</h2>
+					<div class="flex items-center justify-between gap-4">
+						<div class="min-w-0">
+							<h2 class="text-base font-semibold text-ink-gray-8">
+								Available models
+							</h2>
+							<p class="mt-0.5 text-p-sm text-ink-gray-5">
+								What a key in this geography can call, what each model takes and
+								gives, and the APIs it answers on.
+							</p>
+						</div>
 						<Select
 							v-if="geographyOptions.length"
 							v-model="geography"
@@ -159,10 +165,6 @@ const shownModels = computed(() =>
 							</template>
 						</Select>
 					</div>
-					<p class="mt-0.5 text-p-sm text-ink-gray-5">
-						What a key in this geography can generally call, what each model
-						takes and gives, and the APIs it answers on.
-					</p>
 				</div>
 
 				<div
@@ -187,7 +189,13 @@ const shownModels = computed(() =>
 						<tr
 							class="border-b border-outline-gray-2 text-p-xs text-ink-gray-5"
 						>
+							<th scope="col" class="py-2 pr-3 text-left font-normal">
+								Provider
+							</th>
 							<th scope="col" class="py-2 pr-3 text-left font-normal">Model</th>
+							<th scope="col" class="py-2 pr-3 text-left font-normal">
+								Model key
+							</th>
 							<th scope="col" class="py-2 pr-3 text-left font-normal">Input</th>
 							<th scope="col" class="py-2 pr-3 text-left font-normal">
 								Output
@@ -198,9 +206,13 @@ const shownModels = computed(() =>
 
 					<tbody class="divide-y divide-outline-gray-1">
 						<tr v-for="model in shownModels" :key="model.name">
-							<td
-								class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9"
-							>
+							<td class="py-3 pr-3 text-sm text-ink-gray-7">
+								{{ model.provider }}
+							</td>
+							<td class="py-3 pr-3 text-sm font-medium text-ink-gray-9">
+								{{ model.model_id }}
+							</td>
+							<td class="py-3 pr-3 font-mono text-xs text-ink-gray-6">
 								{{ model.name }}
 							</td>
 
@@ -238,8 +250,11 @@ const shownModels = computed(() =>
 					</tbody>
 				</table>
 
-				<p v-else class="mt-3 text-p-sm text-ink-gray-5">
-					No models in this geography yet.
+				<p
+					v-else
+					class="mt-3 rounded-6 border border-outline-gray-2 p-8 text-center text-p-sm text-ink-gray-5"
+				>
+					No models in this geography yet
 				</p>
 
 				<Button

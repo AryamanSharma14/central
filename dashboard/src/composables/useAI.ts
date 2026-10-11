@@ -61,11 +61,11 @@ const createKeyCall = useCall<
 	immediate: false,
 })
 
-const updateKeyCall = useCall<
-	AIApiKey,
-	{ team: string; key: string; cap: number }
+const capsCall = useCall<
+	AIApiKey[],
+	{ team: string; caps: Record<string, number> }
 >({
-	url: method(API.updateAIApiKey),
+	url: method(API.setAIApiKeyCaps),
 	method: 'POST',
 	immediate: false,
 })
@@ -77,16 +77,6 @@ const modelsParams = ref<{ team: string; geography: string }>({
 const modelsCall = useCall<AIModel[], typeof modelsParams.value>({
 	url: method(API.aiModels),
 	params: () => modelsParams.value,
-	immediate: false,
-})
-
-const keyModelsParams = ref<{ team: string; key: string }>({
-	team: '',
-	key: '',
-})
-const keyModelsCall = useCall<AIModel[], typeof keyModelsParams.value>({
-	url: method(API.aiApiKeyModels),
-	params: () => keyModelsParams.value,
 	immediate: false,
 })
 
@@ -131,24 +121,17 @@ export function useAI() {
 
 		async createApiKey(key: NewKey): Promise<MintedKey> {
 			await submitOrThrow(createKeyCall, { team: activeTeam.value!, ...key })
-			// A cap moves what is unallocated, so the overview reloads with the list.
+			// A cap moves the room left under the spend limit, so the overview reloads with the list.
 			await Promise.all([apiKeysCall.reload(), aiCall.reload()])
 			return createKeyCall.data!
 		},
 
-		async setCap(key: string, cap: number): Promise<void> {
-			busyKey.value = key
-			try {
-				await submitOrThrow(updateKeyCall, {
-					team: activeTeam.value!,
-					key,
-					cap,
-				})
-				await Promise.all([apiKeysCall.reload(), aiCall.reload()])
-			} finally {
-				busyKey.value = ''
-			}
+		// Every cap in one call: Grove saves all or none, so caps can move between keys.
+		async setCaps(caps: Record<string, number>): Promise<void> {
+			await submitOrThrow(capsCall, { team: activeTeam.value!, caps })
+			await Promise.all([apiKeysCall.reload(), aiCall.reload()])
 		},
+		capsSaving: computed(() => capsCall.loading),
 
 		// What a key in one geography starts with: the published models of its default group.
 		models: computed<AIModel[]>(() => modelsCall.data ?? []),
@@ -157,14 +140,6 @@ export function useAI() {
 		loadModels(geography: string): Promise<unknown> {
 			modelsParams.value = { team: activeTeam.value!, geography }
 			return modelsCall.reload()
-		},
-
-		// What one key may call, as its geography serves them: fetched when asked for.
-		keyModels: computed<AIModel[]>(() => keyModelsCall.data ?? []),
-		keyModelsLoading: computed(() => keyModelsCall.loading),
-		loadKeyModels(key: string): Promise<unknown> {
-			keyModelsParams.value = { team: activeTeam.value!, key }
-			return keyModelsCall.reload()
 		},
 
 		async revokeApiKey(key: string): Promise<void> {

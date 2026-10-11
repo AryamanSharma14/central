@@ -27,39 +27,64 @@ def enable(team: str) -> str:
 	return service.name
 
 
-def get_alert_email(team: str) -> str:
-	"""Where Grove sends the team's alerts: the billing contact when set, else the owner."""
-	if email := frappe.db.get_value("Billing Profile", team, "email"):
-		return email
-
-	owner = frappe.db.get_value("Team", team, "owner_user")
-	# The User's name is not always an address: Administrator is not one.
-	return frappe.db.get_value("User", owner, "email")
-
-
-def register_team(team: str, free: bool = True) -> dict:
-	"""Register the team at Grove under the team id, with its alert email. A repeat sends the
-	email again and changes nothing else; `free=False` keeps the Free setting Grove already has."""
-	return GroveClient.from_settings().provision_team(team, get_alert_email(team), free=free) or {}
+def register_team(team: str) -> dict:
+	"""Register the team at Grove under the team id, Free, with its tier's limits and its
+	standing. Grove keeps nothing else about the team."""
+	client = GroveClient.from_settings()
+	registered = client.provision_team(team, free=True) or {}
+	client.update_team(team, **get_team_limits(team))
+	return registered
 
 
-def on_alert_address_update(doc, method: str | None = None) -> None:
-	"""Team and Billing Profile hook: send a changed alert address to Grove. A Billing Profile
-	is named by its team. A no-op when the address stayed or AI is off."""
-	field = "owner_user" if doc.doctype == "Team" else "email"
-	if not doc.has_value_changed(field) or not get_ai_service(doc.name):
+def get_team_limits(team: str) -> dict:
+	"""What Grove gates the team's keys on: its tier's AI key count and monthly spend, and
+	whether its account is suspended. An untiered team sends no key count, keeping Grove's."""
+	from central.billing.catalog.entitlements import get_team_caps
+	from central.billing.catalog.subscriptions import anchor_subscription
+
+	caps = get_team_caps(team)
+	anchor = anchor_subscription(team)
+	return {
+		"max_keys": caps.max_ai_keys or None,
+		"spend_limit": frappe.utils.flt(caps.max_ai_spend),
+		"suspended": bool(anchor) and frappe.db.get_value("Subscription", anchor, "account_standing") == "Suspended",
+	}
+
+
+def sync_team(team: str) -> None:
+	"""Send the team's limits and standing to Grove. A no-op while AI is off."""
+	if get_ai_service(team):
+		GroveClient.from_settings().update_team(team, **get_team_limits(team))
+
+
+def on_tier_update(doc, method: str | None = None) -> None:
+	"""Billing Profile and Subscription hook: a team's tier or standing moved, so Grove's limits
+	follow. A Billing Profile is named by its team."""
+	fields = (
+		("account_standing",)
+		if doc.doctype == "Subscription"
+		else ("trust_tier_level", "manual_override", "override_max_ai_spend")
+	)
+	team = doc.team if doc.doctype == "Subscription" else doc.name
+	if any(doc.has_value_changed(field) for field in fields) and get_ai_service(team):
+		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
+
+
+def on_level_update(doc, method: str | None = None) -> None:
+	"""Trust Tier Level hook: an edited level reaches every AI team on it."""
+	if not (doc.has_value_changed("max_ai_keys") or doc.has_value_changed("max_ai_spend")):
 		return
-
-	# No retry: if Grove is down now, it keeps the old address until the next change.
-	frappe.enqueue("central.services.ai.register_team", team=doc.name, free=False, enqueue_after_commit=True)
+	teams = frappe.get_all("Billing Profile", filters={"trust_tier_level": doc.name}, pluck="name")
+	for team in frappe.get_all("Team Service", filters={"team": ("in", teams), "add_on_service": AI_SERVICE}, pluck="team"):
+		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
 
 
 def get_overview(team: str) -> dict:
-	"""The team's AI at a glance: `balance`, this month's `usage`, and the `geographies` a key
-	may be minted in. What a key may call and how fast is the key's own: see `list_api_keys`."""
+	"""The team's AI at a glance: `spend` (this month's, and the keys' caps against the tier's
+	spend limit), this month's `usage`, and the `geographies` a key may be minted in. What a key may call and how fast is the key's own: see `list_api_keys`."""
 	client = GroveClient.from_settings()
 	return {
-		"balance": client.get_balance(team),
+		"spend": client.get_spend(team),
 		"usage": get_month_usage(team),
 		"geographies": client.list_geographies(),
 	}
@@ -92,6 +117,8 @@ def shape_models(rows: list[dict]) -> list[dict]:
 	return [
 		{
 			"name": row["name"],
+			"provider": row.get("provider"),
+			"model_id": row.get("model_id"),
 			"input_modalities": row.get("input_modalities", []),
 			"output_modalities": row.get("output_modalities", []),
 			"dialects": row["dialects"],

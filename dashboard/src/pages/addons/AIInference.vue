@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Spinner, TabButtons } from 'frappe-ui'
+import { Alert, Button, Spinner, TabButtons } from 'frappe-ui'
 import { ref } from 'vue'
 import AIApiKeys from '@/components/addons/ai/AIApiKeys.vue'
 import AIOverview from '@/components/addons/ai/AIOverview.vue'
@@ -54,9 +54,19 @@ const enableAI = async (): Promise<void> => {
 				</div>
 			</div>
 
+			<!-- Grove down or in maintenance: the gateways keep serving keys, only this page waits. -->
+			<Alert
+				v-if="ai?.unavailable"
+				class="mt-6"
+				theme="amber"
+				title="LLM service is under maintenance"
+				description="Your API keys keep working. Usage, keys and limits can't be shown or changed until it is back."
+				:primary-action="{ label: 'Retry', onClick: reloadAI }"
+			/>
+
 			<!-- One row: the tabs, then the open tab's own controls (teleported in). -->
 			<div
-				v-if="ai?.enabled"
+				v-else-if="ai?.enabled"
 				class="mt-6 flex flex-wrap items-center justify-between gap-2"
 			>
 				<TabButtons v-model="tab" :options="tabs" />
@@ -85,13 +95,16 @@ const enableAI = async (): Promise<void> => {
 		</div>
 
 		<!-- Keyed on the team: a switch in the sidebar remounts the tab, so it lists that team. -->
-		<template v-else-if="ai?.enabled" :key="activeTeam">
+		<template v-else-if="ai?.enabled && !ai.unavailable" :key="activeTeam">
 			<AIOverview v-if="tab === 'overview'" />
 			<AIUsage v-else-if="tab === 'usage'" />
 			<AIApiKeys v-else :can-manage="canManageServices" />
 		</template>
 
-		<div v-else class="flex flex-1 items-center justify-center p-8">
+		<div
+			v-else-if="!ai?.enabled"
+			class="flex flex-1 items-center justify-center p-8"
+		>
 			<EmptyState
 				icon="lucide-bot"
 				title="Set up LLM"

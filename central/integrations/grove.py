@@ -6,12 +6,21 @@ from frappe import _
 
 # Connect, read: a dashboard call must not hang on a Grove that is down.
 TIMEOUT = (30, 90)
+# What a Grove that is down or in maintenance answers; Frappe's maintenance mode is a 503.
+UNAVAILABLE = (502, 503, 504)
+
+
+class GroveUnavailable(frappe.ValidationError):
+	"""Grove cannot be reached or is in maintenance. Its gateways keep serving keys meanwhile."""
+
+	http_status_code = 503
 
 
 class GroveClient:
 	"""Calls Grove's control API (`grove.api`) as Central. A team is one Central Team at Grove,
-	named by the team id; each of its keys carries its own geography, models, rate limits and
-	cap. Grove owns the keys; Central never proxies inference."""
+	named by the team id, under the key count and monthly spend limit of its tier; each of its
+	keys carries its own geography, models, rate limits and monthly cap. Grove owns the keys;
+	Central never proxies inference."""
 
 	def __init__(self, base_url: str, api_key: str, api_secret: str):
 		self.base_url = base_url
@@ -37,23 +46,37 @@ class GroveClient:
 		"""A new secret for Central's own control user; the old one stops at once."""
 		return self.call("grove.api.create_control_client_key")
 
-	def provision_team(self, team: str, email: str, free: bool = False) -> dict:
-		"""Register `team`, or send its new `email` (an alert address, not a login). Grove upserts
+	def provision_team(self, team: str, free: bool = False) -> dict:
+		"""Register `team` by its id; Grove keeps nothing else about who it is. Grove upserts
 		by `team`. With `free`, Grove charges and gates nothing; without it, Grove keeps the
 		setting it has. → `team` and `max_keys`, how many live keys it may hold."""
-		return self.call("grove.api.provision_team", team=team, email=email, free=free)
+		return self.call("grove.api.provision_team", team=team, free=free)
+
+	def update_team(
+		self,
+		team: str,
+		max_keys: int | None = None,
+		spend_limit: float | None = None,
+		suspended: bool | None = None,
+	) -> dict:
+		"""What the team's tier allows — `max_keys` live keys, `spend_limit` USD a month across
+		its keys' caps — and whether it is `suspended`, each kept at Grove when None."""
+		return self.call(
+			"grove.api.update_team", team=team, max_keys=max_keys, spend_limit=spend_limit, suspended=suspended
+		)
 
 	def provision_key(
 		self, team: str, title: str, geography: str | None = None, cap: float | None = None
 	) -> dict:
-		"""Mint a key in `geography` (Grove's default when None) with `cap` USD to spend (required
-		above zero on a prepaid team): its `name`, `geography`, `gateway_url` and `api_key`. The
-		secret is never sent again."""
+		"""Mint a key in `geography` (Grove's default when None) with `cap` USD to spend a month
+		(0 when None: refused until it gets one): its `name`, `geography`, `gateway_url` and
+		`api_key`. The secret is never sent again."""
 		return self.call("grove.api.provision_key", team=team, title=title, geography=geography, cap=cap)
 
-	def update_key(self, team: str, key: str, cap: float | None = None) -> dict:
-		"""Change what a key may spend. → the key as `list_keys` lists it."""
-		return self.call("grove.api.update_key", team=team, key=key, cap=cap)
+	def update_caps(self, team: str, caps: dict[str, float]) -> list[dict]:
+		"""Set several keys' monthly caps at once, {key: USD}; Grove saves all or none. → the keys
+		as `list_keys` lists them."""
+		return self.call("grove.api.update_caps", team=team, caps=caps) or []
 
 	def list_keys(self, team: str) -> list[dict]:
 		return self.call("grove.api.keys", team=team) or []
@@ -72,9 +95,10 @@ class GroveClient:
 		"""Where a key may be minted: `name`, `label`, `endpoint`, `is_default`."""
 		return self.call("grove.api.geographies") or []
 
-	def get_balance(self, team: str) -> dict:
-		"""`balance`, `spent` and `unallocated` in USD as of Grove's last pull, and `is_free_user`."""
-		return self.call("grove.api.balance", team=team)
+	def get_spend(self, team: str) -> dict:
+		"""As of Grove's last pull, in USD: `spent`, `month_spent`, `capped` (Σ live caps)
+		against `spend_limit`; and `max_keys`, `suspended`, `is_free_user`."""
+		return self.call("grove.api.spend", team=team)
 
 	def get_usage(
 		self,
@@ -85,29 +109,19 @@ class GroveClient:
 	) -> dict:
 		return self.call("grove.api.usage", teams=teams, month=month, period=period, key_hash=key_hash)
 
-	def add_credit(
-		self,
-		team: str,
-		amount: float,
-		reference: str | None = None,
-		allocations: dict[str, float] | None = None,
-	) -> dict:
-		"""USD onto the team's ledger. Grove books one `reference` once, so a call with no
-		answer can be sent again under it. `allocations`, {key: USD}, says how much of it each
-		key may spend; none spreads it over the live keys in proportion to their spend limits.
-		→ `balance` after, and the `allocations` made."""
-		return self.call(
-			"grove.api.add_credit", team=team, amount=amount, reference=reference, allocations=allocations
-		)
-
 	def call(self, method: str, **body) -> dict | list:
-		response = requests.post(
-			f"{self.base_url}/api/method/{method}", json=body, headers=self.headers, timeout=TIMEOUT
-		)
+		try:
+			response = requests.post(
+				f"{self.base_url}/api/method/{method}", json=body, headers=self.headers, timeout=TIMEOUT
+			)
+		except (requests.ConnectionError, requests.Timeout) as e:
+			raise GroveUnavailable(_("Grove can't be reached right now.")) from e
 		return read(response)
 
 
 def read(response: requests.Response) -> dict | list:
+	if response.status_code in UNAVAILABLE:
+		raise GroveUnavailable(_("Grove is unavailable ({0}).").format(response.status_code))
 	if response.status_code >= 400:
 		frappe.throw(_("Grove request failed ({0}): {1}").format(response.status_code, response.text[:200]))
 	return response.json().get("message", {})

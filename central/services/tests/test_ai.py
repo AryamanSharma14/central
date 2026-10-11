@@ -5,9 +5,10 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import frappe
+import requests
 from frappe.tests import IntegrationTestCase
 
-from central.integrations.grove import GroveClient
+from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
 from central.services.api import ai as api
 from central.services.doctype.ai_settings import ai_settings
@@ -26,14 +27,14 @@ LISTED = {
 	"creation": "2026-10-06 10:00:00",
 	"revocable_at": "2026-10-06T10:30:00Z",
 	"key_hash": "abc123",
-	"masked": "gr_tes…cret",
+	"masked": "gr_test…",
 	"geography": "eu",
 	"gateway_url": "https://eu.llm.frappe.cloud",
 	"cap": 5.0,
 	"spent": 1.25,
 	"limits": LIMITS,
 }
-MODELS = [{"name": "m", "dialects": ["openai"]}]
+MODELS = [{"name": "acme/m", "provider": "acme", "model_id": "m", "dialects": ["openai"]}]
 GEOGRAPHIES = [
 	{"name": "eu", "label": "Europe", "endpoint": "https://eu.llm.frappe.cloud", "is_default": True}
 ]
@@ -82,11 +83,11 @@ class TestGroveClientCalls(IntegrationTestCase):
 
 	def test_a_team_is_registered_under_the_control_credential(self):
 		with grove_replies({"team": "TEAM-1", "max_keys": 10}) as post:
-			self.client.provision_team("TEAM-1", "owner@example.com", free=True)
+			self.client.provision_team("TEAM-1", free=True)
 
 		self.assertEqual(
 			sent(post),
-			("grove.api.provision_team", {"team": "TEAM-1", "email": "owner@example.com", "free": True}),
+			("grove.api.provision_team", {"team": "TEAM-1", "free": True}),
 		)
 		self.assertEqual(
 			post.call_args.kwargs["headers"], {"Authorization": "token control-key:control-secret"}
@@ -104,15 +105,15 @@ class TestGroveClientCalls(IntegrationTestCase):
 			self.client.list_keys("TEAM-1")
 		self.assertEqual(sent(post), ("grove.api.keys", {"team": "TEAM-1"}))
 
-		with grove_replies(LISTED) as post:
-			self.client.update_key("TEAM-1", "k1", 7.5)
-		self.assertEqual(sent(post), ("grove.api.update_key", {"team": "TEAM-1", "key": "k1", "cap": 7.5}))
+		with grove_replies([LISTED]) as post:
+			self.client.update_caps("TEAM-1", {"k1": 7.5})
+		self.assertEqual(sent(post), ("grove.api.update_caps", {"team": "TEAM-1", "caps": {"k1": 7.5}}))
 
 		with grove_replies("Revoked.") as post:
 			self.client.revoke_key("TEAM-1", "k1")
 		self.assertEqual(sent(post), ("grove.api.revoke_key", {"team": "TEAM-1", "key": "k1"}))
 
-	def test_models_geographies_balance_usage_and_credit_name_the_team(self):
+	def test_models_geographies_spend_and_usage_name_the_team(self):
 		calls = [
 			(
 				lambda: self.client.list_models("TEAM-1", "k1"),
@@ -123,7 +124,7 @@ class TestGroveClientCalls(IntegrationTestCase):
 				("grove.api.available_models", {"team": None, "key": None, "geography": "eu"}),
 			),
 			(lambda: self.client.list_geographies(), ("grove.api.geographies", {})),
-			(lambda: self.client.get_balance("TEAM-1"), ("grove.api.balance", {"team": "TEAM-1"})),
+			(lambda: self.client.get_spend("TEAM-1"), ("grove.api.spend", {"team": "TEAM-1"})),
 			(
 				lambda: self.client.get_usage(["TEAM-1"], period="Last 7 Days"),
 				(
@@ -132,10 +133,10 @@ class TestGroveClientCalls(IntegrationTestCase):
 				),
 			),
 			(
-				lambda: self.client.add_credit("TEAM-1", 5, "ref-1", {"k1": 5}),
+				lambda: self.client.update_team("TEAM-1", spend_limit=50),
 				(
-					"grove.api.add_credit",
-					{"team": "TEAM-1", "amount": 5, "reference": "ref-1", "allocations": {"k1": 5}},
+					"grove.api.update_team",
+					{"team": "TEAM-1", "max_keys": None, "spend_limit": 50, "suspended": None},
 				),
 			),
 		]
@@ -148,8 +149,19 @@ class TestGroveClientCalls(IntegrationTestCase):
 		with patch("central.integrations.grove.requests.post") as post:
 			post.return_value.status_code = 403
 			post.return_value.text = "Not permitted"
-			with self.assertRaises(frappe.ValidationError):
+			with self.assertRaises(frappe.ValidationError) as refused:
 				self.client.list_keys("TEAM-1")
+		self.assertNotIsInstance(refused.exception, GroveUnavailable, "a refusal is not an outage")
+
+	def test_a_grove_that_is_down_or_in_maintenance_is_unavailable(self):
+		with patch("central.integrations.grove.requests.post", side_effect=requests.ConnectionError):
+			with self.assertRaises(GroveUnavailable):
+				self.client.list_keys("TEAM-1")
+		for status in (502, 503, 504):
+			with patch("central.integrations.grove.requests.post") as post:
+				post.return_value.status_code = status
+				with self.assertRaises(GroveUnavailable, msg=status):
+					self.client.list_keys("TEAM-1")
 
 
 class TestAI(IntegrationTestCase):
@@ -174,18 +186,26 @@ class TestAI(IntegrationTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def enabled(self):
-		with patch.object(GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 10}):
+		with (
+			patch.object(GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 10}),
+			patch.object(GroveClient, "update_team"),
+		):
 			return ai.enable(self.team)
 
 	def test_enabling_registers_the_team_as_free_at_its_alert_address(self):
 		frappe.set_user(self.owner)
-		with patch.object(
-			GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 10}
-		) as provision_team:
+		with (
+			patch.object(
+				GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 10}
+			) as provision_team,
+			patch.object(GroveClient, "update_team") as update_team,
+		):
 			name = api.enable_ai(self.team)["name"]
 			self.assertEqual(api.enable_ai(self.team)["name"], name)
 
-		provision_team.assert_called_once_with(self.team, ai.get_alert_email(self.team), free=True)
+		provision_team.assert_called_once_with(self.team, free=True)
+		# The tier's limits and the standing go with it, so the first key has room for a cap.
+		update_team.assert_called_once_with(self.team, **ai.get_team_limits(self.team))
 		service = frappe.get_doc("Team Service", name)
 		# Prepaid at Grove, and each key calls its own geography: no subscription, no region,
 		# no endpoint on the row.
@@ -193,16 +213,6 @@ class TestAI(IntegrationTestCase):
 			(service.status, service.subscription, service.region, service.endpoint_url),
 			("Active", None, None, None),
 		)
-
-	def test_the_alert_address_is_the_billing_contact_else_the_owner(self):
-		if not frappe.db.exists("Billing Profile", self.team):
-			frappe.get_doc({"doctype": "Billing Profile", "team": self.team}).insert(ignore_permissions=True)
-
-		frappe.db.set_value("Billing Profile", self.team, "email", "billing@example.com")
-		self.assertEqual(ai.get_alert_email(self.team), "billing@example.com")
-
-		frappe.db.set_value("Billing Profile", self.team, "email", None)
-		self.assertEqual(ai.get_alert_email(self.team), frappe.db.get_value("User", self.owner, "email"))
 
 	def test_a_grove_refusal_leaves_ai_off(self):
 		with patch.object(GroveClient, "provision_team", side_effect=frappe.ValidationError):
@@ -230,23 +240,31 @@ class TestAI(IntegrationTestCase):
 		with self.assertRaises(frappe.MandatoryError):
 			storage.validate()
 
+	def test_the_page_says_grove_is_unavailable_instead_of_failing(self):
+		self.enabled()
+		with patch.object(GroveClient, "get_spend", side_effect=GroveUnavailable):
+			self.assertEqual(api.get_ai(self.team), {"enabled": True, "unavailable": True})
+
 	def test_ai_off_answers_with_nothing_and_refuses_the_rest(self):
 		self.assertEqual(api.get_ai(self.team), {"enabled": False})
 		with self.assertRaises(frappe.ValidationError):
 			api.list_api_keys(self.team)
 
-	def test_the_overview_carries_balance_this_months_usage_and_the_geographies(self):
+	def test_the_overview_carries_spend_this_months_usage_and_the_geographies(self):
 		self.enabled()
-		balance = {"balance": 12.5, "spent": 7.5, "unallocated": 2.0, "is_free_user": False}
+		spend = {
+			"spent": 7.5, "month_spent": 7.5, "capped": 20.0, "spend_limit": 50.0,
+			"max_keys": 10, "suspended": False, "is_free_user": False,
+		}
 		month = {**EMPTY_USAGE, self.team: {"requests": 6, "tokens": 900, "cost": 7.5}}
 		with (
-			patch.object(GroveClient, "get_balance", return_value=balance),
+			patch.object(GroveClient, "get_spend", return_value=spend),
 			patch.object(GroveClient, "get_usage", return_value=month) as get_usage,
 			patch.object(GroveClient, "list_geographies", return_value=GEOGRAPHIES),
 		):
 			first = api.get_ai(self.team)
 
-		self.assertEqual(first["balance"], balance)
+		self.assertEqual(first["spend"], spend)
 		self.assertEqual(first["usage"]["tokens"], 900)
 		self.assertEqual(first["usage"]["to_date"], EMPTY_USAGE["to_date"])
 		self.assertEqual(first["geographies"], GEOGRAPHIES)
@@ -265,7 +283,7 @@ class TestAI(IntegrationTestCase):
 			(created["api_key"], created["geography"], created["gateway_url"]),
 			(MINTED["api_key"], "eu", MINTED["gateway_url"]),
 		)
-		self.assertEqual(created["models"][0]["name"], "m")
+		self.assertEqual(created["models"][0]["name"], "acme/m")
 
 		with patch.object(GroveClient, "list_keys", return_value=[LISTED]):
 			[listed] = api.list_api_keys(self.team)
@@ -277,28 +295,23 @@ class TestAI(IntegrationTestCase):
 		# So the console can hold Revoke back instead of asking Grove and being refused.
 		self.assertEqual(listed["revocable_at"], LISTED["revocable_at"])
 
-		with patch.object(GroveClient, "update_key", return_value={**LISTED, "cap": 7.5}) as update_key:
-			self.assertEqual(api.update_api_key(self.team, "k1", "7.5")["cap"], 7.5)
-		update_key.assert_called_once_with(self.team, "k1", 7.5)
+		with patch.object(GroveClient, "update_caps", return_value=[{**LISTED, "cap": 7.5}]) as update_caps:
+			self.assertEqual(api.set_api_key_caps(self.team, {"k1": "7.5"})[0]["cap"], 7.5)
+		update_caps.assert_called_once_with(self.team, {"k1": 7.5})
 
 		with patch.object(GroveClient, "revoke_key") as revoke_key:
 			api.revoke_api_key(self.team, "k1")
 		revoke_key.assert_called_once_with(self.team, "k1")
 
-	def test_a_keys_models_and_a_geographys_models_are_read_from_grove(self):
+	def test_a_geographys_models_are_read_from_grove(self):
 		self.enabled()
-		with patch.object(GroveClient, "list_models", return_value=MODELS) as list_models:
-			[model] = api.get_api_key_models(self.team, "k1")
-		list_models.assert_called_once_with(self.team, "k1")
-		self.assertEqual((model["name"], model["dialects"], model["input_modalities"]), ("m", ["openai"], []))
-
 		with patch.object(GroveClient, "list_models", return_value=MODELS) as list_models:
 			[model] = api.get_models(self.team, "eu")
 			api.get_models(self.team, "")
 		self.assertEqual(
 			[call.kwargs for call in list_models.call_args_list], [{"geography": "eu"}, {"geography": None}]
 		)
-		self.assertEqual(model["name"], "m")
+		self.assertEqual((model["name"], model["provider"], model["model_id"]), ("acme/m", "acme", "m"))
 
 	def test_usage_of_one_key_sends_its_hash_and_an_unknown_key_is_refused(self):
 		self.enabled()
@@ -337,38 +350,30 @@ class TestAI(IntegrationTestCase):
 			],
 		)
 
-	def test_only_an_operator_adds_credit(self):
-		self.enabled()
-		handed = {"balance": 5, "allocations": [{"key": "k1", "amount": 5}]}
-		with patch.object(GroveClient, "add_credit", return_value=handed) as add_credit:
-			self.assertEqual(api.add_credit(self.team, 5, "ref-1"), handed)
-			frappe.set_user("Guest")
-			with self.assertRaises(frappe.PermissionError):
-				api.add_credit(self.team, 5, "ref-2")
-
-		add_credit.assert_called_once_with(self.team, 5, "ref-1", None)
-
-	def test_a_changed_alert_address_is_sent_to_grove_only_when_ai_is_on(self):
-		team = frappe.get_doc("Team", self.team)
+	def test_the_teams_limits_are_its_tiers_and_its_standing(self):
+		caps = frappe._dict(max_ai_keys=4, max_ai_spend=50)
 		with (
-			patch.object(team, "has_value_changed", return_value=True),
-			patch.object(frappe, "enqueue") as enqueue,
+			patch("central.billing.catalog.entitlements.get_team_caps", return_value=caps),
+			patch("central.billing.catalog.subscriptions.anchor_subscription", return_value=None),
 		):
-			ai.on_alert_address_update(team)
+			self.assertEqual(ai.get_team_limits(self.team), {"max_keys": 4, "spend_limit": 50, "suspended": False})
+			# Untiered: Grove keeps its own key count.
+			caps.max_ai_keys = 0
+			self.assertIsNone(ai.get_team_limits(self.team)["max_keys"])
+
+	def test_a_tier_or_standing_change_is_sent_to_grove_only_when_ai_is_on(self):
+		profile = frappe._dict(doctype="Billing Profile", name=self.team, has_value_changed=lambda field: field == "trust_tier_level")
+		standing = frappe._dict(doctype="Subscription", team=self.team, has_value_changed=lambda field: field == "account_standing")
+		unchanged = frappe._dict(doctype="Subscription", team=self.team, has_value_changed=lambda field: False)
+		with patch.object(frappe, "enqueue") as enqueue:
+			ai.on_tier_update(profile)
 			enqueue.assert_not_called()
-
 			self.enabled()
-			ai.on_alert_address_update(team)
+			for doc in (profile, standing, unchanged):
+				ai.on_tier_update(doc)
 
-		enqueue.assert_called_once_with(
-			"central.services.ai.register_team", team=self.team, free=False, enqueue_after_commit=True
-		)
-
-	def test_a_team_save_reaches_the_alert_address_hook(self):
-		with patch("central.services.ai.on_alert_address_update") as hook:
-			frappe.get_doc("Team", self.team).save()
-
-		hook.assert_called_once()
+		self.assertEqual(enqueue.call_count, 2)
+		enqueue.assert_called_with("central.services.ai.sync_team", team=self.team, enqueue_after_commit=True)
 
 	def test_enroll_pops_the_secret_from_the_request_and_keeps_the_credential(self):
 		minted = {"api_key": "gr_key", "api_secret": "gr_sec"}

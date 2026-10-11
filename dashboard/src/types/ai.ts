@@ -4,7 +4,10 @@
 export type AIDialect = 'openai' | 'anthropic'
 
 export interface AIModel {
+	// The key a caller sends: `provider/model_id`.
 	name: string
+	provider: string
+	model_id: string
 	// What the model takes and what it gives: text, image, embeddings, ...
 	input_modalities: string[]
 	output_modalities: string[]
@@ -19,12 +22,16 @@ export interface AIRateLimit {
 	value: number
 }
 
-// USD, as of Grove's last pull. `unallocated` is what no key's cap has claimed yet. A free
-// team is never charged: `spent` stays at zero and caps do not apply.
-export interface AIBalance {
-	balance: number
+// USD, as of Grove's last pull. `capped` is Σ the live keys' monthly caps, which the tier's
+// `spend_limit` bounds. A free team is never charged: `spent` stays at zero and caps do not apply.
+// Credit and invoices are Central's wallet and invoicing, not Grove's.
+export interface AISpend {
 	spent: number
-	unallocated: number
+	month_spent: number
+	capped: number
+	spend_limit: number
+	max_keys: number
+	suspended: boolean
 	is_free_user: boolean
 }
 
@@ -48,7 +55,9 @@ export interface AIMonthUsage {
 
 export interface AIState {
 	enabled: boolean
-	balance?: AIBalance
+	// Grove is down or in maintenance: nothing else is filled in.
+	unavailable?: boolean
+	spend?: AISpend
 	usage?: AIMonthUsage
 	geographies?: AIGeography[]
 }
@@ -99,8 +108,9 @@ export interface AIApiKey {
 	geography: string
 	// The base URL for both API surfaces, of the key's own geography.
 	gateway_url: string
-	// USD: what the key may spend out of the team's balance, and what it has.
+	// USD: what the key may spend a month, what it spent this month and in all.
 	cap: number
+	month_spent: number
 	spent: number
 	limits: AIRateLimit[]
 }

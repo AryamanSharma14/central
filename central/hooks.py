@@ -186,15 +186,19 @@ doc_events = {
 	"Team": {
 		# Keep a staging-trial team's billing profile complete so it can create servers
 		# without the setup prompt (the profile gate is otherwise enforced in the console).
-		"on_update": [
-			"central.billing.payments.provisioning.on_team_update",
-			# A new owner may be the new alert address of the team's Grove user.
-			"central.services.ai.on_alert_address_update",
-		],
+		"on_update": "central.billing.payments.provisioning.on_team_update",
 	},
+    # TODO: this needs to happen via bg jobs. Coz a faliure in receiving this should ideally have retries, etc
 	"Billing Profile": {
-		# Its email is the alert address of the team's Grove user when set.
-		"on_update": "central.services.ai.on_alert_address_update",
+		# Its tier sets the team's AI key count and monthly spend limit at Grove.
+		"on_update": "central.services.ai.on_tier_update",
+	},
+	"Subscription": {
+		# A suspended account suspends the team's AI keys at Grove, and recovery lifts it.
+		"on_update": "central.services.ai.on_tier_update",
+	},
+	"Trust Tier Level": {
+		"on_update": "central.services.ai.on_level_update",
 	},
 }
 

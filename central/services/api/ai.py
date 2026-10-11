@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from central.integrations.grove import GroveClient
+from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
 from central.utils.guards import require_capability
 
@@ -21,6 +21,7 @@ KEY_FIELDS = (
 	"gateway_url",
 	"cap",
 	"spent",
+	"month_spent",
 	"limits",
 )
 
@@ -30,12 +31,16 @@ KEY_FIELDS = (
 @frappe.whitelist(methods=["GET"])
 @require_capability("service:view", VIEW_DENIED)
 def get_ai(team: str | None = None) -> dict:
-	"""Whether AI is on for the team and, when it is, its balance, this month's usage and the
-	geographies a key may be minted in."""
+	"""Whether AI is on for the team and, when it is, its spend and limits, this month's usage
+	and the geographies a key may be minted in. `unavailable` while Grove is down or in
+	maintenance: the page says so, and the keys keep working at the gateways."""
 	if not ai.get_ai_service(team):
 		return {"enabled": False}
 
-	return {"enabled": True, **ai.get_overview(team)}
+	try:
+		return {"enabled": True, **ai.get_overview(team)}
+	except GroveUnavailable:
+		return {"enabled": True, "unavailable": True}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -49,7 +54,7 @@ def enable_ai(team: str | None = None) -> dict:
 @require_capability("service:view", VIEW_DENIED)
 def list_api_keys(team: str | None = None) -> list[dict]:
 	"""The team's keys, newest first, masked, each with its geography and the gateway it
-	calls, its cap and spend, and its rate limits."""
+	calls, its monthly cap, its spend this month and in all, and its rate limits."""
 	require_ai(team)
 	keys = GroveClient.from_settings().list_keys(team)
 	return [{field: row.get(field) for field in KEY_FIELDS} for row in keys]
@@ -61,7 +66,7 @@ def create_api_key(
 	team: str | None = None, label: str | None = None, geography: str | None = None, cap: float | None = None
 ) -> dict:
 	"""Mint a key for the team in `geography` (Grove's default when none) with `cap` USD to
-	spend (none on a prepaid team: the key is refused until it gets one), and return its secret.
+	spend a month (none: the key is refused until it gets one), and return its secret.
 	This is the only time it is shown. `models` is what it may call, for the quickstart."""
 	require_ai(team)
 	label = (label or "").strip()
@@ -82,12 +87,12 @@ def create_api_key(
 
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
-def update_api_key(team: str | None = None, key: str | None = None, cap: float | None = None) -> dict:
-	"""Change what one of the team's keys may spend. Grove refuses a cap the balance cannot
-	cover, and another team's key."""
+def set_api_key_caps(team: str | None = None, caps: dict[str, float] | None = None) -> list[dict]:
+	"""Set the monthly caps of several of the team's keys in one go, {key: USD}. Grove saves all
+	or none: it refuses caps that add up past the tier's spend limit, and another team's key."""
 	require_ai(team)
-	row = GroveClient.from_settings().update_key(team, key, flt(cap))
-	return {field: row.get(field) for field in KEY_FIELDS}
+	rows = GroveClient.from_settings().update_caps(team, {key: flt(cap) for key, cap in (caps or {}).items()})
+	return [{field: row.get(field) for field in KEY_FIELDS} for row in rows]
 
 
 @frappe.whitelist(methods=["GET"])
@@ -96,14 +101,6 @@ def get_models(team: str | None = None, geography: str | None = None) -> list[di
 	"""What a key in `geography` (Grove's default when none) starts with: its default group."""
 	require_ai(team)
 	return ai.get_models(geography or None)
-
-
-@frappe.whitelist(methods=["GET"])
-@require_capability("service:view", VIEW_DENIED)
-def get_api_key_models(team: str | None = None, key: str | None = None) -> list[dict]:
-	"""The models one of the team's keys may call."""
-	require_ai(team)
-	return ai.get_key_models(team, key)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -122,19 +119,6 @@ def get_usage(team: str | None = None, period: str = "Last 7 Days", key: str | N
 	total, per model, and per day."""
 	require_ai(team)
 	return ai.get_usage_report(team, period, get_key_hash(team, key) if key else None)
-
-
-@frappe.whitelist(methods=["POST"])
-def add_credit(
-	team: str, amount: float, reference: str | None = None, allocations: dict[str, float] | None = None
-) -> dict:
-	"""Add USD credit to the team's balance at Grove. Operator only: nothing is charged to the
-	team for it. A repeat with the same `reference` adds nothing. Grove spreads it over the
-	team's keys' spend limits, or as `allocations` ({key: USD}) says. Returns the balance after
-	and the split."""
-	frappe.only_for("System Manager")
-	require_ai(team)
-	return GroveClient.from_settings().add_credit(team, amount, reference, allocations)
 
 
 def require_ai(team: str) -> None:
