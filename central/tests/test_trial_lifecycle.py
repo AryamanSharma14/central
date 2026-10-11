@@ -6,6 +6,7 @@ from frappe.utils import add_days, getdate, now_datetime, nowdate
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import observe_server
+from central.resource_actions import submit_command, validate_trial_site
 from central.signups import credit, trial
 from central.tests.test_sites import SiteOnAMachine
 
@@ -162,3 +163,17 @@ class TestTrialLifecycle(SiteOnAMachine):
 			job_id=f"trial-convert:{self.server.name}",
 			deduplicate=True,
 		)
+
+	def test_an_ended_trial_cannot_be_started(self):
+		self.ready_site()
+		self.site().db_set("trial_state", "Ended")
+
+		with self.assertRaisesRegex(frappe.ValidationError, "trial has ended"):
+			submit_command("start", self.team.name, self.server.name)
+
+	def test_a_team_has_a_limited_number_of_free_trial_sites(self):
+		self.ready_site()
+
+		with self.change_settings("Central Settings", trial_servers_per_team=1):
+			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
+				validate_trial_site(self.team.name)

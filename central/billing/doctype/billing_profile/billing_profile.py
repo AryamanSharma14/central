@@ -79,18 +79,6 @@ def require_billing_profile(team: str, action: str) -> None:
 		)
 
 
-def require_billing_profile_or_credit(team: str, new_rate, action: str) -> None:
-	"""Refuse `action` until the billing profile is complete, unless credits fund it.
-
-	`new_rate` is the monthly run-rate `action` adds; None is never funded.
-	"""
-	from central.billing.payments.settlement import wallet_funds
-
-	if wallet_funds(team, new_rate):
-		return
-	require_billing_profile(team, action)
-
-
 class BillingProfile(Document):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.

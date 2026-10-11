@@ -28,6 +28,7 @@
   "sign_in_code_attempts",
   "sign_in_codes_per_email",
   "trials_section",
+  "require_payment_method",
   "trial_servers_per_team",
   "trial_days",
   "trial_deletion_days",
@@ -177,6 +178,13 @@
    "fieldname": "trials_section",
    "fieldtype": "Section Break",
    "label": "Trials"
+  },
+  {
+   "default": "1",
+   "description": "A team needs an active payment method, or credit that covers the server, to create a server other than a free trial site. Turn it off for demos, so a complete billing profile is enough.",
+   "fieldname": "require_payment_method",
+   "fieldtype": "Check",
+   "label": "Require Payment Method for Servers"
   },
   {
    "default": "3",
