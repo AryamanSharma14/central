@@ -101,7 +101,11 @@ export function usePlans(
 		currency: computed<string | null>(() => call.data?.currency ?? null),
 		tier: computed<string | null>(() => call.data?.tier ?? null),
 		// Remaining trust-tier headroom in the team's currency — explains an empty menu.
-		available: computed<number | null>(() => call.data?.available ?? null),
+		available: computed<number | null>(() =>
+			call.data?.spend_limit_enforced === false
+				? Infinity
+				: (call.data?.available ?? null),
+		),
 		// "Design your own" inputs: the per-resource rate card + the profile bounds.
 		rateCard: computed<RateCard>(() =>
 			current.value ? (call.data?.rate_card ?? {}) : {},

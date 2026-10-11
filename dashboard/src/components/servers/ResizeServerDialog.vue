@@ -2,15 +2,19 @@
 import {
 	Alert,
 	Button,
-	Checkbox,
 	Dialog,
 	LoadingIndicator,
+	Radio,
+	RadioGroup,
+	Skeleton,
 	Tabs,
 } from 'frappe-ui'
+import { DialogDescription } from 'reka-ui'
 import { computed, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
+import { configSpecs } from '@/lib/composed'
 import { money } from '@/lib/format'
 import { formatGb } from '@/lib/units'
 
@@ -50,6 +54,11 @@ const {
 	computeOnly,
 	currentPrice,
 	totalPrice,
+	totalShape,
+	selectionError,
+	canConfirm,
+	optionsError,
+	reloadOptions,
 	downtimeNote,
 	changed,
 	confirm,
@@ -69,6 +78,9 @@ const open = computed({
 <template>
 	<Dialog v-model="open" title="Resize server" size="3xl">
 		<template #default>
+			<DialogDescription class="sr-only"
+				>Choose CPU, memory and storage. Your files are kept.</DialogDescription
+			>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
 				v-if="resizeCall.loading"
@@ -81,12 +93,31 @@ const open = computed({
 					list and comes back on its own when it’s done.
 				</p>
 			</div>
-			<p
+			<div
 				v-else-if="configCall.loading || plansLoading"
-				class="text-p-sm text-ink-gray-5"
+				class="space-y-4"
+				aria-busy="true"
+				aria-label="Loading resize options"
 			>
-				Loading…
-			</p>
+				<div class="space-y-2">
+					<Skeleton class="h-4 w-full rounded-4" />
+					<Skeleton class="h-4 w-2/3 rounded-4" />
+				</div>
+				<div class="grid gap-3 sm:grid-cols-2">
+					<Skeleton v-for="index in 2" :key="index" class="h-16 rounded-6" />
+				</div>
+				<div class="grid gap-3 sm:grid-cols-3">
+					<Skeleton v-for="index in 6" :key="index" class="h-24 rounded-6" />
+				</div>
+			</div>
+			<div v-else-if="optionsError" class="space-y-3">
+				<Alert
+					theme="red"
+					title="Couldn't load resize options"
+					:description="optionsError"
+				/>
+				<Button label="Retry" @click="reloadOptions" />
+			</div>
 			<p
 				v-else-if="!resizable || nothingToShow"
 				class="text-p-sm text-ink-gray-5"
@@ -102,21 +133,32 @@ const open = computed({
 					:description="`You pay ${money(lock.locked_rate, lock.currency)}/mo for this size; it now lists at ${money(lock.list_rate, lock.currency)}/mo. Any resize is priced at today's rates, and the old rate doesn't come back, including if you resize to this size again later.`"
 				/>
 
-				<div class="space-y-2 text-p-base text-ink-gray-7">
+				<div class="space-y-2 text-p-sm text-ink-gray-7">
 					<p>
-						You can change CPU and memory only, or grow the disk too. You can
-						only move to a smaller size later if you keep the disk as it is.
+						You can change CPU and memory only, or grow the disk too. Choosing a
+						smaller CPU and memory size does not shrink your disk.
 					</p>
-					<p>{{ downtimeNote }}</p>
+					<p>
+						Changing CPU or memory restarts the server and may take a few
+						minutes. Increasing storage alone does not need a restart. Your
+						files are kept.
+					</p>
 				</div>
-
-				<div class="rounded-6 border border-outline-gray-2 px-3 py-2.5">
-					<Checkbox
-						v-model="computeOnly"
-						label="CPU and memory only"
-						:description="`Keeps the ${formatGb(currentDisk)} GB disk as it is.`"
+				<RadioGroup v-model="computeOnly" label="Storage" padded>
+					<Radio
+						:value="true"
+						:label="`Keep my ${formatGb(currentDisk)} GB disk`"
+						description="Change CPU and memory. You can choose a smaller compute size."
 					/>
-				</div>
+					<Radio
+						:value="false"
+						label="Increase storage too"
+						description="Use the selected plan's storage, or choose a custom size. Storage cannot shrink."
+					/>
+				</RadioGroup>
+				<p class="text-p-sm text-ink-gray-6">
+					Prices include all storage you keep. Increasing storage is permanent.
+				</p>
 
 				<Tabs v-if="hasTabs" v-model="activeTab" :tabs="classTabs">
 					<template #tab-panel="{ tab }">
@@ -124,6 +166,7 @@ const open = computed({
 							class="pt-4"
 							:omit-disk="computeOnly"
 							:min-disk="computeOnly ? undefined : currentDisk"
+							:current-disk="currentDisk"
 							:current-plan="currentPlanKey"
 							:presets="groups[tab.value] ?? []"
 							:profile="designableProfile(String(tab.value))"
@@ -141,6 +184,7 @@ const open = computed({
 					v-else
 					:omit-disk="computeOnly"
 					:min-disk="computeOnly ? undefined : currentDisk"
+					:current-disk="currentDisk"
 					:current-plan="currentPlanKey"
 					:presets="flatPresets"
 					:profile="flatProfile"
@@ -152,6 +196,19 @@ const open = computed({
 					v-model:selected-plan="selectedPlan"
 					v-model:composed-config="composedConfig"
 				/>
+				<Alert v-if="selectionError" theme="red" :title="selectionError" />
+				<div
+					v-if="totalShape && changed"
+					class="space-y-2 border-t border-outline-gray-2 pt-4"
+					aria-live="polite"
+				>
+					<p class="text-sm-medium text-ink-gray-9">After resizing</p>
+					<p class="text-p-sm text-ink-gray-7">{{ configSpecs(totalShape) }}</p>
+					<p class="text-p-sm text-ink-gray-6">
+						{{ downtimeNote }}
+						Your files are kept.
+					</p>
+				</div>
 			</div>
 		</template>
 		<template #actions>
@@ -170,7 +227,7 @@ const open = computed({
 				<Button
 					variant="solid"
 					label="Resize"
-					:disabled="!changed"
+					:disabled="!canConfirm"
 					@click="confirm"
 				/>
 			</div>
