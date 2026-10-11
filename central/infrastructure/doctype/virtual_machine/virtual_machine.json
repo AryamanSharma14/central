@@ -35,6 +35,7 @@
   "gateway_url",
   "has_public_ipv6",
   "is_firewall_enabled",
+  "firewall_rules",
   "ssh_keys_section",
   "ssh_keys",
   "diagnostics_tab",
@@ -242,10 +243,17 @@
   },
   {
    "default": "0",
-   "description": "The customer turned on the Atlas firewall at creation. It allows the mesh, ICMP, SSH, HTTP, and HTTPS.",
+   "description": "Whether the Atlas firewall enforces its rules, as Atlas last reported.",
    "fieldname": "is_firewall_enabled",
    "fieldtype": "Check",
    "label": "Firewall Enabled",
+   "read_only": 1
+  },
+  {
+   "description": "The customer's firewall rules, as Atlas last reported, without the rules Central adds.",
+   "fieldname": "firewall_rules",
+   "fieldtype": "JSON",
+   "label": "Firewall Rules",
    "read_only": 1
   },
   {
@@ -355,7 +363,7 @@
    "link_fieldname": "server"
   }
  ],
- "modified": "2026-10-11 12:00:00.000000",
+ "modified": "2026-10-11 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Infrastructure",
  "name": "Virtual Machine",

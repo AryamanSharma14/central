@@ -61,6 +61,7 @@ export const API = {
 	resizeServer: 'central.api.servers.resize_server',
 	renameServer: 'central.api.servers.rename_server',
 	setTerminationProtection: 'central.api.servers.set_termination_protection',
+	updateServerFirewall: 'central.api.servers.update_server_firewall',
 	terminateServer: 'central.api.servers.terminate_server',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',

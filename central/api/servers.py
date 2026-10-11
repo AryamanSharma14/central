@@ -5,12 +5,14 @@ import frappe
 from frappe import _
 from frappe.utils import get_system_timezone
 from frappe.utils.translations import _lt
+from pydantic import ValidationError
 
 from central.errors import handle_resource_operation
-from central.iam import get_server_capabilities
+from central.iam import can, get_server_capabilities
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import get_cached_metrics, reconcile
+from central.server_models import FirewallChange
 from central.utils.guards import require_capability
 
 METRICS_PERIOD_DAYS = {"24h": 1, "7d": 7, "14d": 14, "30d": 30}
@@ -142,6 +144,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 			"has_public_ipv6": row.has_public_ipv6,
 			"is_firewall_enabled": row.is_firewall_enabled,
 			"is_termination_protected": row.is_termination_protected,
+			"firewall_rules": frappe.parse_json(row.firewall_rules) if row.firewall_rules else None,
 			"ssh_command": _ssh_command(row),
 			"ssh_keys": _server_ssh_keys(row.resource_id),
 			"gateway_url": row.gateway_url,
@@ -286,6 +289,7 @@ def _overview_server_row(resource_id: str, team: str):
 			server.has_public_ipv6,
 			server.is_firewall_enabled,
 			server.is_termination_protected,
+			server.firewall_rules,
 			server.gateway_url,
 			server.creation,
 			region.display_name.as_("region_display_name"),
@@ -471,6 +475,46 @@ def set_termination_protection(
 	"""Turn termination protection on or off. Gated on `server:terminate`."""
 	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
 	server.set_termination_protection(bool(frappe.utils.cint(enabled)))
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability("server:network", _lt("You can't change the network of this team's servers."))
+def update_server_firewall(
+	team: str | None = None,
+	resource_ids: list[str] | str | None = None,
+	firewall: dict | str | None = None,
+) -> dict[str, str | None]:
+	"""Change the firewall of each server in `resource_ids`. Gated on `server:network` on each
+	server. Returns each server's error, or None when it changed."""
+	change = _validate_firewall_change(firewall or {})
+
+	return {
+		resource_id: _update_one_firewall(team, resource_id, change)
+		for resource_id in frappe.parse_json(resource_ids) or []
+	}
+
+
+def _validate_firewall_change(firewall: dict | str) -> FirewallChange:
+	try:
+		return FirewallChange.model_validate(frappe.parse_json(firewall))
+	except ValidationError as error:
+		frappe.throw(error.errors(include_input=False)[0]["msg"].removeprefix("Value error, "))
+
+
+def _update_one_firewall(team: str, resource_id: str, change: FirewallChange) -> str | None:
+	if not can(frappe.session.user, team, "server:network", server=resource_id):
+		return _("You can't change the network of this server.")
+
+	try:
+		server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+		server.update_firewall(change)
+	except (frappe.ValidationError, frappe.DoesNotExistError) as error:
+		# The error goes back in this server's result, not as a page-wide message.
+		frappe.clear_messages()
+		return str(error)
+
+	return None
 
 
 @frappe.whitelist(methods=["POST"])

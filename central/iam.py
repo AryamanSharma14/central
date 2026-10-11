@@ -10,7 +10,7 @@ from frappe.utils.caching import request_cache
 OPERATOR_BYPASS_ROLE = "System Manager"
 
 # The revision of the capability taxonomy. Bump it with every change (see CAPABILITIES.md).
-CAPABILITY_VERSION = 5
+CAPABILITY_VERSION = 6
 
 # Granting a key implies each capability in its value, because acting on a resource needs
 # seeing it. Every grant is closed under these before it is checked.
@@ -18,6 +18,7 @@ CAP_IMPLICATIONS = {
 	"server:create": ("server:view", "cluster:view"),
 	"server:terminate": ("server:view",),
 	"server:power": ("server:view",),
+	"server:network": ("server:view",),
 	"server:resize": ("server:view",),
 	"server:snapshot": ("server:view",),
 	"server:ssh-key": ("server:view",),
@@ -31,6 +32,7 @@ SERVER_CAPABILITIES = frozenset(
 	{
 		"server:view",
 		"server:power",
+		"server:network",
 		"server:resize",
 		"server:snapshot",
 		"server:terminate",

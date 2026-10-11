@@ -46,6 +46,7 @@ const { setBreadcrumbs } = useBreadcrumbs()
 
 const {
 	canPowerServer,
+	canManageNetwork,
 	canResizeServer,
 	canSnapshotServer,
 	canTerminateServer,
@@ -127,6 +128,7 @@ const actions = computed(() =>
 	getServerActions(server.value, {
 		open: canOpenConsole.value,
 		power: canPowerServer.value,
+		network: canManageNetwork.value,
 		resize: canResizeServer.value,
 		snapshot: canSnapshotServer.value,
 		terminate: canTerminateServer.value,
@@ -349,7 +351,16 @@ watch(
 					v-else-if="activeTab === 'networking'"
 					:server="server"
 					:overview="details"
+					:can-manage-network="!!actions.network"
+					:servers="
+						servers.filter(
+							(row) =>
+								row.resource_id !== server?.resource_id &&
+								row.status !== 'Terminated',
+						)
+					"
 					class="mt-6"
+					@changed="reloadOverview"
 				/>
 
 				<AccessTab

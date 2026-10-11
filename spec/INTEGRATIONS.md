@@ -81,11 +81,35 @@ Server creation has two customer options, stored on `Virtual Machine` as `has_pu
 | Public IPv6 | `public_ipv6: "auto"` |
 | Firewall | `firewall.enabled: true` with the rules below |
 
-The firewall allows all inbound traffic from the mesh prefix `fdaa::/16`, because an enabled Atlas firewall also filters mesh traffic and the regional gateway reaches a machine over the mesh. It also allows inbound ICMP, inbound TCP ports 22, 80, and 443, and all outbound traffic. Without the option, Central sends `firewall.enabled: false`, which permits all traffic.
+Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
 Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
 
 A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
+
+## Firewall
+
+The Networking tab of a server shows its firewall. A member with `server:network` can change it.
+
+| Change | What Central sends | Confirmation |
+| --- | --- | --- |
+| Turn the firewall on or off | `enabled` only | When it opens every port, or blocks SSH or all outbound traffic |
+| Save rules | `inbound` and `outbound` only | When the saved rules block SSH or all outbound traffic on an enabled firewall |
+| Copy to other servers | `enabled`, `inbound`, and `outbound` | None. The dialog names the servers. |
+
+Rule edits stay in the browser until the customer saves them, so a change such as "SSH from one office instead of from anywhere" never applies half done. The presets Web server, SSH only, and Private only fill the rule lists the same way.
+
+`update_server_firewall` takes a list of servers and returns an error or `null` for each one. Central validates the change first: protocol `any`, `tcp`, `udp`, or `icmp`; ports only for TCP and UDP, as one port or one ascending range; address ranges in canonical CIDR form; and each rule only once.
+
+Central sends the change through `PATCH /virtual-machines/{id}/network`. Atlas replaces each firewall field it gets and keeps the others. Central puts these system rules before the customer's inbound rules, and the dashboard does not show them.
+
+| Rule | Why |
+| --- | --- |
+| All traffic from `fdaa::/16` | The console and the regional gateway reach a machine over the mesh, and an enabled firewall filters mesh traffic too. |
+| All traffic from `fdac::/16` | WireGuard gateway clients. Atlas still drops them unless the VM opts in to gateway access. |
+| ICMP from anywhere | IPv6 neighbour discovery and path MTU need it. |
+
+Atlas checks at most 50 address ranges across all rules, system rules included. The PATCH reply does not hold the firewall, so Central reads the VM again. Every read stores `is_firewall_enabled` and the customer's rules in `firewall_rules`. A server that Central has not read since this field was added shows its firewall after the next reconcile, which runs every 10 minutes.
 
 ## Termination protection
 

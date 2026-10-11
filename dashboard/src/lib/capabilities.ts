@@ -16,6 +16,7 @@ const CATEGORY_ORDER = ['Billing', 'Team', 'Services', 'Servers']
 export type ServerCapability =
 	| 'server:view'
 	| 'server:power'
+	| 'server:network'
 	| 'server:resize'
 	| 'server:snapshot'
 	| 'server:terminate'
@@ -31,6 +32,8 @@ export interface ServerActions {
 	/** Sign in to the server's bench or site, which is an Administrator session. */
 	open: boolean
 	power: boolean
+	/** Change the firewall. */
+	network?: boolean
 	resize: boolean
 	snapshot: boolean
 	terminate: boolean
@@ -49,6 +52,7 @@ export function getServerActions(
 	return {
 		open: caps.includes('server:console'),
 		power: caps.includes('server:power'),
+		network: caps.includes('server:network'),
 		resize: caps.includes('server:resize'),
 		snapshot: caps.includes('server:snapshot'),
 		terminate: caps.includes('server:terminate'),

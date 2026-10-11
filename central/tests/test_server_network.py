@@ -7,7 +7,8 @@ from frappe.tests import IntegrationTestCase
 
 from central.api.servers import open_console, server_overview
 from central.errors import AtlasConnectionError, AtlasRejected, AtlasResourceGone
-from central.integrations.resource_actions import MESH_NETWORK, _create_payload
+from central.infrastructure.doctype.virtual_machine.firewall import SYSTEM_INBOUND_RULES
+from central.integrations.resource_actions import _create_payload
 from central.tests.test_iam import ensure_user
 from central.tests.utils import ensure_atlas_instance
 
@@ -37,24 +38,25 @@ class TestCreationNetworkPayload(TestCase):
 
 		self.assertNotIn("public_ipv4", payload)
 		self.assertNotIn("public_ipv6", payload)
-		self.assertEqual(payload["firewall"], {"enabled": False})
+		self.assertFalse(payload["firewall"]["enabled"])
 
 	def test_public_ipv6_asks_atlas_for_an_automatic_address(self, _idle) -> None:
 		payload = _create_payload(creation_request(has_public_ipv6=True))
 
 		self.assertEqual(payload["public_ipv6"], "auto")
 
-	def test_firewall_keeps_the_mesh_and_web_ports_open(self, _idle) -> None:
-		firewall = _create_payload(creation_request(is_firewall_enabled=True))["firewall"]
+	def test_every_new_server_gets_the_web_server_rules(self, _idle) -> None:
+		firewall = _create_payload(creation_request())["firewall"]
 
-		self.assertTrue(firewall["enabled"])
-		self.assertIn({"protocol": "any", "cidrs": [MESH_NETWORK]}, firewall["inbound"])
-		self.assertIn({"protocol": "icmp", "cidrs": ["0.0.0.0/0", "::/0"]}, firewall["inbound"])
+		self.assertEqual(firewall["inbound"][: len(SYSTEM_INBOUND_RULES)], SYSTEM_INBOUND_RULES)
 		self.assertEqual(
 			[rule["ports"] for rule in firewall["inbound"] if rule["protocol"] == "tcp"],
 			["22", "80", "443"],
 		)
-		self.assertEqual(firewall["outbound"], [{"protocol": "any", "cidrs": ["0.0.0.0/0", "::/0"]}])
+		self.assertEqual(
+			firewall["outbound"], [{"protocol": "any", "ports": "", "cidrs": ["0.0.0.0/0", "::/0"]}]
+		)
+		self.assertTrue(_create_payload(creation_request(is_firewall_enabled=True))["firewall"]["enabled"])
 
 
 class TestServerConsole(IntegrationTestCase):

@@ -11,8 +11,10 @@ from central.errors import AtlasConnectionError, AtlasRejected, AtlasResourceGon
 from central.iam import can_on_any_server
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
+from central.infrastructure.doctype.virtual_machine import firewall
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.atlas import AtlasClient
+from central.server_models import FirewallChange
 from central.utils.units import (
 	gigabytes_to_mebibytes,
 	mebibytes_to_gigabytes,
@@ -82,6 +84,7 @@ def observe_server(server: VirtualMachine) -> str:
 			# Atlas reports the guest's public IPv6 as a prefix. A /128 is one address.
 			"public_ipv6": (network.get("public_ipv6") or "").removesuffix("/128") or None,
 			"gateway_url": gateway,
+			**firewall.get_observed_firewall(network),
 		},
 	)
 
@@ -204,6 +207,12 @@ def get_client(server: VirtualMachine) -> AtlasClient:
 	tenant_id = frappe.db.get_value("Team", server.team, "tenant_id")
 
 	return AtlasClient(instance, tenant_id)
+
+
+def update_firewall(server: VirtualMachine, change: FirewallChange) -> None:
+	"""Change the firewall on Atlas, then read the result back."""
+	get_client(server).update_network(server.atlas_vm_id, {"firewall": firewall.get_atlas_firewall(change)})
+	observe_server(server)
 
 
 def set_termination_protection(server: VirtualMachine, enabled: bool) -> None:

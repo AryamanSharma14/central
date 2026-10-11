@@ -187,6 +187,10 @@ class AtlasClient:
 			payload={"ssh_keys": public_keys},
 		)
 
+	def update_network(self, name: str, payload: dict) -> dict:
+		"""Change network settings. Atlas replaces each firewall field it gets and keeps the rest."""
+		return self._request("PATCH", f"virtual-machines/{quote(name, safe='')}/network", payload=payload)
+
 	def set_termination_protection(self, name: str, enabled: bool) -> dict:
 		"""Turn termination protection on or off. Atlas refuses to delete a protected VM."""
 		return self._request(
