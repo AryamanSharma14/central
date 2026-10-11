@@ -116,6 +116,14 @@ The console selects region, offering, exact build, and compatible plan. It keeps
 
 Resize uses the same action flow. `central.api.servers.resize_server` validates the target and inserts the action. The integration grows a disk online when CPU and memory stay the same. When CPU or memory changes, it stops the VM and sends the full CPU, memory, and disk target. This call also sets the idle time to zero. On a disk-only grow, a server with idle sleep on also receives a separate resize call that changes only the idle time. So both paths turn sleep off. The integration starts the VM, records the observed shape, and then asks billing to reprice. A billing failure leaves the action at Sent, so recovery can finish the local change without repeating a confirmed remote resize.
 
+## Console resize selection
+
+The resize dialog separates CPU and memory from storage. Keep my disk uses the current disk with the selected CPU and memory. A smaller compute preset is allowed because the disk stays the same. Increase storage too uses the preset's disk or the custom storage control. Presets with less disk than the current server are disabled in this mode. Changing to this mode clears an incompatible selection. Custom storage starts at the current disk size and cannot shrink it.
+
+Every preset card shows its effective storage and price. A retained disk beyond the preset allowance adds the extra storage at the current disk rate. A missing required rate or a price above the spending limit prevents submission. The final summary shows the target CPU, memory, storage, price, and power effect. CPU or memory changes require a restart on a running server. A storage increase alone does not. A stopped server starts after a resize. Central validates the target before it queues the action. A failure to load resize options shows an error and a Retry button. Submission stays unavailable until the options load.
+
+The catalog returns `spend_limit_enforced` with the available budget. Staging trials are exempt from the spending limit. The console preserves this exemption when it checks the price including retained storage.
+
 ## Validation
 
 The focused suites are `test_resource_actions`, `test_resource_action_migration`, `test_atlas_sync`, `test_server_observation`, `test_server_resize`, `test_pilot_credential_delivery`, `test_atlas_errors`, and the billing create, trial, and resize tests.

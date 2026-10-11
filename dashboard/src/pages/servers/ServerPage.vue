@@ -404,7 +404,7 @@ watch(
 		<ResizeServerDialog
 			v-model:open="resizing"
 			:server="server ?? null"
-			@resized="reload"
+			@resized="reload(); reloadOverview()"
 		/>
 	</div>
 </template>

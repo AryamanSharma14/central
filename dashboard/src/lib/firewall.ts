@@ -94,6 +94,54 @@ export function toCidr(value: string): string {
 	return address.includes(':') ? `${address}/128` : `${address}/32`
 }
 
+/** Check an address before adding it; Central validates the complete change again. */
+export function getCidrError(value: string): string {
+	const cidr = toCidr(value)
+	const [address, prefix, extra] = cidr.split('/')
+	if (!address || !/^\d+$/.test(prefix ?? '') || extra !== undefined)
+		return 'Enter an IP address or a range, such as 203.0.113.7 or 203.0.113.0/24.'
+
+	const isIpv6 = address.includes(':')
+	const width = isIpv6 ? 128 : 32
+	const mask = Number(prefix)
+	if (mask > width) return `The range prefix must be between 0 and ${width}.`
+	if (String(mask) !== prefix)
+		return 'Use a range prefix without leading zeros.'
+
+	let bits: bigint
+	if (isIpv6) {
+		let canonical: string
+		try {
+			canonical = new URL(`http://[${address}]/`).hostname.slice(1, -1)
+		} catch {
+			return 'Enter a valid IPv6 address.'
+		}
+		if (canonical !== address)
+			return `Use ${canonical}/${mask} for this address.`
+		const [left, right] = canonical
+			.split('::')
+			.map((part) => (part ? part.split(':') : []))
+		const groups = right
+			? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right]
+			: left
+		bits = BigInt(`0x${groups.map((part) => part.padStart(4, '0')).join('')}`)
+	} else {
+		const parts = address.split('.')
+		if (
+			parts.length !== 4 ||
+			parts.some(
+				(part) => !/^(0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255,
+			)
+		)
+			return 'Enter a valid IPv4 address.'
+		bits = parts.reduce((result, part) => (result << 8n) + BigInt(part), 0n)
+	}
+	const hostMask = (1n << BigInt(width - mask)) - 1n
+	if (bits & hostMask)
+		return 'Use the network address for a range, such as 203.0.113.0/24.'
+	return ''
+}
+
 export function isSameRule(a: FirewallRule, b: FirewallRule): boolean {
 	return (
 		a.protocol === b.protocol &&

@@ -94,11 +94,13 @@ The Networking tab of a server shows its firewall. A member with `server:network
 
 | Change | What Central sends | Confirmation |
 | --- | --- | --- |
-| Turn the firewall on or off | `enabled` only | When it opens every port, or blocks SSH or all outbound traffic |
-| Save rules | `inbound` and `outbound` only | When the saved rules block SSH or all outbound traffic on an enabled firewall |
+| Turn the firewall on or off | `enabled`, plus default rules when enabling an empty firewall | When it opens every port, or blocks SSH or all outbound traffic |
+| Apply changes | `inbound` and `outbound` only | When the saved rules block SSH or all outbound traffic on an enabled firewall |
 | Copy to other servers | `enabled`, `inbound`, and `outbound` | None. The dialog names the servers. |
 
-Rule edits stay in the browser until the customer saves them, so a change such as "SSH from one office instead of from anywhere" never applies half done. The presets Web server, SSH only, and Private only fill the rule lists the same way.
+Rule edits stay in the browser until the customer selects Apply changes. Rules are edited inline, with one column header for each direction. A removed row stays visible with Keep rule. Reset all pending changes in the options menu restores the saved lists. A background observation does not replace a pending draft. The presets Web server, SSH only, and Private only fill the rule lists for review before applying. Enabling a firewall with no saved rules allows SSH, HTTP, HTTPS and all outgoing connections.
+
+Each row selects a service and either Anyone on the internet or Specific addresses. Anyone permits both IPv4 and IPv6. Specific addresses shows an inline input for the first IP address or canonical CIDR range. Add IP address adds it to the rule. The selected addresses use the same searchable Frappe UI MultiSelect pattern as the SSH key field during server creation. A customer can deselect an address, clear the selection, or add another address. A single IP becomes a one-address range. Incomplete rules show guidance and cannot be applied. Invalid entries show a field error. Central validates the complete change before sending it to Atlas.
 
 `update_server_firewall` takes a list of servers and returns an error or `null` for each one. Central validates the change first: protocol `any`, `tcp`, `udp`, or `icmp`; ports only for TCP and UDP, as one port or one ascending range; address ranges in canonical CIDR form; and each rule only once.
 

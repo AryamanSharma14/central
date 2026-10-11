@@ -242,6 +242,8 @@ export const MobileNav: Component
 export const MobileNavItem: Component
 export const DateTimePicker: Component
 export const MultiSelect: Component
+export const Radio: Component
+export const RadioGroup: Component
 export const Popover: Component
 export const Select: Component
 export const SettingsBody: Component

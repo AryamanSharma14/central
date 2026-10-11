@@ -76,6 +76,8 @@ pilot frappe --site central-test.localhost run-tests --app central
 
 See [`e2e/README.md`](e2e/README.md) for the Playwright suite.
 
+Run the isolated server control checks with `yarn test:server-controls`. These checks render the resize and firewall components with mocked API responses. They do not change a server. Install the Playwright browser first, or set `PLAYWRIGHT_CHANNEL=chrome` to use an installed Chrome browser.
+
 ## Documentation
 
 - [CLAUDE.md](CLAUDE.md): contributor and agent rules.
