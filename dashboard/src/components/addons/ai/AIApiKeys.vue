@@ -314,7 +314,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				<Button
 					v-if="canManage && activeKeys.length"
 					class="shrink-0"
-					label="Set monthly caps"
+					label="Set caps"
 					icon-left="lucide-wallet"
 					@click="openCaps"
 				/>
@@ -520,7 +520,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					type="number"
 					min="0"
 					step="0.01"
-					label="Monthly cap (USD)"
+					label="Cap (USD)"
 					placeholder="0"
 					:description="`What this key may spend each month. Leave it at 0 to set it later: the key is refused until it has a cap.`"
 					@keyup.enter="create"
@@ -532,7 +532,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 		</template>
 	</Dialog>
 
-	<Dialog v-model="capsOpen" title="Set monthly caps" size="2xl">
+	<Dialog v-model="capsOpen" title="Set caps" size="2xl">
 		<template #default>
 			<Alert v-if="capsError" class="mb-4" theme="red" :title="capsError" />
 			<div

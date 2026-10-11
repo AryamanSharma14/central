@@ -40,8 +40,12 @@ const { ai, aiLoading, models, modelsLoading, modelsError, loadModels } =
 
 const usage = computed(() => ai.value?.usage ?? null)
 const spend = computed(() => ai.value?.spend ?? null)
-// A free team is never charged: the limit card says so instead of hinting at caps.
+// A free team is never charged: the spent card says so instead of hinting at caps.
 const prepaid = computed(() => !!spend.value && !spend.value.is_free_user)
+const spentPercent = computed(() => {
+	const limit = spend.value?.spend_limit ?? 0
+	return limit > 0 ? Math.min(((usage.value?.cost ?? 0) / limit) * 100, 100) : 0
+})
 
 // A model call often costs a fraction of a cent, so small amounts keep 4 places.
 const usdPrecision = (value: number): number => (value > 0 && value < 1 ? 4 : 2)
@@ -97,18 +101,18 @@ const shownModels = computed(() =>
 					{{ usage?.as_of ? formatDateTime(usage.as_of) : 'the last count' }}.
 				</p>
 
-				<div class="mt-3 grid grid-cols-2 gap-4 md:grid-cols-4">
+				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
 					<NumberCard
-						title="Monthly limit"
-						:value="prepaid ? (spend?.spend_limit ?? null) : null"
+						title="Spent"
+						:value="usage?.cost ?? null"
 						prefix="$"
-						:precision="2"
+						:precision="usdPrecision(usage?.cost ?? 0)"
 					>
 						<template #actions>
 							<Tooltip
 								:text="
 									prepaid
-										? `What your plan lets your keys spend a month; their caps add up to $${(spend?.capped ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
+										? `Your plan lets your keys spend $${(spend?.spend_limit ?? 0).toFixed(2)} a month; their caps add up to $${(spend?.capped ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
 										: 'This is a free team: usage is counted but never charged.'
 								"
 							>
@@ -118,13 +122,25 @@ const shownModels = computed(() =>
 								/>
 							</Tooltip>
 						</template>
+						<template v-if="prepaid" #caption>
+							<div
+								class="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-gray-3"
+								role="progressbar"
+								:aria-valuenow="Math.round(spentPercent)"
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-label="Share of the monthly limit spent"
+							>
+								<div
+									class="h-full rounded-full bg-surface-gray-9"
+									:style="{ width: `${spentPercent}%` }"
+								/>
+							</div>
+							<span class="shrink-0 tabular-nums text-ink-gray-5">
+								of ${{ (spend?.spend_limit ?? 0).toFixed(2) }}
+							</span>
+						</template>
 					</NumberCard>
-					<NumberCard
-						title="Spent"
-						:value="usage?.cost ?? null"
-						prefix="$"
-						:precision="usdPrecision(usage?.cost ?? 0)"
-					/>
 					<NumberCard title="Requests" :value="usage?.requests ?? null" />
 					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
 						<template #actions>
