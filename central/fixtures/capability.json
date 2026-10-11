@@ -50,6 +50,16 @@
   "resource": "server"
  },
  {
+  "capability": "server:network",
+  "description": "Change the firewall of servers",
+  "docstatus": 0,
+  "doctype": "Capability",
+  "modified": "2026-10-11 14:00:00.000000",
+  "name": "server:network",
+  "plane": "atlas",
+  "resource": "server"
+ },
+ {
   "capability": "server:power",
   "description": "Start, stop, and restart servers",
   "docstatus": 0,

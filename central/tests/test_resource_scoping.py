@@ -26,6 +26,7 @@ from central.tests.utils import ensure_server
 
 SERVER_CAPABILITIES = [
 	"server:console",
+	"server:network",
 	"server:power",
 	"server:resize",
 	"server:snapshot",
