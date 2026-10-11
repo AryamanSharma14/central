@@ -1,11 +1,12 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, getdate, now_datetime, nowdate
 
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import observe_server
-from central.signups import trial
+from central.signups import credit, trial
 from central.tests.test_sites import SiteOnAMachine
 
 
@@ -124,3 +125,40 @@ class TestTrialLifecycle(SiteOnAMachine):
 			trial.stop_trial_server(self.site().name)
 
 		hold_server_stopped.assert_not_called()
+
+	def test_a_trial_server_has_no_subscription_until_it_converts(self):
+		self.ready_site()
+		self.assertTrue(trial.is_billing_deferred(self.server.name))
+
+		self.site().db_set("trial_state", "Converted")
+		self.assertFalse(trial.is_billing_deferred(self.server.name))
+
+	def test_a_bought_server_is_billed_at_once(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "resource_type", "Server")
+
+		self.assertFalse(trial.is_billing_deferred(self.server.name))
+
+	def test_an_active_payment_method_converts_the_team_trials(self):
+		self.ready_site()
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.site().db_set({"trial_state": "Ended", "ready_at": add_days(now_datetime(), -3)})
+		self.server.db_set("status", "Running")
+		method = Mock(team=self.team.name, status="Active")
+		method.get_doc_before_save.return_value = Mock(status="Pending Validation")
+
+		with patch("central.signups.credit.grant_welcome_credits"):
+			credit.on_payment_method_update(method)
+
+		site = self.site()
+		self.assertEqual(site.trial_state, "Converted")
+		self.assertAlmostEqual(site.trial_cost, 3, places=1)
+		VirtualMachine.ensure_subscription_enabled.assert_called()
+		frappe.enqueue.assert_any_call(
+			"central.integrations.servers.convert_trial_server",
+			server=self.server.name,
+			start=True,
+			queue="long",
+			enqueue_after_commit=True,
+			job_id=f"trial-convert:{self.server.name}",
+			deduplicate=True,
+		)

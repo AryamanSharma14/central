@@ -56,6 +56,18 @@ These events are in the **Trial** notification category. A user can turn the ema
 
 A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. To end a trial, Central starts the server and then stops it. An explicit stop keeps the VM down, so traffic does not wake it.
 
+### Billing and conversion
+
+A trial server has no subscription, so a trial creates no invoice. Before the site is ready, a server from the signup flow counts as a trial unless its Team already has an active payment method. The daily backfill of missing subscriptions skips these servers too.
+
+When a payment method of the Team becomes active, every Active or Ended trial site of the Team becomes Converted:
+
+1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since the site was ready.
+2. A running server gets its subscription now. A stopped server gets it when it starts.
+3. A background job turns idle sleep off in Atlas, and starts the server if the trial had stopped it.
+
+A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
+
 ### Failure
 
 When a stop or a terminate fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.

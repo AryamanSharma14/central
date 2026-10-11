@@ -146,6 +146,18 @@ def hold_server_stopped(server: VirtualMachine) -> None:
 	observe_server(server)
 
 
+def convert_trial_server(server: str, start: bool) -> None:
+	"""Background job: turn idle sleep off on a converted trial server, and start it when the
+	trial had stopped it. Safe to repeat."""
+	document = frappe.get_doc("Virtual Machine", server)
+	client = get_client(document)
+	client.disable_idle_shutdown(document.atlas_vm_id)
+	if start:
+		wait_for_power_state(client, document.atlas_vm_id, "start", "running")
+
+	observe_server(document)
+
+
 def wait_for_power_state(client: AtlasClient, vm_id: str, action: str, state: str) -> None:
 	"""Wait until Atlas observes the VM in `state`, sending the power action once the VM is in
 	a stable state. A `migrating` or `pending` VM is left to settle first — Atlas may be moving

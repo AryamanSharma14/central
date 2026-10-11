@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import add_days, date_diff, formatdate, getdate, nowdate
+from frappe.utils import add_days, date_diff, flt, formatdate, get_datetime, getdate, now_datetime, nowdate
 
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
@@ -18,6 +18,59 @@ def start_trial(site: Site) -> None:
 
 	ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
 	site.db_set({"trial_state": "Active", "trial_ends_on": ends_on})
+
+
+def is_billing_deferred(server: str) -> bool:
+	"""Whether the server runs a free trial site, so it has no subscription yet. Before the
+	site is ready, a signup's server counts as a trial unless its team already pays."""
+	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
+	if state:
+		return state in ("Active", "Ended", "Deleted")
+
+	team, resource_type = frappe.db.get_value(
+		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"]
+	) or (None, None)
+	return resource_type == "Site" and not has_active_payment_method(team)
+
+
+def convert_team(team: str) -> None:
+	"""Turn the team's open trials into paid sites once it has an active payment method."""
+	for name in frappe.get_all(
+		"Site", filters={"team": team, "trial_state": ["in", ("Active", "Ended")]}, pluck="name"
+	):
+		convert_site(frappe.get_doc("Site", name, for_update=True))
+
+
+def convert_site(site: Site) -> None:
+	"""Start billing the site's server, keep it awake, and start it again if the trial stopped it."""
+	was_stopped = site.trial_state == "Ended"
+	site.db_set({"trial_state": "Converted", "trial_error": None, **get_trial_cost(site)})
+
+	server = frappe.get_doc("Virtual Machine", site.server)
+	if server.status == "Running":
+		server.ensure_subscription_enabled()
+
+	frappe.enqueue(
+		"central.integrations.servers.convert_trial_server",
+		server=server.name,
+		start=was_stopped,
+		queue="long",
+		enqueue_after_commit=True,
+		job_id=f"trial-convert:{server.name}",
+		deduplicate=True,
+	)
+
+
+def get_trial_cost(site: Site, until=None) -> dict:
+	"""The plan's monthly rate for the days the trial ran, from its creation request."""
+	request = site.get_creation_request()
+	if not request or not site.ready_at:
+		return {}
+
+	days = (get_datetime(until or now_datetime()) - get_datetime(site.ready_at)).total_seconds() / 86400
+	cost = flt(request.reserved_monthly_rate) * max(days, 0) / 30
+	currency = frappe.parse_json(request.request_payload or "{}").get("currency")
+	return {"trial_cost": cost, "trial_currency": currency}
 
 
 def has_active_payment_method(team: str) -> bool:
@@ -115,7 +168,7 @@ def delete_trial(site: Site) -> None:
 			requested_by="Administrator",
 		)
 
-	site.db_set({"trial_state": "Deleted", "trial_error": None})
+	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
 	send_notice(site, "trial_deleted", "deleted")
 
 
