@@ -100,7 +100,15 @@ function getRuleActions(rule: FirewallRule) {
 			/>
 		</div>
 
+		<p
+			v-if="!rules.length"
+			class="rounded-4 border border-outline-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-5"
+		>
+			{{ emptyText }}
+		</p>
+
 		<ListView
+			v-else
 			:query="query"
 			:rows="rules"
 			:columns="columns"
@@ -108,7 +116,6 @@ function getRuleActions(rule: FirewallRule) {
 			:paginated="false"
 			:show-count="false"
 			item-label="rule"
-			:empty-state="{ title: emptyText }"
 		>
 			<template #addresses="{ row }">
 				<div class="flex min-w-0 flex-wrap gap-1">
