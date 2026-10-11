@@ -30,6 +30,8 @@ class Product(Document):
 		signup_app: DF.Data
 		subtitle: DF.SmallText | None
 		title: DF.Data
+		trial_days: DF.Int
+		trial_deletion_days: DF.Int
 	# end: auto-generated types
 
 	def validate(self) -> None:

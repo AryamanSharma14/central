@@ -34,6 +34,13 @@ class Site(Document):
 		site_name: DF.Data
 		subdomain: DF.Data | None
 		team: DF.Link
+		trial_cost: DF.Currency
+		trial_currency: DF.Link | None
+		trial_deletes_on: DF.Date | None
+		trial_ends_on: DF.Date | None
+		trial_error: DF.SmallText | None
+		trial_last_notice: DF.Data | None
+		trial_state: DF.Literal["", "Active", "Ended", "Converted", "Deleted"]
 	# end: auto-generated types
 
 	@property
@@ -298,3 +305,5 @@ def on_doctype_update():
 	# The fleet reads a team's sites, then drops the machine each one already stands for.
 	frappe.db.add_index("Site", ["team", "server"])
 	frappe.db.add_index("Site", ["product"])
+	# The daily trial job reads trials by state and the day they end.
+	frappe.db.add_index("Site", ["trial_state", "trial_ends_on"])

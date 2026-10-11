@@ -18,7 +18,11 @@
   "subtitle",
   "image_section",
   "signup_app",
-  "landing_route"
+  "landing_route",
+  "trial_section",
+  "trial_days",
+  "column_break_trial",
+  "trial_deletion_days"
  ],
  "fields": [
   {
@@ -84,6 +88,29 @@
    "fieldname": "landing_route",
    "fieldtype": "Data",
    "label": "Landing Route"
+  },
+  {
+   "fieldname": "trial_section",
+   "fieldtype": "Section Break",
+   "label": "Trial"
+  },
+  {
+   "description": "Days a trial site of this product runs from when it is first ready. 0 uses Central Settings.",
+   "fieldname": "trial_days",
+   "fieldtype": "Int",
+   "label": "Trial Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_trial",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings.",
+   "fieldname": "trial_deletion_days",
+   "fieldtype": "Int",
+   "label": "Trial Deletion Days",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
