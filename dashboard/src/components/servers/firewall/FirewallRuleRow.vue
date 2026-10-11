@@ -9,6 +9,7 @@ import {
 	getCidrError,
 	getPortLabel,
 	getService,
+	isValidPortRange,
 	SERVICES,
 	toCidr,
 } from '@/lib/firewall'
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 const adding = ref(false)
 const address = ref('')
 const addressError = ref('')
+const portTouched = ref(false)
 watch(
 	[address, adding, () => props.rule.cidrs.length],
 	() =>
@@ -40,21 +42,20 @@ watch(
 		),
 	{ flush: 'sync' },
 )
-const service = computed(() => getService(props.rule))
+const selectedService = ref(getService(props.rule).label)
+const service = computed(
+	() => SERVICES.find((item) => item.label === selectedService.value)!,
+)
 const anyone = computed(
 	() =>
 		props.rule.cidrs.includes(ANYWHERE_IPV4) &&
 		props.rule.cidrs.includes(ANYWHERE_IPV6),
 )
-const portError = computed(() => {
-	if (service.value.ports !== null || !props.rule.ports.trim()) return ''
-	const match = /^([1-9]\d*)(?:-([1-9]\d*))?$/.exec(props.rule.ports)
-	return match &&
-		Number(match[1]) <= Number(match[2] ?? match[1]) &&
-		Number(match[2] ?? match[1]) <= 65535
+const portError = computed(() =>
+	isValidPortRange(props.rule.ports)
 		? ''
-		: 'Use a port from 1 to 65535, or a range such as 8000-8100.'
-})
+		: 'Use a port from 1 to 65535, or a range such as 8000-8100.',
+)
 const serviceOptions = SERVICES.map((item) => ({
 	label: item.label,
 	value: item.label,
@@ -68,6 +69,8 @@ const addressOptions = computed(() =>
 function changeService(label: string): void {
 	cancelAddress()
 	const next = SERVICES.find((item) => item.label === label)!
+	selectedService.value = label
+	portTouched.value = false
 	emit('update', {
 		...props.rule,
 		protocol: next.protocol,
@@ -154,8 +157,10 @@ function cancelAddress(): void {
 				:model-value="rule.ports"
 				:aria-label="`Port, rule ${index + 1}`"
 				:disabled="disabled || service.ports !== null"
-				:error="portError"
-				:placeholder="service.ports === null ? 'e.g. 8000' : rule.protocol === 'icmp' ? 'Not needed' : 'All'"
+				:error="portTouched ? portError : ''"
+				@focus="portTouched = false"
+				@blur="portTouched = true"
+				:placeholder="service.ports === null ? 'All ports' : rule.protocol === 'icmp' ? 'Not needed' : 'All'"
 				size="md"
 				class="w-full"
 				@update:model-value="(ports: string) => emit('update', { ...rule, ports })"

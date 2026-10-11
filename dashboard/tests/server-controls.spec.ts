@@ -437,3 +437,97 @@ test('resize option failure shows a retry and cannot submit', async ({
 		page.getByText("Couldn't load resize options", { exact: true }),
 	).toHaveCount(0)
 })
+
+test('changed observations block an older draft until reset', async ({
+	page,
+}) => {
+	await openControls(page)
+	await page
+		.getByRole('button', { name: 'Remove HTTPS rule', exact: true })
+		.click()
+	await page
+		.getByRole('button', { name: 'Remove observed SSH', exact: true })
+		.click()
+	await expect(
+		page.getByText(/The saved firewall rules changed while you were editing/),
+	).toBeVisible()
+	await expect(
+		page.getByRole('button', { name: 'Apply changes', exact: true }),
+	).toBeDisabled()
+	await page
+		.getByRole('button', { name: 'Firewall options', exact: true })
+		.click()
+	await page
+		.getByRole('menuitem', { name: 'Reset all pending changes', exact: true })
+		.click()
+	await page.getByRole('button', { name: 'Reset changes', exact: true }).click()
+	await expect(
+		page.getByRole('button', { name: 'Remove SSH rule', exact: true }),
+	).toHaveCount(0)
+	await expect(
+		page.getByRole('button', { name: 'Remove HTTPS rule', exact: true }),
+	).toBeVisible()
+})
+
+test('empty saved TCP ports do not block unrelated edits', async ({ page }) => {
+	await openControls(page)
+	await page.goto('/tests/server-controls.html?allTcpPorts=1')
+	await page
+		.getByRole('button', { name: 'Remove HTTPS rule', exact: true })
+		.click()
+	await expect(
+		page.getByRole('button', { name: 'Apply changes', exact: true }),
+	).toBeEnabled()
+})
+
+test('custom ports stay editable through preset port prefixes', async ({
+	page,
+}) => {
+	await openControls(page)
+	await page
+		.getByRole('combobox', { name: 'Service, rule 1', exact: true })
+		.first()
+		.click()
+	await page.getByRole('option', { name: 'Custom TCP', exact: true }).click()
+	const port = page
+		.getByRole('textbox', { name: 'Port, rule 1', exact: true })
+		.first()
+	await port.pressSequentially('2200-2205')
+	await expect(port).toBeEnabled()
+	await expect(port).toHaveValue('2200-2205')
+	await expect(
+		page
+			.getByRole('combobox', { name: 'Service, rule 1', exact: true })
+			.first(),
+	).toHaveValue('Custom TCP')
+})
+
+test('changed observations also block an open Apply confirmation', async ({
+	page,
+}) => {
+	await openControls(page)
+	await removeSSH(page)
+	await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+	await page
+		.getByRole('button', {
+			name: 'Remove observed SSH',
+			exact: true,
+			includeHidden: true,
+		})
+		.dispatchEvent('click')
+	const writes: string[] = []
+	page.on('request', (request) => {
+		if (request.url().includes('update_server_firewall'))
+			writes.push(request.url())
+	})
+	await page
+		.getByRole('dialog')
+		.getByRole('button', { name: 'Apply changes', exact: true })
+		.click()
+	await expect(
+		page
+			.getByRole('dialog')
+			.getByText(/The saved firewall rules changed while you were editing/),
+	).toBeVisible()
+	expect(writes).toEqual([])
+})

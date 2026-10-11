@@ -13,8 +13,10 @@ import {
 	type FirewallChange,
 	type FirewallRules,
 	getFirewallTexts,
+	getRulesError,
 	getService,
 	isSameRule,
+	isSameRules,
 	PRESETS,
 	SERVICES,
 } from '@/lib/firewall'
@@ -130,28 +132,22 @@ function usePreset(rules: FirewallRules): void {
 }
 
 const directions: Direction[] = ['inbound', 'outbound']
+const staleDraft = computed(
+	() =>
+		!!baseline.value &&
+		(!props.rules || !isSameRules(baseline.value, props.rules)),
+)
+const conflictMessage =
+	'The saved firewall rules changed while you were editing. Reset all pending changes to load the latest rules before applying.'
 const validation = computed(() => {
+	if (staleDraft.value) return conflictMessage
 	if (Object.values(incomplete.value).some(Boolean))
 		return 'Add or cancel the address you are typing.'
-	for (const direction of directions) {
-		const rules = effectiveDraft.value?.[direction] ?? []
-		for (const [index, rule] of rules.entries()) {
-			if (!rule.cidrs.length)
-				return `Choose an address for ${getService(rule).label}.`
-			if (rule.protocol === 'tcp' || rule.protocol === 'udp') {
-				const match = /^([1-9]\d*)(?:-([1-9]\d*))?$/.exec(rule.ports)
-				if (
-					!match ||
-					Number(match[1]) > Number(match[2] ?? match[1]) ||
-					Number(match[2] ?? match[1]) > 65535
-				)
-					return 'Enter a port from 1 to 65535, or an ascending range.'
-			}
-			if (rules.slice(index + 1).some((other) => isSameRule(rule, other)))
-				return 'Two rules are identical. Remove one before applying.'
-		}
-	}
-	return ''
+	if (!effectiveDraft.value) return ''
+	return (
+		getRulesError(effectiveDraft.value.inbound) ||
+		getRulesError(effectiveDraft.value.outbound)
+	)
 })
 function addRule(direction: Direction): void {
 	if (!draft.value) return
@@ -225,6 +221,10 @@ function saveDraftRules(): void {
 }
 
 async function sendChange(action: FirewallAction): Promise<void> {
+	if (action.change.inbound && staleDraft.value) {
+		sendError.value = conflictMessage
+		return
+	}
 	const error = (await updateFirewall([props.resourceId], action.change))[
 		props.resourceId
 	]

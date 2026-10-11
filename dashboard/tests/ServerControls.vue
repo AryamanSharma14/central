@@ -28,6 +28,16 @@ if (!enabled.value) rules.value = { inbound: [], outbound: [] }
 if (new URLSearchParams(location.search).has('specificFirewall'))
 	rules.value.inbound[0].cidrs = ['203.0.113.7/32']
 
+if (new URLSearchParams(location.search).has('allTcpPorts'))
+	rules.value.inbound[0].ports = ''
+
+function removeObservedSsh(): void {
+	rules.value = {
+		...rules.value,
+		inbound: rules.value.inbound.filter((rule) => rule.ports !== '22'),
+	}
+}
+
 function refresh(): void {
 	rules.value = JSON.parse(JSON.stringify(rules.value))
 }
@@ -36,6 +46,7 @@ function refresh(): void {
 	<main style="max-width: 960px; margin: 48px auto; padding: 16px;">
 		<Button label="Resize server" @click="resizing = true" />
 		<Button label="Refresh observed rules" @click="refresh" />
+		<Button label="Remove observed SSH" @click="removeObservedSsh" />
 		<FirewallSection
 			resource-id="test-vm"
 			:is-enabled="enabled"
