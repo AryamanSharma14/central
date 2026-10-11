@@ -74,16 +74,17 @@ Atlas must return the following fields with each build:
 
 Cargo's current Pilot image contains `default-bench` and `site.local`. Server and signup flows use that image layout. Ubuntu uses a base image. SSH keys are optional. See [Image Offering](../central/infrastructure/doctype/image_offering/SPEC.md) for selectors and pagination.
 
-Server creation has two customer options, stored on `Virtual Machine` as `has_public_ipv6` and `is_firewall_enabled`. Central sends an option to Atlas only when the customer selects it:
+Server creation has three network options. Central sends an option to Atlas only when the customer selects it:
 
 | Option | Atlas create field |
 | --- | --- |
+| Public IPv4 | `public_ipv4: "auto"`. Refused when the region has no IPv4 price. |
 | Public IPv6 | `public_ipv6: "auto"` |
 | Firewall | `firewall.enabled: true` with the rules below |
 
 Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
-Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
+Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. See [Public addresses](#public-addresses) for changes after creation. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
 
 A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
 
@@ -110,6 +111,20 @@ Central sends the change through `PATCH /virtual-machines/{id}/network`. Atlas r
 | ICMP from anywhere | IPv6 neighbour discovery and path MTU need it. |
 
 Atlas checks at most 50 address ranges across all rules, system rules included. The PATCH reply does not hold the firewall, so Central reads the VM again. Every read stores `is_firewall_enabled` and the customer's rules in `firewall_rules`. A server that Central has not read since this field was added shows its firewall after the next reconcile, which runs every 10 minutes.
+
+## Public addresses
+
+A member with `server:network` on a server can attach or detach its public IPv4 and IPv6 addresses, and turn IPv4 internet access on or off, from the Networking tab.
+
+| Operation | Atlas request | Notes |
+| --- | --- | --- |
+| Attach | `PUT /virtual-machines/{id}/public-ipv{4,6}` with `{"public_ip": "auto"}` | Atlas picks an address from the region's pool. For IPv4, Central first turns on IPv4 internet access, because Atlas requires it. |
+| Detach | `DELETE /virtual-machines/{id}/public-ipv{4,6}` | The address goes back to the pool. The customer cannot get it back. |
+| IPv4 internet access | `PATCH /virtual-machines/{id}/network` with `ipv4_internet_access` | Stays on while the server has a public IPv4. |
+
+Atlas applies an attach or detach after it replies. Central waits up to 30 seconds for Atlas to report the change, then reads the server. A slower change appears on the next reconcile. Central does not use reserved addresses yet, so an address always belongs to one server.
+
+A public IPv4 is billed from the first read that reports it until a read no longer reports it, or the server is terminated. `VirtualMachine.sync_public_ipv4_billing` opens and closes one `Subscription` per server, linked by `public_ip_server`. The price is the Catalog Rate of the `IP` Resource Type for the team's currency, optionally per region. The starter rates are INR 170 and USD 2 per month. Central refuses to attach an IPv4, or to create a server with one, in a region without a rate. IPv6 is free.
 
 ## Termination protection
 

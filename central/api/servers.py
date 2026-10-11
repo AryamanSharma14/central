@@ -144,6 +144,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 			"has_public_ipv6": row.has_public_ipv6,
 			"is_firewall_enabled": row.is_firewall_enabled,
 			"is_termination_protected": row.is_termination_protected,
+			"has_ipv4_internet": row.has_ipv4_internet,
 			"firewall_rules": frappe.parse_json(row.firewall_rules) if row.firewall_rules else None,
 			"ssh_command": _ssh_command(row),
 			"ssh_keys": _server_ssh_keys(row.resource_id),
@@ -289,6 +290,7 @@ def _overview_server_row(resource_id: str, team: str):
 			server.has_public_ipv6,
 			server.is_firewall_enabled,
 			server.is_termination_protected,
+			server.has_ipv4_internet,
 			server.firewall_rules,
 			server.gateway_url,
 			server.creation,
@@ -477,6 +479,51 @@ def set_termination_protection(
 	server.set_termination_protection(bool(frappe.utils.cint(enabled)))
 
 
+@frappe.whitelist(methods=["GET"])
+@require_capability("server:view", _lt("You can't view this team's servers."))
+def public_ipv4_pricing(team: str | None = None, region: str | None = None) -> dict:
+	"""The monthly price of one public IPv4 in `region`, shown before the customer commits."""
+	from central.billing.catalog.public_ips import get_public_ipv4_rate
+
+	rate, currency = get_public_ipv4_rate(team, region)
+	return {"rate": rate, "currency": currency}
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability(
+	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+)
+def set_server_public_ip(
+	team: str | None = None,
+	resource_id: str | None = None,
+	version: int | str = 4,
+	is_attached: bool | int | str = True,
+) -> dict:
+	"""Attach or detach the public IPv4 or IPv6 address. Gated on `server:network`. Returns
+	`is_pending` when Atlas is still applying the change."""
+	version = frappe.utils.cint(version)
+	if version not in (4, 6):
+		frappe.throw(_("Choose IPv4 or IPv6."))
+
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	is_done = server.set_public_ip(version, bool(frappe.utils.cint(is_attached)))
+	return {"is_pending": not is_done}
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability(
+	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+)
+def set_server_ipv4_internet(
+	team: str | None = None, resource_id: str | None = None, enabled: bool | int | str = True
+) -> None:
+	"""Turn IPv4 internet access on or off. Gated on `server:network`."""
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	server.set_ipv4_internet(bool(frappe.utils.cint(enabled)))
+
+
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
 @require_capability("server:network", _lt("You can't change the network of this team's servers."))
@@ -546,6 +593,7 @@ def create_server(
 	hostname: str | None = None,
 	ssh_keys: list[str] | None = None,
 	ssh_key_ids: list[str] | None = None,
+	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
 	snapshot: str | None = None,
@@ -564,6 +612,7 @@ def create_server(
 		hostname=hostname,
 		ssh_keys=ssh_keys,
 		ssh_key_ids=ssh_key_ids,
+		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
 		snapshot=snapshot,
@@ -584,6 +633,7 @@ def create_composed_server(
 	hostname: str | None = None,
 	ssh_keys: list[str] | None = None,
 	ssh_key_ids: list[str] | None = None,
+	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
 	snapshot: str | None = None,
@@ -603,6 +653,7 @@ def create_composed_server(
 		hostname=hostname,
 		ssh_keys=ssh_keys,
 		ssh_key_ids=ssh_key_ids,
+		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
 		snapshot=snapshot,

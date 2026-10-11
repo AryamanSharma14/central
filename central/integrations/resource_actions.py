@@ -231,6 +231,8 @@ def _create_payload(request) -> dict:
 		"sleep_after_idle_seconds": idle_shutdown_seconds(request.team),
 		"metadata": {"central_action_id": request.name},
 	}
+	if configuration.has_public_ipv4:
+		payload["public_ipv4"] = "auto"
 	if configuration.has_public_ipv6:
 		payload["public_ipv6"] = "auto"
 	if configuration.image_tags.get("purpose") == "pilot":

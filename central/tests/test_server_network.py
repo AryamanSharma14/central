@@ -25,6 +25,7 @@ def creation_request(purpose: str = "base", **options) -> SimpleNamespace:
 		ssh_keys=["ssh-ed25519 AAAA"],
 		ssh_key_ids=[],
 		image_tags={"os": "Ubuntu", "purpose": purpose},
+		has_public_ipv4=options.get("has_public_ipv4", False),
 		has_public_ipv6=options.get("has_public_ipv6", False),
 		is_firewall_enabled=options.get("is_firewall_enabled", False),
 	)
@@ -40,9 +41,10 @@ class TestCreationNetworkPayload(TestCase):
 		self.assertNotIn("public_ipv6", payload)
 		self.assertFalse(payload["firewall"]["enabled"])
 
-	def test_public_ipv6_asks_atlas_for_an_automatic_address(self, _idle) -> None:
-		payload = _create_payload(creation_request(has_public_ipv6=True))
+	def test_public_addresses_ask_atlas_for_automatic_addresses(self, _idle) -> None:
+		payload = _create_payload(creation_request(has_public_ipv4=True, has_public_ipv6=True))
 
+		self.assertEqual(payload["public_ipv4"], "auto")
 		self.assertEqual(payload["public_ipv6"], "auto")
 
 	def test_every_new_server_gets_the_web_server_rules(self, _idle) -> None:

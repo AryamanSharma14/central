@@ -7,6 +7,7 @@ import { usePlans } from '@/composables/usePlans'
 import { useProvisioningAction } from '@/composables/useProvisioningAction'
 import { useRegionalImages } from '@/composables/useRegionalImages'
 import { useRegions } from '@/composables/useRegions'
+import { usePublicIpv4Pricing } from '@/composables/useServerAddresses'
 import { useServerMapData } from '@/composables/useServerMapData'
 import { useSession } from '@/composables/useSession'
 import {
@@ -157,6 +158,11 @@ export function useServerCreation() {
 	const sshKeyIds = ref<string[]>([])
 	watch(activeTeam, () => {
 		sshKeyIds.value = []
+	})
+	const hasPublicIpv4 = ref(false)
+	const { priceLabel: ipv4PriceLabel } = usePublicIpv4Pricing(selectedRegion)
+	watch(ipv4PriceLabel, (label) => {
+		if (!label) hasPublicIpv4.value = false
 	})
 	const hasPublicIpv6 = ref(true)
 	const isFirewallEnabled = ref(false)
@@ -335,6 +341,7 @@ export function useServerCreation() {
 					: '',
 				offeringTitle,
 				[
+					hasPublicIpv4.value ? `Public IPv4 · ${ipv4PriceLabel.value}` : '',
 					hasPublicIpv6.value ? 'Public IPv6' : '',
 					isFirewallEnabled.value ? 'Firewall on' : '',
 				]
@@ -377,6 +384,7 @@ export function useServerCreation() {
 			hostname: hostnameFrom(name.value),
 			...selection.value,
 			ssh_key_ids: sshKeyIds.value,
+			has_public_ipv4: hasPublicIpv4.value,
 			has_public_ipv6: hasPublicIpv6.value,
 			is_firewall_enabled: isFirewallEnabled.value,
 		}
@@ -468,6 +476,8 @@ export function useServerCreation() {
 		imagesError,
 		reloadImages,
 		sshKeyIds,
+		hasPublicIpv4,
+		ipv4PriceLabel,
 		hasPublicIpv6,
 		isFirewallEnabled,
 		action,

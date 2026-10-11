@@ -46,6 +46,7 @@ export interface ServerOverview {
 		has_public_ipv6: 0 | 1
 		is_firewall_enabled: 0 | 1
 		is_termination_protected: 0 | 1
+		has_ipv4_internet: 0 | 1
 		/** Null until Central first reads the firewall from the region. */
 		firewall_rules: FirewallRules | null
 		region_details: {

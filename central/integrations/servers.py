@@ -25,6 +25,9 @@ from central.utils.units import (
 # A resize may move the VM to another host, so the wait is generous enough to cover a migration.
 POWER_WAIT_SECONDS = 15 * 60
 POWER_POLL_SECONDS = 5
+# Atlas attaches or detaches a public address in seconds; a slower change shows on the next read.
+ADDRESS_WAIT_SECONDS = 30
+ADDRESS_POLL_SECONDS = 2
 METRICS_CACHE_SECONDS = 60
 MIB = 1024 * 1024
 
@@ -84,6 +87,7 @@ def observe_server(server: VirtualMachine) -> str:
 			# Atlas reports the guest's public IPv6 as a prefix. A /128 is one address.
 			"public_ipv6": (network.get("public_ipv6") or "").removesuffix("/128") or None,
 			"gateway_url": gateway,
+			"has_ipv4_internet": bool(network.get("ipv4_internet_access")),
 			**firewall.get_observed_firewall(network),
 		},
 	)
@@ -212,6 +216,42 @@ def get_client(server: VirtualMachine) -> AtlasClient:
 def update_firewall(server: VirtualMachine, change: FirewallChange) -> None:
 	"""Change the firewall on Atlas, then read the result back."""
 	get_client(server).update_network(server.atlas_vm_id, {"firewall": firewall.get_atlas_firewall(change)})
+	observe_server(server)
+
+
+def set_public_ip(server: VirtualMachine, version: int, is_attached: bool) -> bool:
+	"""Attach or detach the public IPv4 or IPv6 address, then wait briefly for Atlas to apply it.
+	Returns False when the change is still in progress. A public IPv4 needs IPv4 internet access,
+	so attaching one turns it on first."""
+	client = get_client(server)
+	if is_attached and version == 4 and not server.has_ipv4_internet:
+		client.update_network(server.atlas_vm_id, {"ipv4_internet_access": True})
+
+	if is_attached:
+		client.attach_public_ip(server.atlas_vm_id, version)
+	else:
+		client.detach_public_ip(server.atlas_vm_id, version)
+
+	is_done = wait_for_public_ip(client, server.atlas_vm_id, version, is_attached)
+	observe_server(server)
+	return is_done
+
+
+def wait_for_public_ip(client: AtlasClient, vm_id: str, version: int, is_attached: bool) -> bool:
+	deadline = time.monotonic() + ADDRESS_WAIT_SECONDS
+	while time.monotonic() < deadline:
+		network = client.get_vm(vm_id).get("network") or {}
+		if bool(network.get(f"public_ipv{version}")) == is_attached:
+			return True
+		time.sleep(ADDRESS_POLL_SECONDS)
+
+	return False
+
+
+def set_ipv4_internet(server: VirtualMachine, enabled: bool) -> None:
+	"""Turn IPv4 internet access on or off, then read the result back. Atlas keeps it on while
+	the server has a public IPv4."""
+	get_client(server).update_network(server.atlas_vm_id, {"ipv4_internet_access": enabled})
 	observe_server(server)
 
 

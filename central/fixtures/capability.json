@@ -51,10 +51,10 @@
  },
  {
   "capability": "server:network",
-  "description": "Change the firewall of servers",
+  "description": "Change the firewall and public addresses of servers",
   "docstatus": 0,
   "doctype": "Capability",
-  "modified": "2026-10-11 14:00:00.000000",
+  "modified": "2026-10-11 18:00:00.000000",
   "name": "server:network",
   "plane": "atlas",
   "resource": "server"

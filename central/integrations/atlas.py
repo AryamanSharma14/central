@@ -191,6 +191,18 @@ class AtlasClient:
 		"""Change network settings. Atlas replaces each firewall field it gets and keeps the rest."""
 		return self._request("PATCH", f"virtual-machines/{quote(name, safe='')}/network", payload=payload)
 
+	def attach_public_ip(self, name: str, version: int) -> dict:
+		"""Attach a public address from the region's pool. Atlas attaches it after the reply."""
+		return self._request(
+			"PUT",
+			f"virtual-machines/{quote(name, safe='')}/public-ipv{version}",
+			payload={"public_ip": "auto"},
+		)
+
+	def detach_public_ip(self, name: str, version: int) -> dict:
+		"""Detach the public address. An address from the pool goes back to it."""
+		return self._request("DELETE", f"virtual-machines/{quote(name, safe='')}/public-ipv{version}")
+
 	def set_termination_protection(self, name: str, enabled: bool) -> dict:
 		"""Turn termination protection on or off. Atlas refuses to delete a protected VM."""
 		return self._request(
