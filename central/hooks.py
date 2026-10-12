@@ -190,7 +190,7 @@ doc_events = {
 	},
     # TODO: this needs to happen via bg jobs. Coz a faliure in receiving this should ideally have retries, etc
 	"Billing Profile": {
-		# Its tier sets the team's AI key count and monthly spend limit at Grove.
+		# Its level names the team's Tier at Grove, which holds the AI limits.
 		"on_update": "central.services.ai.on_tier_update",
 	},
 	"Subscription": {
@@ -198,6 +198,7 @@ doc_events = {
 		"on_update": "central.services.ai.on_tier_update",
 	},
 	"Trust Tier Level": {
+		# A level's renamed tier reaches every AI team on it.
 		"on_update": "central.services.ai.on_level_update",
 	},
 }

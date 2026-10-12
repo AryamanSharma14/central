@@ -20,8 +20,6 @@ _LEVEL_FIELDS = (
 	"sequence",
 	"is_default",
 	"max_resource_count",
-	"max_ai_keys",
-	"max_ai_spend",
 	"allowed_plans",
 	"allowed_clusters",
 	"allowed_resource_types",
@@ -111,7 +109,7 @@ def get_team_caps(team: str):
 		frappe.db.get_value(
 			"Billing Profile",
 			team,
-			["currency", "trust_tier_level", "manual_override", "override_max_spend", "override_max_ai_spend"],
+			["currency", "trust_tier_level", "manual_override", "override_max_spend"],
 			as_dict=True,
 		)
 		or frappe._dict()
@@ -123,15 +121,12 @@ def get_team_caps(team: str):
 	# An untiered team has no resolved cap (0) — the same "no ceiling yet" signal
 	# the old per-team-doc absence gave. A manual override still pins a bespoke cap.
 	override = profile.override_max_spend if profile.manual_override else 0
-	ai_override = profile.override_max_ai_spend if profile.manual_override else 0
 	if level is None:
 		return frappe._dict(
 			tier=None,
 			currency=currency,
 			max_spend=override or 0,
 			max_resource_count=0,
-			max_ai_keys=0,
-			max_ai_spend=ai_override or 0,
 			allowed_plans=None,
 			allowed_clusters=None,
 			allowed_resource_types=None,
@@ -142,8 +137,6 @@ def get_team_caps(team: str):
 		currency=currency,
 		max_spend=max_spend,
 		max_resource_count=level.max_resource_count,
-		max_ai_keys=level.max_ai_keys,
-		max_ai_spend=ai_override or level.max_ai_spend,
 		allowed_plans=level.allowed_plans,
 		allowed_clusters=level.allowed_clusters,
 		allowed_resource_types=level.allowed_resource_types,

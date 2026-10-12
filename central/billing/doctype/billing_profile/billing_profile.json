@@ -46,7 +46,6 @@
   "manual_override",
   "column_break_trust",
   "override_max_spend",
-  "override_max_ai_spend",
   "promoted_at",
   "promotion_basis"
  ],
@@ -131,7 +130,7 @@
    "options": "Country"
   },
   {
-   "description": "For India, pick the GST registration state — its code must match the GSTIN.",
+   "description": "For India, pick the GST registration state \u2014 its code must match the GSTIN.",
    "fieldname": "state",
    "fieldtype": "Autocomplete",
    "label": "State"
@@ -227,13 +226,6 @@
    "options": "currency"
   },
   {
-   "depends_on": "manual_override",
-   "description": "Bespoke monthly AI spend limit in USD for Manual Override; blank uses the level's Max AI Spend. Sent to Grove on save.",
-   "fieldname": "override_max_ai_spend",
-   "fieldtype": "Float",
-   "label": "Override Max AI Spend (USD / month)"
-  },
-  {
    "fieldname": "promoted_at",
    "fieldtype": "Datetime",
    "label": "Promoted At",
@@ -312,7 +304,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-10 10:27:25.616292",
+ "modified": "2026-10-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Billing Profile",
