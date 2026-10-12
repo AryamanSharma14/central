@@ -17,6 +17,7 @@ import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ListViewPagination from '@/components/common/list-view/ListViewPagination.vue'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
 import { useAI } from '@/composables/useAI'
 import { getErrorMessage, reportError } from '@/lib/feedback'
@@ -57,6 +58,16 @@ const activeKeys = computed(() =>
 const atKeyLimit = computed(
 	() => !!spend.value && activeKeys.value.length >= spend.value.max_keys,
 )
+// All keys come in one call; page them on the client past ten.
+const PAGE_SIZE = 10
+const page = ref(1)
+const pageCount = computed(() => Math.ceil(apiKeys.value.length / PAGE_SIZE))
+const pagedKeys = computed(() =>
+	apiKeys.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
+watch(pageCount, (count) => {
+	page.value = Math.min(page.value, Math.max(count, 1))
+})
 const isCapReached = (key: AIApiKey): boolean =>
 	key.cap > 0 && key.month_spent >= key.cap
 const capPercent = (key: AIApiKey): number =>
@@ -344,7 +355,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				class="mt-3 divide-y divide-outline-gray-1 border-t border-outline-gray-1"
 			>
 				<div
-					v-for="key in apiKeys"
+					v-for="key in pagedKeys"
 					:key="key.name"
 					class="flex items-center gap-3 py-2.5"
 				>
@@ -454,6 +465,21 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					/>
 				</template>
 			</EmptyState>
+
+			<ListViewPagination
+				v-if="pageCount > 1"
+				:page="page"
+				:page-count="pageCount"
+				:page-size="PAGE_SIZE"
+				:can-previous="page > 1"
+				:can-next="page < pageCount"
+				:show-page-size="false"
+				:count-text="`${apiKeys.length} keys`"
+				@first="page = 1"
+				@previous="page--"
+				@next="page++"
+				@last="page = pageCount"
+			/>
 		</div>
 	</div>
 
