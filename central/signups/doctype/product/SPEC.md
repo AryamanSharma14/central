@@ -55,7 +55,7 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 | `signup_verified` | A new email verifies its code and gets an account | `product` |
 | `trial_requested` | Central saves a new trial request. A repeated request with the same key sends nothing. | `product`, `region` |
 | `trial_failed` | The trial's create Resource Action fails or times out | `product`, `status`, `error_code` |
-| `trial_ready` | The site first answers its readiness probe | `product`, `seconds_to_ready` |
+| `trial_ready` | Central first records that the site answers. See [Readiness](../../../infrastructure/doctype/site/SPEC.md#readiness). | `product`, `seconds_to_ready` |
 | `trial_claimed` | The customer first opens the site | `product` |
 
 `send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.

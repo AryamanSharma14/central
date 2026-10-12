@@ -115,8 +115,9 @@ class Site(Document):
 		self.enqueue_subdomain_rename()
 
 	def record_ready(self) -> None:
-		"""Record and announce the first successful probe of the site's public address."""
-		if self.ready_at:
+		"""Record and announce the first successful probe of the site's public address. The locking
+		read keeps the scheduled probe and a console request from both announcing it."""
+		if frappe.db.get_value("Site", self.name, "ready_at", for_update=True):
 			return
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
@@ -313,6 +314,23 @@ class Site(Document):
 		)
 
 		return (gateway.rstrip("/") if gateway else None), audience
+
+
+def record_ready_sites() -> None:
+	"""Scheduled job: probe each running trial site that has not answered yet, so readiness and
+	its email do not wait for the customer to come back. A sleeping server is not Running, so the
+	probe does not wake it. Other sites record readiness when someone opens them."""
+	from central.integrations.pilot import is_site_reachable
+
+	for name in frappe.get_all(
+		"Site",
+		filters={"trial_state": "Active", "ready_at": ["is", "not set"], "server.status": "Running"},
+		pluck="name",
+	):
+		site = frappe.get_doc("Site", name)
+		if is_site_reachable(site.url):
+			site.record_ready()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's readiness if a later probe fails
 
 
 def on_host(url: str, host: str, path: str | None = None) -> str:

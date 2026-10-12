@@ -7,7 +7,7 @@ from central.api.sites import claim_site, get_site, login_site, onboarding_statu
 from central.errors import AtlasResourceGone
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
-from central.infrastructure.doctype.site.site import on_host
+from central.infrastructure.doctype.site.site import on_host, record_ready_sites
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.pilot import PilotLoginPending, fetch_site_login_url
 from central.integrations.servers import observe_server
@@ -226,16 +226,44 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertFalse(state["ready"])
 		self.assertIsNone(state["login_url"])
 
-	def test_first_successful_probe_records_and_announces_readiness(self):
+	def test_a_read_reports_readiness_without_recording_it(self):
 		site = self.site()
 		with (
 			patch("central.api.sites.is_site_reachable", return_value=True),
 			patch("central.notification.engine.queue_event") as queue_event,
 		):
-			get_site(site.name)
-			get_site(site.name)
+			self.assertTrue(get_site(site.name)["ready"])
+
+		self.assertIsNone(site.reload().ready_at)
+		queue_event.assert_not_called()
+
+	def test_the_scheduled_probe_leaves_a_site_that_is_not_a_trial(self):
+		site = self.site()
+		site.db_set("trial_state", "")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+		):
+			record_ready_sites()
+
+		self.assertIsNone(site.reload().ready_at)
+
+	def test_the_scheduled_probe_records_and_announces_readiness_once(self):
+		site = self.site()
+		site.db_set("trial_state", "Active")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+			patch("central.infrastructure.doctype.site.site.capture") as capture,
+			patch("central.notification.engine.queue_event") as queue_event,
+		):
+			record_ready_sites()
+			record_ready_sites()
 
 		self.assertTrue(site.reload().ready_at)
+		self.assertEqual([call.args[0] for call in capture.call_args_list], ["trial_ready"])
 		queue_event.assert_called_once_with(
 			site.team,
 			"site_ready",

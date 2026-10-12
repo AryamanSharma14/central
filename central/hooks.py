@@ -209,6 +209,8 @@ scheduler_events = {
 		# Retry proxy routes that failed or never ran, up to the attempt limit.
 		"*/5 * * * *": [
 			"central.infrastructure.doctype.site_domain.site_domain.retry_failed",
+			# Record readiness of a site the customer left before it answered.
+			"central.infrastructure.doctype.site.site.record_ready_sites",
 			# Snapshots have no region event, so Central reads each one until it settles.
 			"central.infrastructure.doctype.vm_snapshot.vm_snapshot.sync_pending_snapshots",
 			"central.infrastructure.doctype.frappemail_service.frappemail_service.refill_mailboxes",

@@ -161,10 +161,11 @@ def terminate_site(name: str) -> dict:
 
 def site_state(site: Site, with_login: bool = True) -> dict:
 	"""The site's readiness: its machine is awake and the site answers.
-	A login is minted only when asked, because each one starts a real Administrator session."""
+	A login is minted only when asked, because each one starts a real Administrator session.
+	Only the POST calls that ask for a login record readiness, because Frappe rolls back a GET."""
 	status = site.status
 	ready = is_site_reachable(site.url)
-	if ready:
+	if ready and with_login:
 		site.record_ready()
 	login_url = None
 	login_pending = False
