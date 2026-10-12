@@ -9,7 +9,6 @@ import {
 	Skeleton,
 	Tabs,
 } from 'frappe-ui'
-import { DialogDescription } from 'reka-ui'
 import { computed, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
@@ -78,9 +77,6 @@ const open = computed({
 <template>
 	<Dialog v-model="open" title="Resize server" size="3xl">
 		<template #default>
-			<DialogDescription class="sr-only"
-				>Choose CPU, memory and storage. Your files are kept.</DialogDescription
-			>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
 				v-if="resizeCall.loading"
