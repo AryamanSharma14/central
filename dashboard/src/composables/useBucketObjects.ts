@@ -31,6 +31,11 @@ const putFile = (
 	signal: AbortSignal,
 ): Promise<void> =>
 	new Promise((resolve, reject) => {
+		if (signal.aborted) {
+			reject(new DOMException('Upload cancelled', 'AbortError'))
+			return
+		}
+
 		const request = new XMLHttpRequest()
 		request.open('PUT', url)
 		request.setRequestHeader('Content-Type', contentType)

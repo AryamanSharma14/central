@@ -63,7 +63,6 @@ const {
 } = useBucketObjects()
 
 const prefix = ref('')
-const selecting = ref(false)
 const downloading = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploads = ref<Upload[]>([])
@@ -343,7 +342,7 @@ const confirmDelete = async (rows: FileRow[]): Promise<void> => {
 			:loading="loading"
 			:error="error"
 			searchable
-			:selectable="selecting"
+			:selectable="canManage"
 			server-side
 			:paginated="false"
 			:show-count="false"
@@ -352,11 +351,6 @@ const confirmDelete = async (rows: FileRow[]): Promise<void> => {
 			@retry="retry(bucket.name, searchPrefix)"
 		>
 			<template v-if="canManage" #toolbar>
-				<Button
-					:label="selecting ? 'Done' : 'Select'"
-					@click="selecting = !selecting"
-				/>
-
 				<Button
 					variant="solid"
 					icon-left="lucide-upload"
