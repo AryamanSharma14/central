@@ -54,6 +54,7 @@ def convert_site(site: Site) -> None:
 	capture_trial_event(
 		"trial_converted", site.team, site.product, days_in_trial=date_diff(nowdate(), site.creation)
 	)
+	send_notice(site, "trial_converted", "converted")
 
 	server = frappe.get_doc("Virtual Machine", site.server)
 	if server.status == "Running":

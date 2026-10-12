@@ -217,6 +217,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(site.trial_state, "Converted")
 		self.assertAlmostEqual(site.trial_cost, 3, places=1)
 		self.funnel.assert_called_once_with("trial_converted", self.team.name, None, days_in_trial=3)
+		self.assertEqual(self.sent_events(), ["trial_converted"])
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
 

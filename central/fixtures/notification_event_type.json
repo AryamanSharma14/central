@@ -542,5 +542,21 @@
   "in_app_body": "Your {{ context.product }} trial ended without a payment method, so we deleted the site and its data.",
   "action_label": "",
   "action_route": ""
+ },
+ {
+  "name": "trial_converted",
+  "event_type": "trial_converted",
+  "category": "Trial",
+  "create_in_app": 1,
+  "direct_recipients": "None",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "modified": "2026-10-12 00:00:00",
+  "required_cap": "billing:view",
+  "severity": "Success",
+  "in_app_title": "{{ context.address }} is now a paid site",
+  "in_app_body": "Your payment method is active, so your {{ context.product }} trial is over. {{ context.address }} keeps running, and billing starts today.",
+  "action_label": "View billing",
+  "action_route": "/billing"
  }
 ]

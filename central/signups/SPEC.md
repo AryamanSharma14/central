@@ -53,6 +53,7 @@ The daily job `central.signups.trial.run_trials` moves each site. It sends each 
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
 | `trial_deleted` | When the server is terminated |
+| `trial_converted` | When a payment method converts the trial |
 
 These events are in the **Trial** notification category. A user can turn the email or the in-app notice for this category off in their notification settings. Each event goes to the Team members who hold `billing:view`.
 
