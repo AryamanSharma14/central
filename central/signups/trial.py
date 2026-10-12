@@ -168,11 +168,10 @@ def extend_trial(site: Site, days: int) -> None:
 
 
 def end_trial(site: Site, today) -> None:
-	"""Stop the trial's server and set the day it is terminated."""
+	"""Stop the trial's server and set the day it is terminated. The stop job tells the team."""
 	deletes_on = add_days(today, get_trial_days(site.product, "trial_deletion_days"))
 	site.db_set({"trial_state": "Ended", "trial_deletes_on": deletes_on, "trial_error": None})
 	enqueue_stop(site)
-	send_notice(site, "trial_ended", "ended")
 
 
 def enqueue_stop(site: Site) -> None:
@@ -187,7 +186,8 @@ def enqueue_stop(site: Site) -> None:
 
 
 def stop_trial_server(site: str) -> None:
-	"""Background job: stop an ended trial's server, unless the team paid in the meantime."""
+	"""Background job: stop an ended trial's server, unless the team paid in the meantime. The
+	team hears that the trial ended only once the server is stopped."""
 	from central.integrations.servers import hold_server_stopped
 
 	document = frappe.get_doc("Site", site)
@@ -203,6 +203,7 @@ def stop_trial_server(site: str) -> None:
 		return
 
 	document.db_set("trial_error", None)
+	send_notice(document, "trial_ended", "ended")
 
 
 def delete_trial(site: Site) -> None:

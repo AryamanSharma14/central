@@ -50,7 +50,7 @@ The daily job `central.signups.trial.run_trials` moves each site. It sends each 
 | Event | Sent |
 |---|---|
 | `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day |
-| `trial_ended` | When the server is stopped |
+| `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
 | `trial_deleted` | When the server is terminated |
 

@@ -117,6 +117,13 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(site.trial_state, "Ended")
 		self.assertEqual(getdate(site.trial_deletes_on), getdate(add_days(nowdate(), 21)))
 		enqueue_stop.assert_called_once()
+		self.assertEqual(self.sent_events(), [])
+
+	def test_the_team_hears_the_trial_ended_once_the_server_is_stopped(self):
+		self.site().db_set("trial_state", "Ended")
+		with patch("central.integrations.servers.hold_server_stopped"):
+			trial.stop_trial_server(self.site().name)
+
 		self.assertEqual(self.sent_events(), ["trial_ended"])
 
 	def test_the_deletion_date_terminates_the_server_and_deletes_the_site_once_it_is_gone(self):
@@ -162,6 +169,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 			trial.stop_trial_server(self.site().name)
 
 		self.assertIn("could not stop", self.site().trial_error)
+		self.assertEqual(self.sent_events(), [])
 
 	def test_a_converted_trial_is_not_stopped(self):
 		self.site().db_set("trial_state", "Converted")
