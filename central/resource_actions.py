@@ -390,8 +390,8 @@ def validate_trial_site(team: str) -> None:
 
 
 def trial_site_count(team: str) -> int:
-	"""Open trial sites, pending site creations, and provisioned sites that are not ready yet,
-	which have a server but no trial state. Locking reads, for the same reason as reserved_rate."""
+	"""Open trial sites, pending site creations, and provisioned servers whose site Central has
+	not recorded yet. Locking reads, for the same reason as reserved_rate."""
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")

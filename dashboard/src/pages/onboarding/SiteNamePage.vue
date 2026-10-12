@@ -21,10 +21,9 @@ type CreationStatus = {
 }
 
 type Availability = {
+	subdomain: string
 	available: boolean
 	reason: string | null
-	fqdn: string
-	domain: string
 }
 
 const route = useRoute()
@@ -78,11 +77,11 @@ onMounted(async () => {
 	try {
 		const result = await getFrappe<{ domain: string }>(
 			methodUrl(API.siteDomain),
-			{ team: team.value || undefined },
+			{ team: team.value || undefined, product: productKey.value || undefined },
 		)
 		domain.value = result.domain
 	} catch {
-		// Non-fatal: the suffix is cosmetic until the check runs, which returns it too.
+		// Non-fatal: the suffix is cosmetic, and creating the site reports the same refusal.
 	}
 })
 
@@ -108,7 +107,6 @@ async function check(value: string) {
 		// a newer request is in flight and owns the spinner.
 		if (value !== subdomain.value.trim()) return
 		availability.value = result
-		if (result.domain) domain.value = result.domain
 		checking.value = false
 	} catch (exception) {
 		if (value !== subdomain.value.trim()) return
@@ -183,7 +181,7 @@ async function createSite() {
 				{{ availability.reason }}
 			</p>
 			<p v-else-if="availability?.available" class="text-sm text-ink-green-7">
-				{{ availability.fqdn }}
+				{{ domain ? `${availability.subdomain}.${domain}` : availability.subdomain }}
 				is available.
 			</p>
 

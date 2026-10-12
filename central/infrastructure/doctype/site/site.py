@@ -4,7 +4,8 @@ from urllib.parse import urlsplit, urlunsplit
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils.telemetry import capture
+
+from central.signups.funnel import capture_trial_event
 
 if TYPE_CHECKING:
 	from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
@@ -101,24 +102,27 @@ class Site(Document):
 		# The verified regional server report owns creation of this system mirror.
 		site.insert(ignore_permissions=True)
 
+	def before_insert(self) -> None:
+		from central.signups.trial import start_trial
+
+		start_trial(self)
+
 	def mark_claimed(self) -> None:
 		"""Record the first successful login handoff and schedule the optional rename."""
 		if not self.claimed_at:
 			self.db_set("claimed_at", frappe.utils.now_datetime())
-			capture("trial_claimed", "central", properties={"product": self.product})
+			capture_trial_event("trial_claimed", self.team, self.product, user=frappe.session.user)
 
 		self.enqueue_subdomain_rename()
 
 	def record_ready(self) -> None:
-		"""Record and announce the first successful probe of the site's public address."""
-		if self.ready_at:
+		"""Record and announce the first successful probe of the site's public address. The locking
+		read keeps the scheduled probe and a console request from both announcing it."""
+		if frappe.db.get_value("Site", self.name, "ready_at", for_update=True):
 			return
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
 		self.capture_ready()
-		from central.signups.trial import start_trial
-
-		start_trial(self)
 		from central.notification.engine import queue_event
 
 		queue_event(
@@ -133,14 +137,11 @@ class Site(Document):
 		requested_at = frappe.db.get_value(
 			"Resource Action", {"server": self.server, "action": "create"}, "creation"
 		)
-		capture(
+		capture_trial_event(
 			"trial_ready",
-			"central",
-			user=frappe.get_cached_value("Team", self.team, "owner_user"),
-			properties={
-				"product": self.product,
-				"seconds_to_ready": (self.ready_at - requested_at).total_seconds() if requested_at else None,
-			},
+			self.team,
+			self.product,
+			seconds_to_ready=(self.ready_at - requested_at).total_seconds() if requested_at else None,
 		)
 
 	def enqueue_subdomain_rename(self) -> None:
@@ -311,6 +312,23 @@ class Site(Document):
 		)
 
 		return (gateway.rstrip("/") if gateway else None), audience
+
+
+def record_ready_sites() -> None:
+	"""Scheduled job: probe each running trial site that has not answered yet, so readiness and
+	its email do not wait for the customer to come back. A sleeping server is not Running, so the
+	probe does not wake it. Other sites record readiness when someone opens them."""
+	from central.integrations.pilot import is_site_reachable
+
+	for name in frappe.get_all(
+		"Site",
+		filters={"trial_state": "Active", "ready_at": ["is", "not set"], "server.status": "Running"},
+		pluck="name",
+	):
+		site = frappe.get_doc("Site", name)
+		if is_site_reachable(site.url):
+			site.record_ready()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's readiness if a later probe fails
 
 
 def on_host(url: str, host: str, path: str | None = None) -> str:

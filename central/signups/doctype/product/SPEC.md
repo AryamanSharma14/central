@@ -19,7 +19,7 @@ System Managers create and edit products in Desk. Nobody else can read the DocTy
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
-| Trial Days | Days a trial site of this product runs from when it is first ready. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
+| Trial Days | Days a trial site of this product runs from when Central records its site. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
 | Trial Deletion Days | Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings, Trial Deletion Days. |
 
 Example: Product Key `raven`, Title `Raven`, Signup App `raven`. The signup link is `/dashboard/signup?product=raven`.
@@ -47,7 +47,7 @@ A Product needs a Cargo image of type Apps for its signup app in the region. Wit
 
 ## Signup funnel
 
-Central sends one Pulse event at each signup step with `frappe.utils.telemetry.capture`. Each event goes to a Redis queue in the request and is sent to Pulse later, so it adds no network call to the step. Events are sent only when Central has a Pulse key and telemetry is on. Pulse stores the user as a salted hash, so use Central records, not Pulse, to look up one customer.
+Central sends one Pulse event at each signup step with `frappe.utils.telemetry.capture`. A trial event goes through `central.signups.funnel.capture_trial_event`. It names the customer's Team, so events of one team can be joined, and it is queued only after the step commits, so a step that rolls back sends nothing. Each event goes to a Redis queue and is sent to Pulse later, so it adds no network call to the step. Events are sent only when Central has a Pulse key and telemetry is on. Pulse stores the user as a salted hash, so use Central records, not Pulse, to look up one customer.
 
 | Event | Sent when | Properties |
 |---|---|---|
@@ -55,10 +55,15 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 | `signup_verified` | A new email verifies its code and gets an account | `product` |
 | `trial_requested` | Central saves a new trial request. A repeated request with the same key sends nothing. | `product`, `region` |
 | `trial_failed` | The trial's create Resource Action fails or times out | `product`, `status`, `error_code` |
-| `trial_ready` | The site first answers its readiness probe | `product`, `seconds_to_ready` |
+| `trial_ready` | Central first records that the site answers. See [Readiness](../../../infrastructure/doctype/site/SPEC.md#readiness). | `product`, `seconds_to_ready` |
 | `trial_claimed` | The customer first opens the site | `product` |
+| `trial_converted` | A payment method converts the trial | `product`, `days_in_trial` |
+| `trial_ended` | The trial reaches its end date without a payment method | `product` |
+| `trial_deleted` | The ended trial's server is terminated | `product` |
 
-`send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
+A product app sends its own activation events from the trial site. Central puts `fc_team` in the site config of every Pilot server, so those events name the same Team and join this funnel. See [Integrations](../../../../spec/INTEGRATIONS.md).
+
+`signup_code_sent` and `signup_verified` happen before the customer has a Team, so Pulse files them under Central's own team. `send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
 
 When a new email asks for a code, Central also looks up the request's country in a background job, so the team created after verification reads its billing country from the cache instead of waiting on the lookup.
 

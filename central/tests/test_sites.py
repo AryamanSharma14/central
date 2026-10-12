@@ -7,7 +7,7 @@ from central.api.sites import claim_site, get_site, login_site, onboarding_statu
 from central.errors import AtlasResourceGone
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
-from central.infrastructure.doctype.site.site import on_host
+from central.infrastructure.doctype.site.site import on_host, record_ready_sites
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.pilot import PilotLoginPending, fetch_site_login_url
 from central.integrations.servers import observe_server
@@ -15,7 +15,6 @@ from central.site_provisioning import (
 	signup_offering,
 	subdomain_availability,
 	trial_configuration,
-	trial_region_and_plan,
 )
 from central.tests.test_iam import ensure_user
 from central.www.dashboard import _onboarding_complete
@@ -226,16 +225,44 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertFalse(state["ready"])
 		self.assertIsNone(state["login_url"])
 
-	def test_first_successful_probe_records_and_announces_readiness(self):
+	def test_a_read_reports_readiness_without_recording_it(self):
 		site = self.site()
 		with (
 			patch("central.api.sites.is_site_reachable", return_value=True),
 			patch("central.notification.engine.queue_event") as queue_event,
 		):
-			get_site(site.name)
-			get_site(site.name)
+			self.assertTrue(get_site(site.name)["ready"])
+
+		self.assertIsNone(site.reload().ready_at)
+		queue_event.assert_not_called()
+
+	def test_the_scheduled_probe_leaves_a_site_that_is_not_a_trial(self):
+		site = self.site()
+		site.db_set("trial_state", "")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+		):
+			record_ready_sites()
+
+		self.assertIsNone(site.reload().ready_at)
+
+	def test_the_scheduled_probe_records_and_announces_readiness_once(self):
+		site = self.site()
+		site.db_set("trial_state", "Active")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+			patch("central.infrastructure.doctype.site.site.capture_trial_event") as capture,
+			patch("central.notification.engine.queue_event") as queue_event,
+		):
+			record_ready_sites()
+			record_ready_sites()
 
 		self.assertTrue(site.reload().ready_at)
+		self.assertEqual([call.args[0] for call in capture.call_args_list], ["trial_ready"])
 		queue_event.assert_called_once_with(
 			site.team,
 			"site_ready",
@@ -612,8 +639,11 @@ class TestTrialRegion(IntegrationTestCase):
 		"""A site's address is built from the zone, so without one there is no site."""
 		frappe.db.set_value("Region", {"status": "Active"}, "proxy_domain", None)
 
-		with self.assertRaises(frappe.ValidationError):
-			trial_region_and_plan("any-team")
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			self.assertRaisesRegex(frappe.ValidationError, "No region is offering"),
+		):
+			trial_configuration("any-team")
 
 
 class TestTrialImage(IntegrationTestCase):
@@ -627,7 +657,8 @@ class TestTrialImage(IntegrationTestCase):
 	def resolve(self, page: dict, signup_app: str | None = None) -> tuple[dict, dict]:
 		with (
 			patch("central.site_provisioning.signup_offering", return_value="pilot"),
-			patch("central.site_provisioning.trial_region_and_plan", return_value=("par-2", "plan-trial")),
+			patch("central.site_provisioning.trial_regions", return_value=["par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
 			patch("central.site_provisioning.list_images", return_value=page) as list_images,
 		):
 			return trial_configuration("any-team", signup_app), list_images.call_args.kwargs
@@ -667,8 +698,20 @@ class TestTrialImage(IntegrationTestCase):
 			self.resolve(page)
 
 	def test_a_region_that_offers_none_stops_the_trial(self):
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaisesRegex(frappe.ValidationError, "No trial image"):
 			self.resolve(self.images(0))
+
+	def test_a_later_region_with_the_image_serves_the_trial(self):
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			patch("central.site_provisioning.trial_regions", return_value=["blr-1", "par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
+			patch("central.site_provisioning.list_images", side_effect=[self.images(0), self.images(1)]),
+		):
+			configuration = trial_configuration("any-team", "raven")
+
+		self.assertEqual(configuration["region"], "par-2")
+		self.assertEqual(configuration["image_id"], "image-0")
 
 
 class TestSiteNaming(SiteOnAMachine):
@@ -877,19 +920,24 @@ class TestTrialFunnelEvents(SiteOnAMachine):
 			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": "raven"}},
 		)
 
-	def test_a_trial_request_is_sent_once_with_its_product(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Site")
+	def captured(self, resource_type: str):
+		with patch("central.signups.funnel.capture") as capture:
+			self.queue(resource_type)
+			capture.assert_not_called()
+			frappe.db.after_commit.run()
+
+		return capture
+
+	def test_a_trial_request_is_sent_once_after_commit_under_the_customer_team(self):
+		capture = self.captured("Site")
 
 		capture.assert_called_once()
 		self.assertEqual(capture.call_args.args[0], "trial_requested")
+		self.assertEqual(capture.call_args.kwargs["team"], self.team.name)
 		self.assertEqual(capture.call_args.kwargs["properties"]["product"], "raven")
 
 	def test_a_server_request_sends_no_trial_event(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Server")
-
-		capture.assert_not_called()
+		self.captured("Server").assert_not_called()
 
 
 class TestTrialSignIn(SiteOnAMachine):

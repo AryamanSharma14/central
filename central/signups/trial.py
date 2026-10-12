@@ -5,24 +5,26 @@ from frappe.utils import add_days, date_diff, flt, formatdate, get_datetime, get
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
+from central.signups.funnel import capture_trial_event
 
 
 def start_trial(site: Site) -> None:
-	"""Start the trial clock when a trial site is first ready. A team that already pays has no trial."""
+	"""Start the trial clock on a new trial site, before it is saved. It does not wait for the
+	customer to open the site, so an abandoned trial still ends. A team that already pays has no trial."""
 	if site.trial_state or not site.is_trial():
 		return
 
 	if has_active_payment_method(site.team):
-		site.db_set("trial_state", "Converted")
+		site.trial_state = "Converted"
 		return
 
-	ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
-	site.db_set({"trial_state": "Active", "trial_ends_on": ends_on})
+	site.trial_state = "Active"
+	site.trial_ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
 
 
 def is_billing_deferred(server: str) -> bool:
-	"""Whether the server runs a free trial site, so it has no subscription yet. Before the
-	site is ready, a signup's server counts as a trial unless its team already pays."""
+	"""Whether the server runs a free trial site, so it has no subscription yet. Before Central
+	records the site, a signup's server counts as a trial unless its team already pays."""
 	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
 	if state:
 		return state in ("Active", "Ended", "Deleted")
@@ -48,31 +50,59 @@ def convert_team(team: str) -> None:
 
 def convert_site(site: Site) -> None:
 	"""Start billing the site's server, keep it awake, and start it again if the trial stopped it."""
-	was_stopped = site.trial_state == "Ended"
 	site.db_set({"trial_state": "Converted", "trial_error": None, **get_trial_cost(site)})
+	capture_trial_event(
+		"trial_converted", site.team, site.product, days_in_trial=date_diff(nowdate(), site.creation)
+	)
+	send_notice(site, "trial_converted", "converted")
 
 	server = frappe.get_doc("Virtual Machine", site.server)
 	if server.status == "Running":
 		server.ensure_subscription_enabled()
 
+	enqueue_conversion(site)
+
+
+def enqueue_conversion(site: Site) -> None:
 	frappe.enqueue(
-		"central.integrations.servers.convert_trial_server",
-		server=server.name,
-		start=was_stopped,
+		finish_conversion,
+		site=site.name,
 		queue="long",
 		enqueue_after_commit=True,
-		job_id=f"trial-convert:{server.name}",
+		job_id=f"trial-convert:{site.name}",
 		deduplicate=True,
 	)
 
 
+def finish_conversion(site: str) -> None:
+	"""Background job: turn idle sleep off on a converted trial's server, and start it when it is
+	stopped. Safe to repeat, so the daily job sends it again after a failure."""
+	from central.integrations.servers import convert_trial_server
+
+	document = frappe.get_doc("Site", site)
+	if document.trial_state != "Converted":
+		return
+
+	is_stopped = frappe.db.get_value("Virtual Machine", document.server, "status") == "Stopped"
+	try:
+		convert_trial_server(document.server, start=is_stopped)
+	# This worker boundary records every failure, and the daily job sends the conversion again.
+	except Exception:
+		frappe.db.rollback()
+		record_trial_error(site, _("Central could not start this paid site's server. It retries tomorrow."))
+		return
+
+	document.db_set("trial_error", None)
+
+
 def get_trial_cost(site: Site, until=None) -> dict:
-	"""The plan's monthly rate for the days the trial ran, from its creation request."""
+	"""The plan's monthly rate for the days the trial ran, from its creation request. The trial
+	starts when Central records the site."""
 	request = site.get_creation_request()
-	if not request or not site.ready_at:
+	if not request:
 		return {}
 
-	days = (get_datetime(until or now_datetime()) - get_datetime(site.ready_at)).total_seconds() / 86400
+	days = (get_datetime(until or now_datetime()) - get_datetime(site.creation)).total_seconds() / 86400
 	cost = flt(request.reserved_monthly_rate) * max(days, 0) / 30
 	currency = frappe.parse_json(request.request_payload or "{}").get("currency")
 	return {"trial_cost": cost, "trial_currency": currency}
@@ -110,9 +140,14 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 
 
 def run_trials() -> None:
-	"""Daily job: warn before a trial ends, stop it on its end date, and terminate it on its deletion date."""
+	"""Daily job: warn before a trial ends, stop it on its end date, terminate it on its deletion
+	date, and finish a conversion that failed."""
 	today = getdate(nowdate())
-	for name in frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name"):
+	open_trials = frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name")
+	failed_conversions = frappe.get_all(
+		"Site", filters={"trial_state": "Converted", "trial_error": ["is", "set"]}, pluck="name"
+	)
+	for name in open_trials + failed_conversions:
 		try:
 			advance_trial(frappe.get_doc("Site", name, for_update=True), today)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's step if a later one fails
@@ -124,15 +159,27 @@ def run_trials() -> None:
 
 def advance_trial(site: Site, today) -> None:
 	notice_days = frappe.get_cached_value("Central Settings", "Central Settings", "trial_notice_days")
-	if site.trial_state == "Active":
-		days_left = date_diff(site.trial_ends_on, today)
-		if days_left <= 0:
-			end_trial(site, today)
-		elif days_left <= notice_days:
-			# A second warning goes out on the last day.
-			send_notice(site, "trial_expiring", "last day" if days_left == 1 else "ending")
-		return
+	if site.trial_state == "Converted":
+		enqueue_conversion(site)
+	elif site.trial_state == "Active":
+		advance_active_trial(site, today, notice_days)
+	else:
+		advance_ended_trial(site, today, notice_days)
 
+
+def advance_active_trial(site: Site, today, notice_days: int) -> None:
+	days_left = date_diff(site.trial_ends_on, today)
+	if days_left <= 0:
+		end_trial(site, today)
+	elif days_left <= notice_days:
+		# A second warning goes out on the last day.
+		send_notice(site, "trial_expiring", "last day" if days_left == 1 else "ending")
+	elif site.ready_at and not site.claimed_at and getdate(site.ready_at) < today:
+		# One reminder, from the day after the site is ready, to a team that has not opened it.
+		send_notice(site, "trial_unopened", "unopened")
+
+
+def advance_ended_trial(site: Site, today, notice_days: int) -> None:
 	days_left = date_diff(site.trial_deletes_on, today)
 	if days_left <= 0:
 		delete_trial(site)
@@ -166,11 +213,11 @@ def extend_trial(site: Site, days: int) -> None:
 
 
 def end_trial(site: Site, today) -> None:
-	"""Stop the trial's server and set the day it is terminated."""
+	"""Stop the trial's server and set the day it is terminated. The stop job tells the team."""
 	deletes_on = add_days(today, get_trial_days(site.product, "trial_deletion_days"))
 	site.db_set({"trial_state": "Ended", "trial_deletes_on": deletes_on, "trial_error": None})
+	capture_trial_event("trial_ended", site.team, site.product)
 	enqueue_stop(site)
-	send_notice(site, "trial_ended", "ended")
 
 
 def enqueue_stop(site: Site) -> None:
@@ -185,7 +232,8 @@ def enqueue_stop(site: Site) -> None:
 
 
 def stop_trial_server(site: str) -> None:
-	"""Background job: stop an ended trial's server, unless the team paid in the meantime."""
+	"""Background job: stop an ended trial's server, unless the team paid in the meantime. The
+	team hears that the trial ended only once the server is stopped."""
 	from central.integrations.servers import hold_server_stopped
 
 	document = frappe.get_doc("Site", site)
@@ -200,7 +248,13 @@ def stop_trial_server(site: str) -> None:
 		record_trial_error(site, _("Central could not stop this trial's server. It retries tomorrow."))
 		return
 
+	# The team can pay while the stop runs. Its server must then run again.
+	if document.reload().trial_state == "Converted":
+		enqueue_conversion(document)
+		return
+
 	document.db_set("trial_error", None)
+	send_notice(document, "trial_ended", "ended")
 
 
 def delete_trial(site: Site) -> None:
@@ -218,6 +272,7 @@ def delete_trial(site: Site) -> None:
 		return
 
 	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
+	capture_trial_event("trial_deleted", site.team, site.product)
 	send_notice(site, "trial_deleted", "deleted")
 
 

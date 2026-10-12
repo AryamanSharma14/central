@@ -96,18 +96,16 @@ def validated_subdomain(subdomain: str) -> str:
 
 
 def subdomain_availability(subdomain: str) -> dict:
-	"""Whether a name is free, and the full address it would become."""
+	"""Whether a name is free. It is checked in every trial zone, because the region a trial
+	lands in is chosen only when it is created."""
 	subdomain = (subdomain or "").strip().lower()
-	zone = trial_zone()
-	answer = {"subdomain": subdomain, "domain": zone, "fqdn": f"{subdomain}.{zone}"}
+	answer = {"subdomain": subdomain}
 
 	if not DNS_LABEL.fullmatch(subdomain):
 		reason = _("Use lowercase letters, numbers and hyphens, starting and ending with one.")
 	elif subdomain in RESERVED_SUBDOMAINS:
 		reason = _("That name is reserved. Please choose another.")
-	elif frappe.db.exists("Site", {"subdomain": subdomain}) or frappe.db.exists(
-		"Site Domain", answer["fqdn"]
-	):
+	elif frappe.db.exists("Site", {"subdomain": subdomain}) or is_domain_taken(subdomain):
 		reason = _("That name is taken. Please choose another.")
 	else:
 		return {**answer, "available": True, "reason": None}
@@ -115,13 +113,18 @@ def subdomain_availability(subdomain: str) -> dict:
 	return {**answer, "available": False, "reason": reason}
 
 
-def trial_zone() -> str:
-	"""The regional zone a trial site is named in."""
-	regions = trial_regions()
-	if not regions:
-		frappe.throw(_("No region is offering trial sites right now. Please try again shortly."))
+def is_domain_taken(subdomain: str) -> bool:
+	domains = [
+		f"{subdomain}.{frappe.get_cached_value('Region', region, 'proxy_domain')}"
+		for region in trial_regions()
+	]
+	return bool(domains) and bool(frappe.db.exists("Site Domain", {"name": ["in", domains]}))
 
-	return frappe.get_cached_value("Region", regions[0], "proxy_domain")
+
+def trial_zone(team: str, signup_app: str | None = None) -> str:
+	"""The zone of the region a trial site of this team and app starts in."""
+	region = trial_configuration(team, signup_app)["region"]
+	return frappe.get_cached_value("Region", region, "proxy_domain")
 
 
 def trial_regions() -> list[str]:
@@ -138,17 +141,24 @@ def trial_regions() -> list[str]:
 
 
 def trial_configuration(team: str, signup_app: str | None = None) -> dict:
-	"""The region, image and plan a trial site starts on. The plan must match the shape the
-	image was baked at, or the region cold-boots instead of restoring a warm image."""
+	"""The region, image and plan a trial site starts on: the first region that offers this team
+	a trial plan and has a trial image. The plan must match the shape the image was baked at,
+	or the region cold-boots instead of restoring a warm image."""
 	offering = signup_offering()
-	region, plan = trial_region_and_plan(team)
-	images = trial_images(team, region, offering, signup_app)
-	if not images:
-		frappe.throw(_("No trial image is available right now. Please try again shortly."))
+	has_plan = False
+	for region in trial_regions():
+		plan = get_cheapest_trial_plan(team, region)
+		if not plan:
+			continue
 
-	newest = max(images, key=lambda image: image["created_at"])
+		has_plan = True
+		if images := trial_images(team, region, offering, signup_app):
+			newest = max(images, key=lambda image: image["created_at"])
+			return {"region": region, "offering": offering, "image_id": newest["id"], "plan": plan}
 
-	return {"region": region, "offering": offering, "image_id": newest["id"], "plan": plan}
+	if not has_plan:
+		frappe.throw(_("No region is offering trial sites right now. Please try again shortly."))
+	frappe.throw(_("No trial image is available right now. Please try again shortly."))
 
 
 def trial_images(team: str, region: str, offering: str, signup_app: str | None) -> list[dict]:
@@ -186,14 +196,10 @@ def signup_offering() -> str:
 	return (dedicated or offerings)[0].name
 
 
-def trial_region_and_plan(team: str) -> tuple[str, str]:
-	"""The first region that can serve this team a trial site, and its cheapest trial plan.
+def get_cheapest_trial_plan(team: str, region: str) -> str | None:
+	"""The region's cheapest plan for this team's trial, or None.
 
 	The catalog decides which plans qualify, because it already narrows a trial team's
 	menu to the ones an operator flagged Available on Trial."""
-	for region in trial_regions():
-		plans = [row for rows in get_server_plans(team, cluster=region)["plans"].values() for row in rows]
-		if plans:
-			return region, min(plans, key=lambda plan: plan["rate"])["plan"]
-
-	frappe.throw(_("No region is offering trial sites right now. Please try again shortly."))
+	plans = [row for rows in get_server_plans(team, cluster=region)["plans"].values() for row in rows]
+	return min(plans, key=lambda plan: plan["rate"])["plan"] if plans else None
