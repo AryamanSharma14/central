@@ -15,7 +15,6 @@ from central.site_provisioning import (
 	signup_offering,
 	subdomain_availability,
 	trial_configuration,
-	trial_region_and_plan,
 )
 from central.tests.test_iam import ensure_user
 from central.www.dashboard import _onboarding_complete
@@ -640,8 +639,11 @@ class TestTrialRegion(IntegrationTestCase):
 		"""A site's address is built from the zone, so without one there is no site."""
 		frappe.db.set_value("Region", {"status": "Active"}, "proxy_domain", None)
 
-		with self.assertRaises(frappe.ValidationError):
-			trial_region_and_plan("any-team")
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			self.assertRaisesRegex(frappe.ValidationError, "No region is offering"),
+		):
+			trial_configuration("any-team")
 
 
 class TestTrialImage(IntegrationTestCase):
@@ -655,7 +657,8 @@ class TestTrialImage(IntegrationTestCase):
 	def resolve(self, page: dict, signup_app: str | None = None) -> tuple[dict, dict]:
 		with (
 			patch("central.site_provisioning.signup_offering", return_value="pilot"),
-			patch("central.site_provisioning.trial_region_and_plan", return_value=("par-2", "plan-trial")),
+			patch("central.site_provisioning.trial_regions", return_value=["par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
 			patch("central.site_provisioning.list_images", return_value=page) as list_images,
 		):
 			return trial_configuration("any-team", signup_app), list_images.call_args.kwargs
@@ -695,8 +698,20 @@ class TestTrialImage(IntegrationTestCase):
 			self.resolve(page)
 
 	def test_a_region_that_offers_none_stops_the_trial(self):
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaisesRegex(frappe.ValidationError, "No trial image"):
 			self.resolve(self.images(0))
+
+	def test_a_later_region_with_the_image_serves_the_trial(self):
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			patch("central.site_provisioning.trial_regions", return_value=["blr-1", "par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
+			patch("central.site_provisioning.list_images", side_effect=[self.images(0), self.images(1)]),
+		):
+			configuration = trial_configuration("any-team", "raven")
+
+		self.assertEqual(configuration["region"], "par-2")
+		self.assertEqual(configuration["image_id"], "image-0")
 
 
 class TestSiteNaming(SiteOnAMachine):

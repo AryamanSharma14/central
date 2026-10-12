@@ -16,11 +16,14 @@ from central.utils.guards import require_capability
 
 @frappe.whitelist(methods=["GET"])
 @require_capability("server:create", _lt("You can't create sites for this Team."))
-def site_domain(team: str | None = None) -> dict:
-	"""The zone a new site is named in, so the console can show the suffix as they type."""
+def site_domain(team: str | None = None, product: str | None = None) -> dict:
+	"""The zone a new site of this product is named in, so the console can show the suffix as
+	they type. It is the zone of the region that the trial is then created in."""
+	from central.signups.doctype.product.product import get_signup_product
 	from central.site_provisioning import trial_zone
 
-	return {"domain": trial_zone()}
+	signup_app = get_signup_product(product).signup_app if product else None
+	return {"domain": trial_zone(team, signup_app)}
 
 
 @frappe.whitelist(methods=["GET"])

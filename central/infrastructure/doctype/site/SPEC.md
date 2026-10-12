@@ -103,10 +103,12 @@ The patch removes a Site only when the request of its server names an image with
 | Signup image | `Image Offering.available_in` = `Signup` or `Both` | one offering, lowest title, `Signup` preferred |
 | Signup image tags | `SIGNUP_IMAGE_TAGS` in `central/site_provisioning.py` | `has_site=1`, `frappe_version=develop` |
 | Product app tag | [`Product.signup_app`](../../../signups/doctype/product/SPEC.md) | `app=raven` |
-| Trial plan | `Plan.available_on_trial` | the cheapest eligible plan in the first Active region, by name, that has a proxy zone and offers a trial plan |
+| Trial region and plan | `Plan.available_on_trial` | the first Active region, by name, that has a proxy zone, offers a trial plan, and has a trial image for the signup. Central takes that region's cheapest trial plan. |
 
 Cargo must bake the image site as `site.local`, or Pilot does not recognise the site and no login can be minted.
 
-Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. A region without a matching image is skipped, so the next region can serve the trial. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+
+The site name page shows the zone of that same region: `central.api.sites.site_domain(team, product)` makes the region choice that creation makes. `central.api.sites.check_subdomain` checks a name in every trial zone, because the region is chosen only when the site is created.
 
 Give the trial plan the shape the image was baked at. A region restores a warm image from memory only when the vCPU count, memory and disk all match, and a trial that misses the shape cold-boots instead. `BUILD_SPEC` in Cargo's `cargo/image_builder/doctype/pilot_image/builder.py` holds that shape.
