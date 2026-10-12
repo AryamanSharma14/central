@@ -398,6 +398,7 @@ class ResourceAction(Document):
 			configuration.plan,
 			[row.model_dump() for row in configuration.includes],
 			configuration.sub_category,
+			is_trial_site=self.resource_type == "Site",
 		)
 
 	@classmethod

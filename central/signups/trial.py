@@ -27,9 +27,14 @@ def is_billing_deferred(server: str) -> bool:
 	if state:
 		return state in ("Active", "Ended", "Deleted")
 
-	team, resource_type = frappe.db.get_value(
-		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"]
-	) or (None, None)
+	request = frappe.db.get_value(
+		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"], as_dict=True
+	)
+	return bool(request) and is_free_trial_creation(request.team, request.resource_type)
+
+
+def is_free_trial_creation(team: str, resource_type: str) -> bool:
+	"""Whether a creation request opens a free trial: a site, for a team that does not pay yet."""
 	return resource_type == "Site" and not has_active_payment_method(team)
 
 
@@ -199,9 +204,18 @@ def stop_trial_server(site: str) -> None:
 
 
 def delete_trial(site: Site) -> None:
-	"""Terminate the ended trial's server through the normal terminate action."""
+	"""Terminate the ended trial's server. The site is Deleted once the server is Terminated.
+	Until then the daily job asks again, so a refused terminate is not lost."""
 	if frappe.db.get_value("Virtual Machine", site.server, "status") != "Terminated":
+		if frappe.db.exists(
+			"Resource Action",
+			{"resource_id": site.server, "action": "terminate", "status": ["in", ("Failed", "Timed Out")]},
+		):
+			site.db_set(
+				"trial_error", _("Atlas did not terminate this trial's server. Central asks again tomorrow.")
+			)
 		queue_server_action(site, "terminate")
+		return
 
 	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
 	send_notice(site, "trial_deleted", "deleted")

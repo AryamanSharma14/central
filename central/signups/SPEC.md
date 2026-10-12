@@ -41,7 +41,7 @@ Example: Central Settings has Trial Days 14 and Trial Deletion Days 14. Product 
 | Active | The site is first ready and its Team has no active payment method | Sets Trial Ends On. |
 | Converted | The site is first ready and its Team already has an active payment method | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
-| Deleted | Trial Deletes On is reached | Terminates the server with a normal terminate action. |
+| Deleted | Trial Deletes On is reached and the server is Terminated | Asks for a normal terminate action each day until the server is Terminated, then sets the state. |
 
 The daily job `central.signups.trial.run_trials` moves each site. It sends each email once and records the last one in Trial Last Notice.
 
@@ -60,7 +60,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 | Request | What Central checks |
 |---|---|
-| A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended) and pending site creations than Central Settings, Trial Servers per Team. No credit is needed. |
+| A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned sites that are not ready yet than Central Settings, Trial Servers per Team. No credit is needed. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
 
