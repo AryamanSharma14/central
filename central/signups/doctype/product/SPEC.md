@@ -61,6 +61,8 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 | `trial_ended` | The trial reaches its end date without a payment method | `product` |
 | `trial_deleted` | The ended trial's server is terminated | `product` |
 
+A product app sends its own activation events from the trial site. Central puts `fc_team` in the site config of every Pilot server, so those events name the same Team and join this funnel. See [Integrations](../../../../spec/INTEGRATIONS.md).
+
 `signup_code_sent` and `signup_verified` happen before the customer has a Team, so Pulse files them under Central's own team. `send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
 
 When a new email asks for a code, Central also looks up the request's country in a background job, so the team created after verification reads its billing country from the cache instead of waiting on the lookup.
