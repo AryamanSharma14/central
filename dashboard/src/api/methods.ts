@@ -105,6 +105,8 @@ export const API = {
 	deleteBucket: 'central.services.api.storage.delete_bucket',
 	listBucketObjects: 'central.services.api.storage.list_objects',
 	bucketObjectUrl: 'central.services.api.storage.get_object_url',
+	bucketUploadUrl: 'central.services.api.storage.get_upload_url',
+	deleteBucketObjects: 'central.services.api.storage.delete_objects',
 
 	getProduct: 'central.api.signups.get_product',
 	sendCode: 'central.api.auth.send_code',
