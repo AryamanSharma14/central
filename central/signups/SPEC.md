@@ -28,7 +28,7 @@ A trial site is a site from the signup flow, with or without a Product. It runs 
 
 | Field | Where | Meaning |
 |---|---|---|
-| Trial Days | Central Settings, and Product | Days a trial site runs from when it is first ready. A Product with 0 uses Central Settings. |
+| Trial Days | Central Settings, and Product | Days a trial site runs from when Central records it. A Product with 0 uses Central Settings. |
 | Trial Deletion Days | Central Settings, and Product | Days a stopped trial site is kept before its server is terminated. A Product with 0 uses Central Settings. |
 | Trial Notice Days | Central Settings | Days before the end date, and before the deletion date, that the warning email goes out. |
 
@@ -36,10 +36,12 @@ Example: Central Settings has Trial Days 14 and Trial Deletion Days 14. Product 
 
 ### Operation
 
+Central records the site when the region first reports its machine with an address, a few minutes after the request. The trial starts then. It does not wait for the customer to open the site, so a trial that the customer leaves also ends.
+
 | Trial State | When | What Central does |
 |---|---|---|
-| Active | The site is first ready and its Team has no active payment method | Sets Trial Ends On. |
-| Converted | The site is first ready and its Team already has an active payment method | Nothing. The site is not a trial. |
+| Active | Central records the site and its Team has no active payment method | Sets Trial Ends On. |
+| Converted | Central records the site and its Team already has an active payment method | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
 | Deleted | Trial Deletes On is reached and the server is Terminated | Asks for a normal terminate action each day until the server is Terminated, then sets the state. |
 
@@ -60,7 +62,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 | Request | What Central checks |
 |---|---|
-| A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned sites that are not ready yet than Central Settings, Trial Servers per Team. No credit is needed. |
+| A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned servers whose site Central has not recorded yet than Central Settings, Trial Servers per Team. No credit is needed. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
 
@@ -70,11 +72,11 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 ### Billing and conversion
 
-A trial server has no subscription, so a trial creates no invoice. Before the site is ready, a server from the signup flow counts as a trial unless its Team already has an active payment method. The daily backfill of missing subscriptions skips these servers too.
+A trial server has no subscription, so a trial creates no invoice. Before Central records the site, a server from the signup flow counts as a trial unless its Team already has an active payment method. The daily backfill of missing subscriptions skips these servers too.
 
 When a payment method of the Team becomes active, every Active or Ended trial site of the Team becomes Converted:
 
-1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since the site was ready.
+1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
 2. A running server gets its subscription now. A stopped server gets it when it starts.
 3. A background job turns idle sleep off in Atlas, and starts the server if the trial had stopped it.
 

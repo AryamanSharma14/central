@@ -8,21 +8,22 @@ from central.notification.engine import queue_event
 
 
 def start_trial(site: Site) -> None:
-	"""Start the trial clock when a trial site is first ready. A team that already pays has no trial."""
+	"""Start the trial clock on a new trial site, before it is saved. It does not wait for the
+	customer to open the site, so an abandoned trial still ends. A team that already pays has no trial."""
 	if site.trial_state or not site.is_trial():
 		return
 
 	if has_active_payment_method(site.team):
-		site.db_set("trial_state", "Converted")
+		site.trial_state = "Converted"
 		return
 
-	ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
-	site.db_set({"trial_state": "Active", "trial_ends_on": ends_on})
+	site.trial_state = "Active"
+	site.trial_ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
 
 
 def is_billing_deferred(server: str) -> bool:
-	"""Whether the server runs a free trial site, so it has no subscription yet. Before the
-	site is ready, a signup's server counts as a trial unless its team already pays."""
+	"""Whether the server runs a free trial site, so it has no subscription yet. Before Central
+	records the site, a signup's server counts as a trial unless its team already pays."""
 	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
 	if state:
 		return state in ("Active", "Ended", "Deleted")
@@ -67,12 +68,13 @@ def convert_site(site: Site) -> None:
 
 
 def get_trial_cost(site: Site, until=None) -> dict:
-	"""The plan's monthly rate for the days the trial ran, from its creation request."""
+	"""The plan's monthly rate for the days the trial ran, from its creation request. The trial
+	starts when Central records the site."""
 	request = site.get_creation_request()
-	if not request or not site.ready_at:
+	if not request:
 		return {}
 
-	days = (get_datetime(until or now_datetime()) - get_datetime(site.ready_at)).total_seconds() / 86400
+	days = (get_datetime(until or now_datetime()) - get_datetime(site.creation)).total_seconds() / 86400
 	cost = flt(request.reserved_monthly_rate) * max(days, 0) / 30
 	currency = frappe.parse_json(request.request_payload or "{}").get("currency")
 	return {"trial_cost": cost, "trial_currency": currency}

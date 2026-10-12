@@ -101,6 +101,11 @@ class Site(Document):
 		# The verified regional server report owns creation of this system mirror.
 		site.insert(ignore_permissions=True)
 
+	def before_insert(self) -> None:
+		from central.signups.trial import start_trial
+
+		start_trial(self)
+
 	def mark_claimed(self) -> None:
 		"""Record the first successful login handoff and schedule the optional rename."""
 		if not self.claimed_at:
@@ -116,9 +121,6 @@ class Site(Document):
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
 		self.capture_ready()
-		from central.signups.trial import start_trial
-
-		start_trial(self)
 		from central.notification.engine import queue_event
 
 		queue_event(
