@@ -82,7 +82,7 @@ def refund_part(
 	`destination` is Wallet, or Source for the card or UPI that paid it. A lost dispute
 	over part of a charge passes `dispute` ({id, payment_intent}) and is not refunded.
 	"""
-	doc = frappe.get_doc("Invoice", invoice)
+	doc = frappe.get_doc("Invoice", invoice, for_update=True)
 	amount = frappe.utils.flt(amount, 2)
 	if doc.status != "Paid":
 		frappe.throw(_("Only a paid invoice can be refunded."), frappe.ValidationError)
@@ -135,12 +135,26 @@ def card_refundable(invoice: str) -> float:
 
 
 def retry_failed_refunds(invoice: str) -> int:
-	"""Try again the card or UPI refunds the gateway refused. Returns how many."""
+	"""Try again the card or UPI refunds the gateway refused. Returns how many.
+
+	A failed partial refund gave its share back to the invoice, so a retry takes that share
+	again only while the invoice still has it."""
+	doc = frappe.get_doc("Invoice", invoice, for_update=True)
 	failed = frappe.get_all(
 		"Refund", filters={"invoice": invoice, "status": "Failed", "destination": "Source"}, pluck="name"
 	)
+	left = refundable(doc)
 	for name in failed:
 		refund = frappe.get_doc("Refund", name)
+		if refund.partial:
+			if frappe.utils.flt(refund.amount) > left + 0.005:
+				frappe.throw(
+					_("Refund {0} cannot be retried. Only {1} of this invoice is left to refund.").format(
+						refund.name, left
+					),
+					frappe.ValidationError,
+				)
+			left -= frappe.utils.flt(refund.amount)
 		refund.attempts = (refund.attempts or 0) + 1
 		transition(refund, _UNDER_WAY, actor=frappe.session.user, correlation=invoice)
 		refund.save(ignore_permissions=True)

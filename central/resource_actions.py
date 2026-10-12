@@ -390,8 +390,10 @@ def validate_trial_site(team: str) -> None:
 
 
 def trial_site_count(team: str) -> int:
-	"""Open trial sites plus pending site creations. Locking reads, for the same reason as reserved_rate."""
+	"""Open trial sites, pending site creations, and provisioned sites that are not ready yet,
+	which have a server but no trial state. Locking reads, for the same reason as reserved_rate."""
 	site = frappe.qb.DocType("Site")
+	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")
 
 	sites = (
@@ -413,7 +415,27 @@ def trial_site_count(team: str) -> int:
 		.for_update()
 	).run()
 
-	return sites[0][0] + pending[0][0]
+	started = (
+		frappe.qb.from_(site)
+		.select(site.server)
+		.where(site.server.isnotnull() & site.trial_state.isnotnull() & (site.trial_state != ""))
+	)
+	unready = (
+		frappe.qb.from_(request)
+		.join(machine)
+		.on(machine.name == request.server)
+		.select(Count("*"))
+		.where(
+			(request.team == team)
+			& (request.resource_type == "Site")
+			& (request.action == "create")
+			& (machine.status != "Terminated")
+			& ~request.server.isin(started)
+		)
+		.for_update()
+	).run()
+
+	return sites[0][0] + pending[0][0] + unready[0][0]
 
 
 def trial_server_count(team: str) -> int:

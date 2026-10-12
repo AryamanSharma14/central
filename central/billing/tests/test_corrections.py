@@ -406,6 +406,20 @@ class TestRefundPart(CorrectionsTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			corrections.refund_part(inv, 500, "x")  # only 440 left
 
+	def test_a_failed_part_is_not_retried_once_the_invoice_gave_that_amount_elsewhere(self):
+		inv = self._paid_invoice()  # 5,900 in all
+		self.gateway.refund.return_value = RefundResult(
+			success=False, status="failed", gateway_refund_id=None, raw={}
+		)
+		corrections.refund_part(inv, 3000, "x", destination="Source")
+		self._run_all(inv)
+		self.assertEqual(self._refund(inv, "Source").status, "Failed")
+
+		corrections.refund_part(inv, 3000, "x")  # the released 3,000 goes to the wallet
+		with self.assertRaises(frappe.ValidationError):
+			corrections.retry_failed_refunds(inv)
+		self.assertEqual(self._refund(inv, "Source").status, "Failed")
+
 	def test_a_partly_refunded_invoice_is_not_cancelled_whole(self):
 		inv = self._wallet_paid()
 		corrections.refund_part(inv, 1180, "x")

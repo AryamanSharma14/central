@@ -100,16 +100,41 @@ class TestTrialLifecycle(SiteOnAMachine):
 		enqueue_stop.assert_called_once()
 		self.assertEqual(self.sent_events(), ["trial_ended"])
 
-	def test_the_deletion_date_terminates_the_server(self):
+	def test_the_deletion_date_terminates_the_server_and_deletes_the_site_once_it_is_gone(self):
 		self.ready_site()
 		self.site().db_set({"trial_state": "Ended", "trial_deletes_on": nowdate()})
 
 		site = self.run_on(0)
 
-		self.assertEqual(site.trial_state, "Deleted")
+		self.assertEqual(site.trial_state, "Ended")
 		action = frappe.get_last_doc("Resource Action", {"server": self.server.name, "action": "terminate"})
 		self.assertEqual(action.requested_by, "Administrator")
+		self.assertEqual(self.sent_events(), [])
+
+		frappe.db.set_value("Virtual Machine", self.server.name, "status", "Terminated")
+		site = self.run_on(0)
+
+		self.assertEqual(site.trial_state, "Deleted")
 		self.assertEqual(self.sent_events(), ["trial_deleted"])
+
+	def test_a_refused_termination_stays_selectable_and_is_asked_again(self):
+		self.ready_site()
+		self.site().db_set({"trial_state": "Ended", "trial_deletes_on": nowdate()})
+		self.run_on(0)
+		frappe.db.set_value(
+			"Resource Action",
+			{"server": self.server.name, "action": "terminate"},
+			"status",
+			"Failed",
+		)
+
+		site = self.run_on(0)
+
+		self.assertEqual(site.trial_state, "Ended")
+		self.assertIn("did not terminate", site.trial_error)
+		self.assertEqual(
+			frappe.db.count("Resource Action", {"server": self.server.name, "action": "terminate"}), 2
+		)
 
 	def test_a_failed_stop_leaves_the_reason_on_the_site(self):
 		self.ready_site()
@@ -178,6 +203,15 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.ready_site()
 
 		with self.change_settings("Central Settings", trial_servers_per_team=1):
+			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
+				validate_trial_site(self.team.name)
+
+	def test_a_provisioned_site_that_is_not_ready_still_counts_toward_the_limit(self):
+		with self.change_settings("Central Settings", trial_servers_per_team=1):
+			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
+				validate_trial_site(self.team.name)
+
+			self.ready_site()
 			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
 				validate_trial_site(self.team.name)
 
