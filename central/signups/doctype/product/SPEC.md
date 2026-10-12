@@ -47,7 +47,7 @@ A Product needs a Cargo image of type Apps for its signup app in the region. Wit
 
 ## Signup funnel
 
-Central sends one Pulse event at each signup step with `frappe.utils.telemetry.capture`. Each event goes to a Redis queue in the request and is sent to Pulse later, so it adds no network call to the step. Events are sent only when Central has a Pulse key and telemetry is on. Pulse stores the user as a salted hash, so use Central records, not Pulse, to look up one customer.
+Central sends one Pulse event at each signup step with `frappe.utils.telemetry.capture`. A trial event goes through `central.signups.funnel.capture_trial_event`. It names the customer's Team, so events of one team can be joined, and it is queued only after the step commits, so a step that rolls back sends nothing. Each event goes to a Redis queue and is sent to Pulse later, so it adds no network call to the step. Events are sent only when Central has a Pulse key and telemetry is on. Pulse stores the user as a salted hash, so use Central records, not Pulse, to look up one customer.
 
 | Event | Sent when | Properties |
 |---|---|---|
@@ -57,8 +57,11 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 | `trial_failed` | The trial's create Resource Action fails or times out | `product`, `status`, `error_code` |
 | `trial_ready` | Central first records that the site answers. See [Readiness](../../../infrastructure/doctype/site/SPEC.md#readiness). | `product`, `seconds_to_ready` |
 | `trial_claimed` | The customer first opens the site | `product` |
+| `trial_converted` | A payment method converts the trial | `product`, `days_in_trial` |
+| `trial_ended` | The trial reaches its end date without a payment method | `product` |
+| `trial_deleted` | The ended trial's server is terminated | `product` |
 
-`send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
+`signup_code_sent` and `signup_verified` happen before the customer has a Team, so Pulse files them under Central's own team. `send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
 
 When a new email asks for a code, Central also looks up the request's country in a background job, so the team created after verification reads its billing country from the cache instead of waiting on the lookup.
 

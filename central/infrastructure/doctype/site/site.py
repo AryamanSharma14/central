@@ -4,7 +4,8 @@ from urllib.parse import urlsplit, urlunsplit
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils.telemetry import capture
+
+from central.signups.funnel import capture_trial_event
 
 if TYPE_CHECKING:
 	from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
@@ -110,7 +111,7 @@ class Site(Document):
 		"""Record the first successful login handoff and schedule the optional rename."""
 		if not self.claimed_at:
 			self.db_set("claimed_at", frappe.utils.now_datetime())
-			capture("trial_claimed", "central", properties={"product": self.product})
+			capture_trial_event("trial_claimed", self.team, self.product, user=frappe.session.user)
 
 		self.enqueue_subdomain_rename()
 
@@ -136,14 +137,11 @@ class Site(Document):
 		requested_at = frappe.db.get_value(
 			"Resource Action", {"server": self.server, "action": "create"}, "creation"
 		)
-		capture(
+		capture_trial_event(
 			"trial_ready",
-			"central",
-			user=frappe.get_cached_value("Team", self.team, "owner_user"),
-			properties={
-				"product": self.product,
-				"seconds_to_ready": (self.ready_at - requested_at).total_seconds() if requested_at else None,
-			},
+			self.team,
+			self.product,
+			seconds_to_ready=(self.ready_at - requested_at).total_seconds() if requested_at else None,
 		)
 
 	def enqueue_subdomain_rename(self) -> None:

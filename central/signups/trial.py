@@ -5,6 +5,7 @@ from frappe.utils import add_days, date_diff, flt, formatdate, get_datetime, get
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
+from central.signups.funnel import capture_trial_event
 
 
 def start_trial(site: Site) -> None:
@@ -50,6 +51,9 @@ def convert_team(team: str) -> None:
 def convert_site(site: Site) -> None:
 	"""Start billing the site's server, keep it awake, and start it again if the trial stopped it."""
 	site.db_set({"trial_state": "Converted", "trial_error": None, **get_trial_cost(site)})
+	capture_trial_event(
+		"trial_converted", site.team, site.product, days_in_trial=date_diff(nowdate(), site.creation)
+	)
 
 	server = frappe.get_doc("Virtual Machine", site.server)
 	if server.status == "Running":
@@ -203,6 +207,7 @@ def end_trial(site: Site, today) -> None:
 	"""Stop the trial's server and set the day it is terminated. The stop job tells the team."""
 	deletes_on = add_days(today, get_trial_days(site.product, "trial_deletion_days"))
 	site.db_set({"trial_state": "Ended", "trial_deletes_on": deletes_on, "trial_error": None})
+	capture_trial_event("trial_ended", site.team, site.product)
 	enqueue_stop(site)
 
 
@@ -258,6 +263,7 @@ def delete_trial(site: Site) -> None:
 		return
 
 	site.db_set({"trial_state": "Deleted", "trial_error": None, **get_trial_cost(site, site.trial_ends_on)})
+	capture_trial_event("trial_deleted", site.team, site.product)
 	send_notice(site, "trial_deleted", "deleted")
 
 

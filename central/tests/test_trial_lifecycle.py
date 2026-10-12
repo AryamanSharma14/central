@@ -33,6 +33,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 		)
 		observe_server(self.server)
 		self.notices = self.enterContext(patch("central.signups.trial.queue_event"))
+		self.funnel = self.enterContext(patch("central.signups.trial.capture_trial_event"))
 		self.enterContext(patch.object(frappe.db, "commit"))
 		self.enterContext(
 			self.change_settings(
@@ -51,6 +52,9 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 	def sent_events(self) -> list[str]:
 		return [call.args[1] for call in self.notices.call_args_list]
+
+	def funnel_events(self) -> list[str]:
+		return [call.args[0] for call in self.funnel.call_args_list]
 
 	def test_a_new_trial_site_gets_its_end_date_before_it_is_ready(self):
 		site = self.site()
@@ -118,6 +122,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(getdate(site.trial_deletes_on), getdate(add_days(nowdate(), 21)))
 		enqueue_stop.assert_called_once()
 		self.assertEqual(self.sent_events(), [])
+		self.assertEqual(self.funnel_events(), ["trial_ended"])
 
 	def test_the_team_hears_the_trial_ended_once_the_server_is_stopped(self):
 		self.site().db_set("trial_state", "Ended")
@@ -141,6 +146,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		self.assertEqual(site.trial_state, "Deleted")
 		self.assertEqual(self.sent_events(), ["trial_deleted"])
+		self.assertEqual(self.funnel_events(), ["trial_deleted"])
 
 	def test_a_refused_termination_stays_selectable_and_is_asked_again(self):
 		self.site().db_set({"trial_state": "Ended", "trial_deletes_on": nowdate()})
@@ -210,6 +216,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 		site = self.site()
 		self.assertEqual(site.trial_state, "Converted")
 		self.assertAlmostEqual(site.trial_cost, 3, places=1)
+		self.funnel.assert_called_once_with("trial_converted", self.team.name, None, days_in_trial=3)
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
 

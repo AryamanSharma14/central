@@ -255,7 +255,7 @@ class TestSiteRoutes(SiteOnAMachine):
 		with (
 			patch.object(frappe.db, "commit"),
 			patch("central.integrations.pilot.is_site_reachable", return_value=True),
-			patch("central.infrastructure.doctype.site.site.capture") as capture,
+			patch("central.infrastructure.doctype.site.site.capture_trial_event") as capture,
 			patch("central.notification.engine.queue_event") as queue_event,
 		):
 			record_ready_sites()
@@ -920,19 +920,24 @@ class TestTrialFunnelEvents(SiteOnAMachine):
 			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": "raven"}},
 		)
 
-	def test_a_trial_request_is_sent_once_with_its_product(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Site")
+	def captured(self, resource_type: str):
+		with patch("central.signups.funnel.capture") as capture:
+			self.queue(resource_type)
+			capture.assert_not_called()
+			frappe.db.after_commit.run()
+
+		return capture
+
+	def test_a_trial_request_is_sent_once_after_commit_under_the_customer_team(self):
+		capture = self.captured("Site")
 
 		capture.assert_called_once()
 		self.assertEqual(capture.call_args.args[0], "trial_requested")
+		self.assertEqual(capture.call_args.kwargs["team"], self.team.name)
 		self.assertEqual(capture.call_args.kwargs["properties"]["product"], "raven")
 
 	def test_a_server_request_sends_no_trial_event(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Server")
-
-		capture.assert_not_called()
+		self.captured("Server").assert_not_called()
 
 
 class TestTrialSignIn(SiteOnAMachine):
