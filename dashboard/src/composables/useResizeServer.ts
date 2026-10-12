@@ -9,7 +9,7 @@ import {
 	estimateConfig,
 	rateCardComplete,
 } from '@/lib/composed'
-import { getErrorMessage, successToast } from '@/lib/feedback'
+import { getErrorMessage, isAbortError, successToast } from '@/lib/feedback'
 import { money } from '@/lib/format'
 import { planQuantity, presetPrice } from '@/lib/plans'
 import type { ComposedConfig, Plan, Profile } from '@/types/api'
@@ -338,12 +338,15 @@ export function useResizeServer(
 			return 'This size is over your spending limit, including retained storage.'
 		return ''
 	})
+	const configError = computed(() =>
+		isAbortError(configCall.error) ? null : configCall.error,
+	)
 	const optionsError = computed(() => {
-		const error = configCall.error || plansError.value
+		const error = configError.value || plansError.value
 		return error ? getErrorMessage(error, "Couldn't load resize options.") : ''
 	})
 	async function reloadOptions(): Promise<void> {
-		if (!configCall.error) {
+		if (!configError.value) {
 			reloadPlans()
 			return
 		}
