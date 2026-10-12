@@ -49,22 +49,45 @@ def convert_team(team: str) -> None:
 
 def convert_site(site: Site) -> None:
 	"""Start billing the site's server, keep it awake, and start it again if the trial stopped it."""
-	was_stopped = site.trial_state == "Ended"
 	site.db_set({"trial_state": "Converted", "trial_error": None, **get_trial_cost(site)})
 
 	server = frappe.get_doc("Virtual Machine", site.server)
 	if server.status == "Running":
 		server.ensure_subscription_enabled()
 
+	enqueue_conversion(site)
+
+
+def enqueue_conversion(site: Site) -> None:
 	frappe.enqueue(
-		"central.integrations.servers.convert_trial_server",
-		server=server.name,
-		start=was_stopped,
+		finish_conversion,
+		site=site.name,
 		queue="long",
 		enqueue_after_commit=True,
-		job_id=f"trial-convert:{server.name}",
+		job_id=f"trial-convert:{site.name}",
 		deduplicate=True,
 	)
+
+
+def finish_conversion(site: str) -> None:
+	"""Background job: turn idle sleep off on a converted trial's server, and start it when it is
+	stopped. Safe to repeat, so the daily job sends it again after a failure."""
+	from central.integrations.servers import convert_trial_server
+
+	document = frappe.get_doc("Site", site)
+	if document.trial_state != "Converted":
+		return
+
+	is_stopped = frappe.db.get_value("Virtual Machine", document.server, "status") == "Stopped"
+	try:
+		convert_trial_server(document.server, start=is_stopped)
+	# This worker boundary records every failure, and the daily job sends the conversion again.
+	except Exception:
+		frappe.db.rollback()
+		record_trial_error(site, _("Central could not start this paid site's server. It retries tomorrow."))
+		return
+
+	document.db_set("trial_error", None)
 
 
 def get_trial_cost(site: Site, until=None) -> dict:
@@ -112,9 +135,14 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 
 
 def run_trials() -> None:
-	"""Daily job: warn before a trial ends, stop it on its end date, and terminate it on its deletion date."""
+	"""Daily job: warn before a trial ends, stop it on its end date, terminate it on its deletion
+	date, and finish a conversion that failed."""
 	today = getdate(nowdate())
-	for name in frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name"):
+	open_trials = frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name")
+	failed_conversions = frappe.get_all(
+		"Site", filters={"trial_state": "Converted", "trial_error": ["is", "set"]}, pluck="name"
+	)
+	for name in open_trials + failed_conversions:
 		try:
 			advance_trial(frappe.get_doc("Site", name, for_update=True), today)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's step if a later one fails
@@ -125,6 +153,10 @@ def run_trials() -> None:
 
 
 def advance_trial(site: Site, today) -> None:
+	if site.trial_state == "Converted":
+		enqueue_conversion(site)
+		return
+
 	notice_days = frappe.get_cached_value("Central Settings", "Central Settings", "trial_notice_days")
 	if site.trial_state == "Active":
 		days_left = date_diff(site.trial_ends_on, today)
@@ -200,6 +232,11 @@ def stop_trial_server(site: str) -> None:
 	except Exception:
 		frappe.db.rollback()
 		record_trial_error(site, _("Central could not stop this trial's server. It retries tomorrow."))
+		return
+
+	# The team can pay while the stop runs. Its server must then run again.
+	if document.reload().trial_state == "Converted":
+		enqueue_conversion(document)
 		return
 
 	document.db_set("trial_error", None)

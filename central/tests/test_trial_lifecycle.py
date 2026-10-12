@@ -211,15 +211,51 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(site.trial_state, "Converted")
 		self.assertAlmostEqual(site.trial_cost, 3, places=1)
 		VirtualMachine.ensure_subscription_enabled.assert_called()
+		self.assert_conversion_queued()
+
+	def assert_conversion_queued(self):
 		frappe.enqueue.assert_any_call(
-			"central.integrations.servers.convert_trial_server",
-			server=self.server.name,
-			start=True,
+			trial.finish_conversion,
+			site=self.site().name,
 			queue="long",
 			enqueue_after_commit=True,
-			job_id=f"trial-convert:{self.server.name}",
+			job_id=f"trial-convert:{self.site().name}",
 			deduplicate=True,
 		)
+
+	def test_a_converted_server_that_the_trial_stopped_starts_again(self):
+		self.site().db_set("trial_state", "Converted")
+		self.server.db_set("status", "Stopped")
+		with patch("central.integrations.servers.convert_trial_server") as convert_trial_server:
+			trial.finish_conversion(self.site().name)
+
+		convert_trial_server.assert_called_once_with(self.server.name, start=True)
+
+	def test_a_failed_conversion_leaves_the_reason_and_the_daily_job_retries_it(self):
+		self.site().db_set("trial_state", "Converted")
+		with (
+			patch("central.integrations.servers.convert_trial_server", side_effect=RuntimeError("down")),
+			patch.object(frappe.db, "rollback"),
+		):
+			trial.finish_conversion(self.site().name)
+
+		self.assertIn("could not start", self.site().trial_error)
+
+		frappe.enqueue.reset_mock()
+		trial.run_trials()
+		self.assert_conversion_queued()
+
+	def test_a_team_that_pays_during_the_stop_gets_its_server_back(self):
+		self.site().db_set("trial_state", "Ended")
+
+		def pay_during_stop(server):
+			self.site().db_set("trial_state", "Converted")
+
+		with patch("central.integrations.servers.hold_server_stopped", side_effect=pay_during_stop):
+			trial.stop_trial_server(self.site().name)
+
+		self.assert_conversion_queued()
+		self.assertEqual(self.sent_events(), [])
 
 	def test_an_ended_trial_cannot_be_started(self):
 		self.site().db_set("trial_state", "Ended")

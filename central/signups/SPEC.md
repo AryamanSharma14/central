@@ -78,7 +78,7 @@ When a payment method of the Team becomes active, every Active or Ended trial si
 
 1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
 2. A running server gets its subscription now. A stopped server gets it when it starts.
-3. A background job turns idle sleep off in Atlas, and starts the server if the trial had stopped it.
+3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped.
 
 A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
 
@@ -88,8 +88,8 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 
 ### Desk
 
-On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Trial** adds days and starts an Ended trial again, **End Trial Now** ends an Active trial today, and **Retry Trial Step** runs today's step again after a Trial Error. Each action leaves a comment on the Site. The **Trial Sites** report counts trial sites and their cost by product, month and state.
+On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Trial** adds days and starts an Ended trial again, **End Trial Now** ends an Active trial today, and **Retry Trial Step** runs today's step again after a Trial Error. On a Converted site, it sends the conversion job again. Each action leaves a comment on the Site. The **Trial Sites** report counts trial sites and their cost by product, month and state.
 
 ### Failure
 
-When a stop or a terminate fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.
+When a stop, a terminate, or the conversion job fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. The daily job includes Converted sites that have a Trial Error. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.
