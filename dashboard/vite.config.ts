@@ -44,6 +44,8 @@ export default defineConfig({
 		alias: {
 			'@': path.resolve(__dirname, 'src'),
 		},
+		// One reka-ui instance, so a reka part placed inside a frappe-ui component shares its context.
+		dedupe: ['reka-ui'],
 	},
 	build: {
 		outDir: path.resolve(__dirname, '../central/public/dashboard'),
