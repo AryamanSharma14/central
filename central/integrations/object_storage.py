@@ -29,6 +29,10 @@ class ObjectStorageNotFound(ObjectStorageRejected):
 	"""Cargo says the bucket does not exist."""
 
 
+class ObjectStorageDeleteTooLarge(frappe.ValidationError):
+	"""A delete covers more objects than one request may remove."""
+
+
 class ObjectStorageRequestUncertain(ObjectStorageConnectionError):
 	"""Cargo may have completed a mutation without returning a usable receipt."""
 
@@ -162,6 +166,8 @@ class BucketInteractions:
 
 	MAXIMUM_PAGE_SIZE = 1000
 	DOWNLOAD_URL_EXPIRY_SECONDS = 300
+	UPLOAD_URL_EXPIRY_SECONDS = 3600
+	MAXIMUM_DELETE_COUNT = 1000
 
 	def __init__(self, service: TeamService):
 		self.bucket_name = service.bucket_name
@@ -215,6 +221,48 @@ class BucketInteractions:
 			"get_object",
 			Params={"Bucket": self.bucket_name, "Key": key},
 			ExpiresIn=self.DOWNLOAD_URL_EXPIRY_SECONDS,
+		)
+
+	def get_upload_url(self, key: str, content_type: str) -> str:
+		"""A presigned PUT for one object, so the browser sends its bytes to S3 directly.
+		The browser must send the same Content-Type, because it is signed."""
+		return self.client.generate_presigned_url(
+			"put_object",
+			Params={"Bucket": self.bucket_name, "Key": key, "ContentType": content_type},
+			ExpiresIn=self.UPLOAD_URL_EXPIRY_SECONDS,
+		)
+
+	def delete_objects(self, keys: list[str], prefixes: list[str]) -> int:
+		"""Delete objects and everything under each folder prefix, in one S3 call.
+		Refuses more than MAXIMUM_DELETE_COUNT objects before it deletes any."""
+		targets = set(keys)
+		for prefix in prefixes:
+			page = self._request(self.client.list_objects_v2, Bucket=self.bucket_name, Prefix=prefix)
+			if page.get("IsTruncated"):
+				self._refuse_large_delete()
+
+			targets.update(item["Key"] for item in page.get("Contents", []))
+
+		if len(targets) > self.MAXIMUM_DELETE_COUNT:
+			self._refuse_large_delete()
+
+		if not targets:
+			return 0
+
+		result = self._request(
+			self.client.delete_objects,
+			Bucket=self.bucket_name,
+			Delete={"Objects": [{"Key": key} for key in sorted(targets)], "Quiet": True},
+		)
+		if result.get("Errors"):
+			raise ObjectStorageRejected(_("Object storage did not delete some objects."))
+
+		return len(targets)
+
+	def _refuse_large_delete(self) -> None:
+		frappe.throw(
+			_("Delete at most {0} objects at a time.").format(self.MAXIMUM_DELETE_COUNT),
+			ObjectStorageDeleteTooLarge,
 		)
 
 	@staticmethod
