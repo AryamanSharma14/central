@@ -49,6 +49,7 @@ The daily job `central.signups.trial.run_trials` moves each site. It sends each 
 
 | Event | Sent |
 |---|---|
+| `trial_unopened` | Once, from the day after the site is ready, when nobody has opened it. Not sent when a warning is due. |
 | `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day |
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |

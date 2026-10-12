@@ -558,5 +558,21 @@
   "in_app_body": "Your payment method is active, so your {{ context.product }} trial is over. {{ context.address }} keeps running, and billing starts today.",
   "action_label": "View billing",
   "action_route": "/billing"
+ },
+ {
+  "name": "trial_unopened",
+  "event_type": "trial_unopened",
+  "category": "Trial",
+  "create_in_app": 1,
+  "direct_recipients": "None",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "modified": "2026-10-12 00:00:00",
+  "required_cap": "billing:view",
+  "severity": "Info",
+  "in_app_title": "Your {{ context.product }} site is waiting for you",
+  "in_app_body": "{{ context.address }} is ready. Open it from Frappe Cloud to set it up. Your free trial ends on {{ context.ends_on }}.",
+  "action_label": "View site",
+  "action_route": "/servers"
  }
 ]

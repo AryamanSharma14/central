@@ -158,20 +158,28 @@ def run_trials() -> None:
 
 
 def advance_trial(site: Site, today) -> None:
+	notice_days = frappe.get_cached_value("Central Settings", "Central Settings", "trial_notice_days")
 	if site.trial_state == "Converted":
 		enqueue_conversion(site)
-		return
+	elif site.trial_state == "Active":
+		advance_active_trial(site, today, notice_days)
+	else:
+		advance_ended_trial(site, today, notice_days)
 
-	notice_days = frappe.get_cached_value("Central Settings", "Central Settings", "trial_notice_days")
-	if site.trial_state == "Active":
-		days_left = date_diff(site.trial_ends_on, today)
-		if days_left <= 0:
-			end_trial(site, today)
-		elif days_left <= notice_days:
-			# A second warning goes out on the last day.
-			send_notice(site, "trial_expiring", "last day" if days_left == 1 else "ending")
-		return
 
+def advance_active_trial(site: Site, today, notice_days: int) -> None:
+	days_left = date_diff(site.trial_ends_on, today)
+	if days_left <= 0:
+		end_trial(site, today)
+	elif days_left <= notice_days:
+		# A second warning goes out on the last day.
+		send_notice(site, "trial_expiring", "last day" if days_left == 1 else "ending")
+	elif site.ready_at and not site.claimed_at and getdate(site.ready_at) < today:
+		# One reminder, from the day after the site is ready, to a team that has not opened it.
+		send_notice(site, "trial_unopened", "unopened")
+
+
+def advance_ended_trial(site: Site, today, notice_days: int) -> None:
 	days_left = date_diff(site.trial_deletes_on, today)
 	if days_left <= 0:
 		delete_trial(site)

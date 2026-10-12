@@ -114,6 +114,20 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(self.sent_events(), ["trial_expiring", "trial_expiring"])
 		self.assertEqual(self.site().trial_last_notice, "last day")
 
+	def test_a_ready_site_that_nobody_opened_gets_one_reminder_the_next_day(self):
+		self.site().db_set("ready_at", now_datetime())
+		self.run_on(0)
+		self.run_on(1)
+		self.run_on(2)
+
+		self.assertEqual(self.sent_events(), ["trial_unopened"])
+
+	def test_an_opened_site_gets_no_reminder(self):
+		self.site().db_set({"ready_at": now_datetime(), "claimed_at": now_datetime()})
+		self.run_on(1)
+
+		self.assertEqual(self.sent_events(), [])
+
 	def test_the_end_date_stops_the_server_and_sets_the_deletion_date(self):
 		with patch("central.signups.trial.enqueue_stop") as enqueue_stop:
 			site = self.run_on(14)
