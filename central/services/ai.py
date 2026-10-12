@@ -28,26 +28,26 @@ def enable(team: str) -> str:
 
 
 def register_team(team: str) -> dict:
-	"""Register the team at Grove under the team id, Free, with its tier's limits and its
+	"""Register the team at Grove under the team id, then send the name of its tier and its
 	standing. Grove keeps nothing else about the team."""
 	client = GroveClient.from_settings()
-	registered = client.provision_team(team, free=True) or {}
+	registered = client.provision_team(team) or {}
 	client.update_team(team, **get_team_limits(team))
 	return registered
 
 
 def get_team_limits(team: str) -> dict:
-	"""What Grove gates the team's keys on: its tier's AI key count and monthly spend, and
-	whether its account is suspended. An untiered team sends no key count, keeping Grove's."""
+	"""What Central tells Grove about the team: the name of its tier, whose key count, monthly
+	spend limit and rate limits Grove holds (untiered: "", Grove's default tier), and whether its
+	account is suspended. Every team is paid and gated at Grove."""
 	from central.billing.catalog.entitlements import get_team_caps
 	from central.billing.catalog.subscriptions import anchor_subscription
 
-	caps = get_team_caps(team)
 	anchor = anchor_subscription(team)
 	return {
-		"max_keys": caps.max_ai_keys or None,
-		"spend_limit": frappe.utils.flt(caps.max_ai_spend),
-		"suspended": bool(anchor) and frappe.db.get_value("Subscription", anchor, "account_standing") == "Suspended",
+		"tier": get_team_caps(team).tier or "",
+		"suspended": bool(anchor)
+		and frappe.db.get_value("Subscription", anchor, "account_standing") == "Suspended",
 	}
 
 
@@ -58,24 +58,22 @@ def sync_team(team: str) -> None:
 
 
 def on_tier_update(doc, method: str | None = None) -> None:
-	"""Billing Profile and Subscription hook: a team's tier or standing moved, so Grove's limits
-	follow. A Billing Profile is named by its team."""
-	fields = (
-		("account_standing",)
-		if doc.doctype == "Subscription"
-		else ("trust_tier_level", "manual_override", "override_max_ai_spend")
-	)
+	"""Billing Profile and Subscription hook: a team's tier or standing moved, so Grove follows.
+	A Billing Profile is named by its team."""
+	fields = ("account_standing",) if doc.doctype == "Subscription" else ("trust_tier_level",)
 	team = doc.team if doc.doctype == "Subscription" else doc.name
 	if any(doc.has_value_changed(field) for field in fields) and get_ai_service(team):
 		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
 
 
 def on_level_update(doc, method: str | None = None) -> None:
-	"""Trust Tier Level hook: an edited level reaches every AI team on it."""
-	if not (doc.has_value_changed("max_ai_keys") or doc.has_value_changed("max_ai_spend")):
+	"""Trust Tier Level hook: a level's renamed tier reaches every AI team on it."""
+	if not doc.has_value_changed("tier"):
 		return
 	teams = frappe.get_all("Billing Profile", filters={"trust_tier_level": doc.name}, pluck="name")
-	for team in frappe.get_all("Team Service", filters={"team": ("in", teams), "add_on_service": AI_SERVICE}, pluck="team"):
+	for team in frappe.get_all(
+		"Team Service", filters={"team": ("in", teams), "add_on_service": AI_SERVICE}, pluck="team"
+	):
 		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
 
 

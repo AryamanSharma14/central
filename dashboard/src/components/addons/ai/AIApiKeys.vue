@@ -47,17 +47,25 @@ const {
 
 loadApiKeys()
 
-// A free team is never charged: caps mean nothing to it, so they stay off the page.
-const prepaid = computed(
-	() => !!ai.value?.spend && !ai.value.spend.is_free_user,
-)
+// Every team is prepaid at Grove: the caps show once its spend has loaded.
+const prepaid = computed(() => !!ai.value?.spend)
 const spend = computed(() => ai.value?.spend)
 const activeKeys = computed(() =>
 	apiKeys.value.filter((key) => key.status === 'active'),
 )
+// A plan with max_keys 0 sets no limit.
 const atKeyLimit = computed(
-	() => !!spend.value && activeKeys.value.length >= spend.value.max_keys,
+	() =>
+		!!spend.value &&
+		spend.value.max_keys > 0 &&
+		activeKeys.value.length >= spend.value.max_keys,
 )
+const keyCountLabel = computed(() => {
+	const live = activeKeys.value.length
+	const max = spend.value?.max_keys ?? 0
+	if (max > 0) return `${live} of ${max} keys`
+	return `${live} ${live === 1 ? 'key' : 'keys'}`
+})
 // All keys come in one call; page them on the client past ten.
 const PAGE_SIZE = 10
 const page = ref(1)
@@ -318,14 +326,12 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				<p class="text-p-xs text-ink-gray-5" aria-live="polite">
 					Caps add up to {{ usd(spend?.capped ?? 0) }} of your plan's
 					{{ usd(spend?.spend_limit ?? 0) }}
-					a month ·
-					{{ activeKeys.length }}
-					of {{ spend?.max_keys }} keys.
+					a month · {{ keyCountLabel }}.
 				</p>
 				<Button
 					v-if="canManage && activeKeys.length"
 					class="shrink-0"
-					label="Set caps"
+					label="Set monthly caps"
 					icon-left="lucide-wallet"
 					@click="openCaps"
 				/>

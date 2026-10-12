@@ -23,16 +23,16 @@ export interface AIRateLimit {
 }
 
 // USD, as of Grove's last pull. `capped` is Σ the live keys' monthly caps, which the tier's
-// `spend_limit` bounds. A free team is never charged: `spent` stays at zero and caps do not apply.
+// `spend_limit` bounds.
 // Credit and invoices are Central's wallet and invoicing, not Grove's.
 export interface AISpend {
 	spent: number
 	month_spent: number
 	capped: number
 	spend_limit: number
+	// How many live keys the plan allows; 0 is no limit.
 	max_keys: number
 	suspended: boolean
-	is_free_user: boolean
 }
 
 // Where a key may be minted, and the gateway its keys call.

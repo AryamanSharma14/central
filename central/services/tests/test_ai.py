@@ -82,12 +82,12 @@ class TestGroveClientCalls(IntegrationTestCase):
 		self.assertEqual(result, minted)
 
 	def test_a_team_is_registered_under_the_control_credential(self):
-		with grove_replies({"team": "TEAM-1", "max_keys": 10}) as post:
-			self.client.provision_team("TEAM-1", free=True)
+		with grove_replies({"team": "TEAM-1", "max_keys": 0}) as post:
+			self.client.provision_team("TEAM-1")
 
 		self.assertEqual(
 			sent(post),
-			("grove.api.provision_team", {"team": "TEAM-1", "free": True}),
+			("grove.api.provision_team", {"team": "TEAM-1"}),
 		)
 		self.assertEqual(
 			post.call_args.kwargs["headers"], {"Authorization": "token control-key:control-secret"}
@@ -129,15 +129,19 @@ class TestGroveClientCalls(IntegrationTestCase):
 				lambda: self.client.get_usage(["TEAM-1"], period="Last 7 Days"),
 				(
 					"grove.api.usage",
-					{"teams": ["TEAM-1"], "month": None, "period": "Last 7 Days", "key_hash": None},
+					{
+						"teams": ["TEAM-1"],
+						"month": None,
+						"period": "Last 7 Days",
+						"key_hash": None,
+						"pulled_after": None,
+						"pulled_until": None,
+					},
 				),
 			),
 			(
-				lambda: self.client.update_team("TEAM-1", spend_limit=50),
-				(
-					"grove.api.update_team",
-					{"team": "TEAM-1", "max_keys": None, "spend_limit": 50, "suspended": None},
-				),
+				lambda: self.client.update_team("TEAM-1", tier="Growth"),
+				("grove.api.update_team", {"team": "TEAM-1", "suspended": None, "tier": "Growth"}),
 			),
 		]
 		for call, expected in calls:
@@ -192,23 +196,23 @@ class TestAI(IntegrationTestCase):
 		):
 			return ai.enable(self.team)
 
-	def test_enabling_registers_the_team_as_free_at_its_alert_address(self):
+	def test_enabling_registers_the_team_and_sends_its_limits(self):
 		frappe.set_user(self.owner)
 		with (
 			patch.object(
-				GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 10}
+				GroveClient, "provision_team", return_value={"team": self.team, "max_keys": 0}
 			) as provision_team,
 			patch.object(GroveClient, "update_team") as update_team,
 		):
 			name = api.enable_ai(self.team)["name"]
 			self.assertEqual(api.enable_ai(self.team)["name"], name)
 
-		provision_team.assert_called_once_with(self.team, free=True)
-		# The tier's limits and the standing go with it, so the first key has room for a cap.
+		provision_team.assert_called_once_with(self.team)
+		# The tier's name and the standing go with it, so the first key has room for a cap.
 		update_team.assert_called_once_with(self.team, **ai.get_team_limits(self.team))
 		service = frappe.get_doc("Team Service", name)
-		# Prepaid at Grove, and each key calls its own geography: no subscription, no region,
-		# no endpoint on the row.
+		# Postpaid, and each key calls its own geography: no subscription, no region, no
+		# endpoint on the row.
 		self.assertEqual(
 			(service.status, service.subscription, service.region, service.endpoint_url),
 			("Active", None, None, None),
@@ -253,8 +257,12 @@ class TestAI(IntegrationTestCase):
 	def test_the_overview_carries_spend_this_months_usage_and_the_geographies(self):
 		self.enabled()
 		spend = {
-			"spent": 7.5, "month_spent": 7.5, "capped": 20.0, "spend_limit": 50.0,
-			"max_keys": 10, "suspended": False, "is_free_user": False,
+			"spent": 7.5,
+			"month_spent": 7.5,
+			"capped": 20.0,
+			"spend_limit": 50.0,
+			"max_keys": 10,
+			"suspended": False,
 		}
 		month = {**EMPTY_USAGE, self.team: {"requests": 6, "tokens": 900, "cost": 7.5}}
 		with (
@@ -350,21 +358,31 @@ class TestAI(IntegrationTestCase):
 			],
 		)
 
-	def test_the_teams_limits_are_its_tiers_and_its_standing(self):
-		caps = frappe._dict(max_ai_keys=4, max_ai_spend=50)
+	def test_the_teams_limits_are_its_tiers_name_and_its_standing(self):
+		caps = frappe._dict(tier="Growth")
 		with (
 			patch("central.billing.catalog.entitlements.get_team_caps", return_value=caps),
 			patch("central.billing.catalog.subscriptions.anchor_subscription", return_value=None),
 		):
-			self.assertEqual(ai.get_team_limits(self.team), {"max_keys": 4, "spend_limit": 50, "suspended": False})
-			# Untiered: Grove keeps its own key count.
-			caps.max_ai_keys = 0
-			self.assertIsNone(ai.get_team_limits(self.team)["max_keys"])
+			self.assertEqual(ai.get_team_limits(self.team), {"tier": "Growth", "suspended": False})
+			# Untiered: Grove's default tier.
+			caps.tier = None
+			self.assertEqual(ai.get_team_limits(self.team)["tier"], "")
 
 	def test_a_tier_or_standing_change_is_sent_to_grove_only_when_ai_is_on(self):
-		profile = frappe._dict(doctype="Billing Profile", name=self.team, has_value_changed=lambda field: field == "trust_tier_level")
-		standing = frappe._dict(doctype="Subscription", team=self.team, has_value_changed=lambda field: field == "account_standing")
-		unchanged = frappe._dict(doctype="Subscription", team=self.team, has_value_changed=lambda field: False)
+		profile = frappe._dict(
+			doctype="Billing Profile",
+			name=self.team,
+			has_value_changed=lambda field: field == "trust_tier_level",
+		)
+		standing = frappe._dict(
+			doctype="Subscription",
+			team=self.team,
+			has_value_changed=lambda field: field == "account_standing",
+		)
+		unchanged = frappe._dict(
+			doctype="Subscription", team=self.team, has_value_changed=lambda field: False
+		)
 		with patch.object(frappe, "enqueue") as enqueue:
 			ai.on_tier_update(profile)
 			enqueue.assert_not_called()

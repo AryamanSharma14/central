@@ -40,8 +40,8 @@ const { ai, aiLoading, models, modelsLoading, modelsError, loadModels } =
 
 const usage = computed(() => ai.value?.usage ?? null)
 const spend = computed(() => ai.value?.spend ?? null)
-// A free team is never charged: the spent card says so instead of hinting at caps.
-const prepaid = computed(() => !!spend.value && !spend.value.is_free_user)
+// A plan with no AI spend has nothing to fill: no bar.
+const prepaid = computed(() => !!spend.value && spend.value.spend_limit > 0)
 const spentPercent = computed(() => {
 	const limit = spend.value?.spend_limit ?? 0
 	return limit > 0 ? Math.min(((usage.value?.cost ?? 0) / limit) * 100, 100) : 0
@@ -113,7 +113,7 @@ const shownModels = computed(() =>
 								:text="
 									prepaid
 										? `Your plan lets your keys spend $${(spend?.spend_limit ?? 0).toFixed(2)} a month; their caps add up to $${(spend?.capped ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
-										: 'This is a free team: usage is counted but never charged.'
+										: 'Your plan has no AI spend: upgrade it to give your keys a monthly cap.'
 								"
 							>
 								<lucide-circle-help
@@ -225,10 +225,10 @@ const shownModels = computed(() =>
 							<td class="py-3 pr-3 text-sm text-ink-gray-7">
 								{{ model.provider }}
 							</td>
-							<td class="py-3 pr-3 text-sm font-medium text-ink-gray-9">
+							<td class="py-3 pr-3 text-sm text-ink-gray-6">
 								{{ model.model_id }}
 							</td>
-							<td class="py-3 pr-3 font-mono text-xs text-ink-gray-6">
+							<td class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9">
 								{{ model.name }}
 							</td>
 

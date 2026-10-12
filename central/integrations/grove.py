@@ -18,8 +18,8 @@ class GroveUnavailable(frappe.ValidationError):
 
 class GroveClient:
 	"""Calls Grove's control API (`grove.api`) as Central. A team is one Central Team at Grove,
-	named by the team id, under the key count and monthly spend limit of its tier; each of its
-	keys carries its own geography, models, rate limits and monthly cap. Grove owns the keys;
+	named by the team id, under the key count, monthly spend limit and rate limits of its tier,
+	which Grove holds; each of its keys carries its own geography, models, rate limits and monthly cap. Grove owns the keys;
 	Central never proxies inference."""
 
 	def __init__(self, base_url: str, api_key: str, api_secret: str):
@@ -46,24 +46,16 @@ class GroveClient:
 		"""A new secret for Central's own control user; the old one stops at once."""
 		return self.call("grove.api.create_control_client_key")
 
-	def provision_team(self, team: str, free: bool = False) -> dict:
+	def provision_team(self, team: str) -> dict:
 		"""Register `team` by its id; Grove keeps nothing else about who it is. Grove upserts
-		by `team`. With `free`, Grove charges and gates nothing; without it, Grove keeps the
-		setting it has. → `team` and `max_keys`, how many live keys it may hold."""
-		return self.call("grove.api.provision_team", team=team, free=free)
+		by `team`; `update_team` sets everything else. → `team` and `max_keys`."""
+		return self.call("grove.api.provision_team", team=team)
 
-	def update_team(
-		self,
-		team: str,
-		max_keys: int | None = None,
-		spend_limit: float | None = None,
-		suspended: bool | None = None,
-	) -> dict:
-		"""What the team's tier allows — `max_keys` live keys, `spend_limit` USD a month across
-		its keys' caps — and whether it is `suspended`, each kept at Grove when None."""
-		return self.call(
-			"grove.api.update_team", team=team, max_keys=max_keys, spend_limit=spend_limit, suspended=suspended
-		)
+	def update_team(self, team: str, suspended: bool | None = None, tier: str | None = None) -> dict:
+		"""The name of the team's `tier` at Grove ("" for none: Grove's default tier), whose key
+		count, monthly spend limit and rate limits Grove holds, and whether it is `suspended`,
+		each kept at Grove when None. → the team and the limits in force for it."""
+		return self.call("grove.api.update_team", team=team, suspended=suspended, tier=tier)
 
 	def provision_key(
 		self, team: str, title: str, geography: str | None = None, cap: float | None = None
@@ -97,7 +89,7 @@ class GroveClient:
 
 	def get_spend(self, team: str) -> dict:
 		"""As of Grove's last pull, in USD: `spent`, `month_spent`, `capped` (Σ live caps)
-		against `spend_limit`; and `max_keys`, `suspended`, `is_free_user`."""
+		against `spend_limit`; and `max_keys`, `suspended`."""
 		return self.call("grove.api.spend", team=team)
 
 	def get_usage(
@@ -106,8 +98,22 @@ class GroveClient:
 		month: str | None = None,
 		period: str | None = None,
 		key_hash: str | None = None,
+		pulled_after: str | None = None,
+		pulled_until: str | None = None,
 	) -> dict:
-		return self.call("grove.api.usage", teams=teams, month=month, period=period, key_hash=key_hash)
+		"""Requests and cost per team and model over a UTC `month` or `period`, or, for an invoice,
+		over a landing window: what Grove pulled between `pulled_after` and `pulled_until` (RFC 3339
+		UTC, until exclusive) whatever day it was served on. Central converts its own invoice period
+		to UTC before asking."""
+		return self.call(
+			"grove.api.usage",
+			teams=teams,
+			month=month,
+			period=period,
+			key_hash=key_hash,
+			pulled_after=pulled_after,
+			pulled_until=pulled_until,
+		)
 
 	def call(self, method: str, **body) -> dict | list:
 		try:
