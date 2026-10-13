@@ -292,7 +292,7 @@ useServerLink(
 		>
 			<p class="text-p-base text-ink-gray-7">
 				Restart
-				<span class="font-semibold text-ink-gray-9"
+				<span class="text-p-base-semibold text-ink-gray-9"
 					>{{ pendingRestart?.title || pendingRestart?.resource_id }}</span
 				>? It will be unavailable for a moment.
 			</p>

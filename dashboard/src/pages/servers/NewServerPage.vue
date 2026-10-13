@@ -253,7 +253,7 @@ watch(
 						<div class="mb-3 flex items-center justify-between gap-3">
 							<h2 class="text-base-semibold text-ink-gray-8">Region</h2>
 							<span class="text-xs text-ink-gray-5"
-								>Or pick a pin on the map</span
+								>Or select a region on the map</span
 							>
 						</div>
 						<ChoiceCards
@@ -263,7 +263,7 @@ watch(
 							@update:model-value="selectRegion"
 						>
 							<template #icon="{ option }">
-								<span class="text-xl leading-none" aria-hidden="true">
+								<span class="text-xl" aria-hidden="true">
 									{{ regionFlags[option.value] }}
 								</span>
 							</template>
@@ -309,13 +309,13 @@ watch(
 							v-else-if="bracketExhausted"
 							class="rounded-6 border border-outline-gray-2 bg-surface-gray-1 px-4 py-3"
 						>
-							<p class="text-p-sm font-medium text-ink-gray-8">
+							<p class="text-p-sm-medium text-ink-gray-8">
 								You've reached your spending limit
 							</p>
 							<p class="mt-1 text-p-sm text-ink-gray-5">
-								No plans (preset or custom) fit your remaining headroom in this
-								region. Remove a server to free some up, or contact support to
-								raise your limit.
+								No plans fit your remaining spending limit in this region.
+								Remove a server to free some up, or contact support to raise
+								your limit.
 							</p>
 						</div>
 

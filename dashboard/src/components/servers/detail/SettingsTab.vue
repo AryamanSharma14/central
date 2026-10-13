@@ -27,7 +27,7 @@ const isLocked = computed(
 	<div class="divide-y divide-outline-gray-1">
 		<SettingsSection
 			title="Resize server"
-			description="Change CPU, memory or disk. Changing CPU or memory restarts the server. A disk can grow but never shrink."
+			description="Change CPU, memory, or disk size. CPU and memory changes restart the server. Disk size can only increase."
 		>
 			<template v-if="actions.resize" #actions>
 				<Button label="Resize" :disabled="isLocked" @click="emit('resize')" />
@@ -37,7 +37,7 @@ const isLocked = computed(
 		<SettingsSection
 			v-if="actions.terminate"
 			title="Terminate server"
-			description="Destroys the server and its disk for good. Take a snapshot first to keep a copy."
+			description="Permanently deletes the server and its disk. Create a snapshot first to keep a backup."
 		>
 			<template #actions>
 				<Button

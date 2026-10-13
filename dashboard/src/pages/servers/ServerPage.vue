@@ -74,7 +74,7 @@ const metricsRange = computed<MetricsRange>({
 		return {
 			period: METRIC_PERIODS.some((option) => option.value === period)
 				? String(period)
-				: '24h',
+				: '1h',
 			start: queryValue('start'),
 			end: queryValue('end'),
 		}
@@ -85,7 +85,7 @@ const metricsRange = computed<MetricsRange>({
 		router.replace({
 			query: {
 				...route.query,
-				period: period === '24h' ? undefined : period,
+				period: period === '1h' ? undefined : period,
 				start: isCustom ? (start ?? undefined) : undefined,
 				end: isCustom ? (end ?? undefined) : undefined,
 			},
@@ -187,12 +187,13 @@ const commandCopy = computed(() =>
 		? {
 				title: 'Stop server',
 				label: 'Stop',
-				message: 'Its sites go offline until you start it again.',
+				message:
+					'Sites on this server will be unavailable until you start it again.',
 			}
 		: {
 				title: 'Restart server',
 				label: 'Restart',
-				message: 'Its sites are unavailable for a moment while it restarts.',
+				message: 'Sites on this server will be unavailable during the restart.',
 			},
 )
 
@@ -243,7 +244,7 @@ watch(
 </script>
 
 <template>
-	<div class="h-full overflow-y-auto">
+	<div class="h-full overflow-y-auto" style="scrollbar-gutter: stable">
 		<div class="mx-auto w-full max-w-5xl p-3 md:p-4 xl:pt-8">
 			<div v-if="!loaded && !fleetError" class="space-y-6" aria-busy="true">
 				<Skeleton class="h-24 rounded-6" />

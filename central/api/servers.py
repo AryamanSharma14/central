@@ -15,7 +15,7 @@ from central.integrations.servers import get_cached_metrics, reconcile
 from central.server_models import FirewallChange
 from central.utils.guards import require_capability
 
-METRICS_PERIOD_DAYS = {"24h": 1, "7d": 7, "14d": 14, "30d": 30}
+METRICS_PERIOD_HOURS = {"1h": 1, "24h": 24, "7d": 168, "14d": 336, "30d": 720}
 
 # `list_instances` reads only these non-secret Region fields — base_url, atlas_region_id
 # and webhook_secret never leave this allowlist for a non-operator caller.
@@ -172,7 +172,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 def server_metrics(
 	team: str | None = None,
 	resource_id: str | None = None,
-	period: str = "24h",
+	period: str = "1h",
 	start: str | None = None,
 	end: str | None = None,
 ) -> dict:
@@ -197,9 +197,9 @@ def server_metrics(
 def _metrics_window(period: str, start: str | None, end: str | None) -> tuple[datetime, datetime | None]:
 	"""A preset period runs until now. A custom window reads `start` and `end` on the site's
 	clock, the way the console's date pickers send them."""
-	if period in METRICS_PERIOD_DAYS:
+	if period in METRICS_PERIOD_HOURS:
 		now = datetime.now(UTC).replace(second=0, microsecond=0)
-		return now - timedelta(days=METRICS_PERIOD_DAYS[period]), None
+		return now - timedelta(hours=METRICS_PERIOD_HOURS[period]), None
 
 	if period != "custom" or not start or not end:
 		frappe.throw(_("Choose a metrics period or a start and end."), frappe.ValidationError)
@@ -214,9 +214,9 @@ def _metrics_window(period: str, start: str | None, end: str | None) -> tuple[da
 	if window_end <= window_start:
 		frappe.throw(_("The end must be after the start."), frappe.ValidationError)
 
-	longest = max(METRICS_PERIOD_DAYS.values())
-	if window_end - window_start > timedelta(days=longest):
-		frappe.throw(_("Choose {0} days or less.").format(longest), frappe.ValidationError)
+	longest = max(METRICS_PERIOD_HOURS.values())
+	if window_end - window_start > timedelta(hours=longest):
+		frappe.throw(_("Choose {0} days or less.").format(longest // 24), frappe.ValidationError)
 
 	return window_start, window_end
 

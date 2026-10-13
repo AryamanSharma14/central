@@ -4,6 +4,7 @@ Central is the control plane for Frappe Cloud V2. It signs people in, decides wh
 
 <img width="3080" height="1954" alt="CleanShot 2026-10-03 at 2 50 02 PM@2x" src="https://github.com/user-attachments/assets/7644da1f-ae09-42e3-9a5e-e0130b409995" />
 
+
 Central does not run servers. [Atlas](https://github.com/frappe/atlas) runs the virtual machines in each region, [Pilot](https://github.com/frappe/pilot) runs the benches and sites on a server, and Cargo builds the server images. See [Integrations](spec/INTEGRATIONS.md) for the contracts.
 
 ## Requirements
@@ -62,6 +63,8 @@ Open the team selector at the top of the sidebar and select a team. The console 
 The selector shows full names in tooltips. Teams with the same name show their owner, or their unique team ID when the owner is the same. With more than six teams, use search to filter by name or identifier. The list scrolls while Create team stays available.
 
 Use Enter or Space to open the selector. Use Up and Down to move between actions, Home and End to reach the first or last action, and Enter or Space to select. Tab reaches the search field and each action. Escape closes the selector and returns focus to its button.
+
+Server usage opens with the last hour selected. You can select 24 hours, 7 days, 14 days, 30 days, or a custom window of up to 30 days. Switching tabs preserves the content alignment when a scrollbar is needed.
 
 ## Run checks and tests
 

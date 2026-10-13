@@ -204,7 +204,7 @@ const matchingPreset = computed<Plan | null>(() => {
 			/>
 			<p v-if="matchingPreset" class="mt-3 text-p-xs text-ink-gray-5">
 				The
-				<span class="font-medium text-ink-gray-7"
+				<span class="text-p-xs-medium text-ink-gray-7"
 					>{{ matchingPreset.title }}</span
 				>
 				preset offers this exact shape. It may be cheaper than building it à la
