@@ -26,7 +26,7 @@ const showCreate = ref(false)
 
 <template>
 	<div
-		class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-outline-gray-1 bg-surface-gray-1 px-5 py-3.5"
+		class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-outline-gray-1 px-5 py-3.5"
 	>
 		<span
 			class="lucide-layers size-4 shrink-0 text-ink-gray-5"
@@ -35,10 +35,8 @@ const showCreate = ref(false)
 		<p class="min-w-0 flex-[1_1_18rem] text-p-sm text-ink-gray-6">
 			<span class="text-ink-gray-8">Projects</span>
 			<template v-if="count"> · {{ plural(count, 'project') }}.</template>
-			Split one invoice by customer or environment.
-			<Tooltip
-				text="Tag subscriptions into a project to see their cost grouped separately in your invoice breakdown, and optionally cap how much can be tagged into it."
-			>
+			Group invoice costs by customer or environment.
+			<Tooltip text="Group subscription costs and set project limits.">
 				<span
 					class="lucide-info ml-0.5 inline-block size-3.5 align-[-2px] text-ink-gray-4"
 					aria-label="About projects"
@@ -46,11 +44,17 @@ const showCreate = ref(false)
 			</Tooltip>
 		</p>
 		<div class="flex items-center gap-2">
-			<Button v-if="count" label="View all" @click="$emit('open')" />
+			<Button
+				v-if="count"
+				variant="outline"
+				label="View all"
+				@click="$emit('open')"
+			/>
 			<Button
 				v-if="canManageBilling"
 				icon-left="lucide-plus"
 				label="New project"
+				variant="outline"
 				@click="showCreate = true"
 			/>
 		</div>

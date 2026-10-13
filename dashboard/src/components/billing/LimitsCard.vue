@@ -109,7 +109,7 @@ const startFirstTier = () => {
 
 		<div
 			v-if="current"
-			class="-ml-px -mt-px flex min-w-0 flex-[1_1_18rem] flex-col gap-4 border-l border-t border-outline-gray-1 bg-surface-gray-1 p-5"
+			class="-ml-px -mt-px flex min-w-0 flex-[1_1_18rem] flex-col gap-4 border-l border-t border-outline-gray-1 p-5"
 		>
 			<div class="flex items-center justify-between gap-2.5">
 				<p v-if="nextLevel" class="text-sm text-ink-gray-6">
@@ -128,6 +128,7 @@ const startFirstTier = () => {
 					class="-my-1.5"
 					size="sm"
 					label="All tiers"
+					variant="outline"
 					@click="$emit('openTiers')"
 				/>
 			</div>

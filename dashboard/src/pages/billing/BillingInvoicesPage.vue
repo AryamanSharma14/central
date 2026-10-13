@@ -251,7 +251,7 @@ const eventDate = (at: string | null): string => String(at ?? '').split(',')[0]
 							</dd>
 						</div>
 						<div
-							class="mt-1 flex justify-between gap-3 border-t border-outline-gray-1 pt-2.5 font-semibold"
+							class="mt-1 flex justify-between gap-3 border-t border-outline-gray-1 pt-2.5 text-sm-semibold"
 						>
 							<dt class="text-ink-gray-8">Total</dt>
 							<dd class="tabular-nums text-ink-gray-9">
