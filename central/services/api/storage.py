@@ -62,6 +62,47 @@ def get_object_url(team: str | None = None, name: str | None = None, key: str | 
 
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
+def get_upload_url(
+	team: str | None = None,
+	name: str | None = None,
+	key: str | None = None,
+	content_type: str | None = None,
+) -> dict:
+	"""An upload link for one object that expires in 1 hour. PUT the file to it with the
+	same Content-Type. An existing object with this key is replaced."""
+	_validate_key(key)
+	content_type = content_type or "application/octet-stream"
+
+	return {"url": BucketInteractions(_team_bucket(team, name)).get_upload_url(key, content_type)}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_capability("service:manage", MANAGE_DENIED)
+def delete_objects(
+	team: str | None = None,
+	name: str | None = None,
+	keys: list[str] | None = None,
+	prefixes: list[str] | None = None,
+) -> dict:
+	"""Delete objects and folders. A folder prefix ends in `/` and takes everything under it.
+	Refuses more than 1000 objects in total."""
+	keys, prefixes = keys or [], prefixes or []
+	if not keys and not prefixes:
+		frappe.throw(_("Choose what to delete."))
+
+	for key in keys:
+		_validate_key(key)
+	for prefix in prefixes:
+		_validate_key(prefix)
+		if not prefix.endswith("/"):
+			frappe.throw(_("A folder must end in '/'."))
+
+	deleted = BucketInteractions(_team_bucket(team, name)).delete_objects(keys, prefixes)
+	return {"deleted": deleted}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_capability("service:manage", MANAGE_DENIED)
 def create_bucket(team: str | None = None, bucket_name: str | None = None, region: str | None = None) -> dict:
 	"""Create a bucket and return its secret once. The bucket is named
 	`<tenant>-<region>-<bucket_name>`, because bucket names are shared across a region."""
@@ -149,6 +190,15 @@ def _team_bucket(team: str, name: str | None, for_update: bool = False) -> TeamS
 		frappe.throw(_("No bucket '{0}' for this team.").format(name), frappe.DoesNotExistError)
 
 	return frappe.get_doc("Team Service", name, for_update=for_update)
+
+
+def _validate_key(key: str | None) -> None:
+	"""An object key or folder prefix that names something inside the bucket. An empty
+	prefix would match the whole bucket."""
+	if not key or not isinstance(key, str):
+		frappe.throw(_("Choose an object."))
+	if key.startswith("/") or ".." in key.split("/") or len(key.encode()) > 1024:
+		frappe.throw(_("'{0}' is not a valid object name.").format(key))
 
 
 def _credentials(service: TeamService) -> dict:

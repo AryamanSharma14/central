@@ -1,12 +1,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { API } from '@/api/methods'
+import { useBillingSetup } from '@/composables/useBillingSetup'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { useMyProfile } from '@/composables/useMyProfile'
 import { usePlans } from '@/composables/usePlans'
 import { useProvisioningAction } from '@/composables/useProvisioningAction'
 import { useRegionalImages } from '@/composables/useRegionalImages'
 import { useRegions } from '@/composables/useRegions'
+import { usePublicIpv4Pricing } from '@/composables/useServerAddresses'
 import { useServerMapData } from '@/composables/useServerMapData'
 import { useSession } from '@/composables/useSession'
 import {
@@ -32,6 +34,7 @@ export function useServerCreation() {
 	const route = useRoute()
 	const { regions, loading } = useRegions()
 	const { activeTeam } = useSession()
+	const { paymentMethodRequired, welcomeCredit } = useBillingSetup()
 	const { profile } = useMyProfile()
 	const fleet = useServerMapData()
 
@@ -157,6 +160,11 @@ export function useServerCreation() {
 	const sshKeyIds = ref<string[]>([])
 	watch(activeTeam, () => {
 		sshKeyIds.value = []
+	})
+	const hasPublicIpv4 = ref(false)
+	const { priceLabel: ipv4PriceLabel } = usePublicIpv4Pricing(selectedRegion)
+	watch(ipv4PriceLabel, (label) => {
+		if (!label) hasPublicIpv4.value = false
 	})
 	const hasPublicIpv6 = ref(true)
 	const isFirewallEnabled = ref(false)
@@ -335,6 +343,7 @@ export function useServerCreation() {
 					: '',
 				offeringTitle,
 				[
+					hasPublicIpv4.value ? `Public IPv4 · ${ipv4PriceLabel.value}` : '',
 					hasPublicIpv6.value ? 'Public IPv6' : '',
 					isFirewallEnabled.value ? 'Firewall on' : '',
 				]
@@ -357,6 +366,7 @@ export function useServerCreation() {
 			!name.value.trim()
 		)
 			return false
+		if (paymentMethodRequired.value) return false // the page asks for one instead
 		if (regionFull.value) return false // the region can't seat a new server right now
 		if (bracketExhausted.value) return false // nothing here fits the budget
 		return isCustom.value ? !!composedConfig.value : !!selectedPlanObj.value
@@ -377,6 +387,7 @@ export function useServerCreation() {
 			hostname: hostnameFrom(name.value),
 			...selection.value,
 			ssh_key_ids: sshKeyIds.value,
+			has_public_ipv4: hasPublicIpv4.value,
 			has_public_ipv6: hasPublicIpv6.value,
 			is_firewall_enabled: isFirewallEnabled.value,
 		}
@@ -459,6 +470,8 @@ export function useServerCreation() {
 		summary,
 		canSubmit,
 		submit,
+		paymentMethodRequired,
+		welcomeCredit,
 		offering,
 		offeringOptions,
 		imageId,
@@ -468,6 +481,8 @@ export function useServerCreation() {
 		imagesError,
 		reloadImages,
 		sshKeyIds,
+		hasPublicIpv4,
+		ipv4PriceLabel,
 		hasPublicIpv6,
 		isFirewallEnabled,
 		action,

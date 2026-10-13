@@ -162,7 +162,7 @@ export function useTeamSettings() {
 	const explainOwnerCantLeave = (team: Team): void => {
 		dialog.confirm({
 			title: 'Transfer ownership first',
-			message: `You own “${team.label}”. Hand it to another member before you leave, or delete the team.`,
+			message: `You own “${team.label}”. Transfer ownership to another member before you leave, or delete the team.`,
 			confirmLabel: 'Got it',
 		})
 	}

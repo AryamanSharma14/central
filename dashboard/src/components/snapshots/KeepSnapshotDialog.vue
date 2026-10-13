@@ -46,14 +46,16 @@ const monthly = computed(() =>
 		@confirm="emit('confirm', $event)"
 	>
 		<p v-if="target" class="text-p-base text-ink-gray-7">
-			<span class="font-semibold text-ink-gray-9">{{ target.title }}</span>
+			<span class="text-p-base-semibold text-ink-gray-9"
+				>{{ target.title }}</span
+			>
 			is no longer deleted on its own. It stays free while it is one of this
 			server's
 			{{ freePerServer }}
 			newest snapshots.
 			<template v-if="monthly != null">
 				After that it costs
-				<span class="font-semibold text-ink-gray-9"
+				<span class="text-p-base-semibold text-ink-gray-9"
 					>{{ format(monthly) }}
 					per month</span
 				>

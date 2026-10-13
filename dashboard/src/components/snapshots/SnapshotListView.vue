@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Badge, Button, Tooltip } from 'frappe-ui'
+import { Badge, Button, Dialog, Tooltip } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import {
 	createListViewQuery,
@@ -48,8 +48,15 @@ const query = ref(
 
 const freeRule = computed(
 	() =>
-		`The ${props.freePerServer} newest snapshots of each server are free. Each older one costs money by its size, per month.`,
+		`The newest ${props.freePerServer} snapshots per server are free. Older snapshots are billed by size.`,
 )
+const errorSnapshot = ref<VMSnapshotRow | null>(null)
+const errorOpen = computed({
+	get: () => errorSnapshot.value !== null,
+	set: (open: boolean) => {
+		if (!open) errorSnapshot.value = null
+	},
+})
 const monthlyTotal = computed(() => {
 	const total = props.snapshots.reduce(
 		(sum, row) => sum + (row.is_billed ? (row.monthly_cost ?? 0) : 0),
@@ -284,20 +291,29 @@ function rowActions(row: VMSnapshotRow): SnapshotAction[] {
 		</template>
 
 		<template #status="{ row }">
-			<Tooltip
-				:text="row.error_detail || undefined"
-				:disabled="!row.error_detail"
-			>
-				<Badge
-					:theme="SNAPSHOT_STATUS_THEME[row.status]"
-					variant="subtle"
-					:label="row.status"
-				/>
-			</Tooltip>
+			<Button
+				v-if="row.error_detail"
+				variant="ghost"
+				:theme="row.status === 'Failed' ? 'red' : 'gray'"
+				:label="row.status"
+				tooltip="View snapshot error"
+				@click.stop="errorSnapshot = row"
+			/>
+			<Badge
+				v-else
+				:theme="SNAPSHOT_STATUS_THEME[row.status]"
+				variant="subtle"
+				:label="row.status"
+			/>
 		</template>
 
 		<template #actions="{ row }">
 			<RowActionsMenu :options="rowActions(row)" label="Snapshot actions" />
 		</template>
 	</ListView>
+	<Dialog v-model:open="errorOpen" title="Snapshot error">
+		<p class="whitespace-pre-wrap break-words text-p-base text-ink-gray-8">
+			{{ errorSnapshot?.error_detail }}
+		</p>
+	</Dialog>
 </template>

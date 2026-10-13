@@ -46,7 +46,7 @@ const memberCountText = computed(() => {
 						shape="square"
 					/>
 					<div>
-						<p class="text-lg font-semibold text-ink-gray-9">
+						<p class="text-lg-semibold text-ink-gray-9">
 							{{ activeTeamLabel }}
 						</p>
 						<p class="mt-0.5 text-p-base text-ink-gray-5">

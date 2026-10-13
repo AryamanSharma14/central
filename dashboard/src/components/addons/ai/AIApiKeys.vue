@@ -223,7 +223,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
-							<span class="truncate text-sm font-medium text-ink-gray-9">
+							<span class="truncate text-sm-medium text-ink-gray-9">
 								{{ key.title }}
 							</span>
 							<Badge
@@ -338,7 +338,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				/>
 
 				<div>
-					<label class="mb-1 block text-p-sm font-medium text-ink-gray-7">
+					<label class="mb-1 block text-p-sm-medium text-ink-gray-7">
 						API key
 					</label>
 					<CopyableValue :value="minted.api_key" label="API key" block />

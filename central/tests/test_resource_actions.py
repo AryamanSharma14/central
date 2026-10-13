@@ -36,7 +36,9 @@ class TestResourceActions(IntegrationTestCase):
 		self.enterContext(patch("frappe.enqueue"))
 		self.enterContext(patch("frappe.db.commit"))
 		self.enterContext(patch.object(VirtualMachine, "ensure_subscription_enabled"))
-		self.enterContext(patch("central.billing.catalog.subscriptions.create_server_subscription"))
+		self.subscribe = self.enterContext(
+			patch("central.billing.catalog.subscriptions.create_server_subscription")
+		)
 		self.enterContext(
 			patch(
 				"central.integrations.pilot.central_url",
@@ -289,6 +291,23 @@ class TestResourceActions(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			frappe.get_doc("Resource Action", name).retry()
 		self.assertEqual(get_status(name)["status"], "Failed")
+
+	def test_retry_of_a_trial_site_checks_the_trial_limit_not_the_paid_policy(self):
+		name = self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"]
+		self.client.return_value.create_vm.side_effect = AtlasConnectionError("region refused")
+		_process_locked(name)
+
+		frappe.get_doc("Resource Action", name).retry()
+
+		self.assertTrue(self.purchase.call_args.kwargs["is_trial_site"])
+
+	def test_a_free_trial_site_gets_no_subscription_but_a_paid_server_does(self):
+		_process_locked(self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"])
+		self.subscribe.assert_not_called()
+
+		self.client.return_value.create_vm.return_value = {"id": "vm-00002", "tenant_id": self.team.tenant_id}
+		_process_locked(self.submit(request_key="request-key-00000002")["action"])
+		self.subscribe.assert_called_once()
 
 	def test_success_bootstraps_pilot_without_saving_plaintext_token(self):
 		name = self.submit()["action"]

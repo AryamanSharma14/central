@@ -67,7 +67,7 @@ login_site --> mint a fresh login for site.local
 
 ## Readiness
 
-Nothing is provisioned during signup, so readiness is not a build finishing. `central.api.sites.get_site` reports `ready` when one request to `<url>/api/method/ping` answers. The first successful probe records `ready_at`, queues one `site_ready` notification after commit, and sends the `trial_ready` [funnel event](../../../signups/doctype/product/SPEC.md#signup-funnel). It does not create a login session. The console polls this read and calls the POST-only `central.api.sites.login_site` operation when the user opens the site.
+Nothing is provisioned during signup, so readiness is not a build finishing. A site is ready when one request to `<url>/api/method/ping` answers. `central.api.sites.get_site` and `central.api.sites.onboarding_status` report `ready` but do not record it, because Frappe rolls back the writes of a GET request. These record readiness: the POST operations `claim_site` and `login_site`, the **Check Readiness** Desk action, and the scheduled job `central.infrastructure.doctype.site.site.record_ready_sites`. The job runs every 5 minutes and probes each Active trial site that has no `ready_at` and whose server is Running, so readiness does not wait for the customer to come back. A sleeping server is not Running, so the job does not wake it. The first recorded probe sets `ready_at`, queues one `site_ready` notification after commit, and sends the `trial_ready` [funnel event](../../../signups/doctype/product/SPEC.md#signup-funnel). A locking read makes sure that this happens once. A probe does not create a login session. The console polls `onboarding_status` and calls `claim_site` when the site is ready.
 
 `central.api.sites.onboarding_status(team, product)` first finds the selected product's non-terminated Site that the caller can view in the Team. If none exists, it follows the latest matching Site creation requested by the caller. A plain signup follows only creations without a product. It does not adopt a normal server creation or another team member's pending request. The response reports whether the site was claimed, so a returning customer can find it in the resource list. A Running state report schedules a full server refresh, so the Site record does not wait for the periodic reconciliation job.
 
@@ -103,10 +103,12 @@ The patch removes a Site only when the request of its server names an image with
 | Signup image | `Image Offering.available_in` = `Signup` or `Both` | one offering, lowest title, `Signup` preferred |
 | Signup image tags | `SIGNUP_IMAGE_TAGS` in `central/site_provisioning.py` | `has_site=1`, `frappe_version=develop` |
 | Product app tag | [`Product.signup_app`](../../../signups/doctype/product/SPEC.md) | `app=raven` |
-| Trial plan | `Plan.available_on_trial` | the cheapest eligible plan in the first Active region, by name, that has a proxy zone and offers a trial plan |
+| Trial region and plan | `Plan.available_on_trial` | the first Active region, by name, that has a proxy zone, offers a trial plan, and has a trial image for the signup. Central takes that region's cheapest trial plan. |
 
 Cargo must bake the image site as `site.local`, or Pilot does not recognise the site and no login can be minted.
 
-Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. A region without a matching image is skipped, so the next region can serve the trial. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+
+The site name page shows the zone of that same region: `central.api.sites.site_domain(team, product)` makes the region choice that creation makes. `central.api.sites.check_subdomain` checks a name in every trial zone, because the region is chosen only when the site is created.
 
 Give the trial plan the shape the image was baked at. A region restores a warm image from memory only when the vCPU count, memory and disk all match, and a trial that misses the shape cold-boots instead. `BUILD_SPEC` in Cargo's `cargo/image_builder/doctype/pilot_image/builder.py` holds that shape.

@@ -29,6 +29,7 @@ class Subscription(Document):
 		pricing_mode: DF.Literal["Preset", "Composed"]
 		service_subject: DF.Data | None
 		vm_snapshot: DF.Link | None
+		public_ip_server: DF.Link | None
 		start_date: DF.Date | None
 		sub_category: DF.Link | None
 		team: DF.Link
@@ -206,6 +207,9 @@ class Subscription(Document):
 		if doc.get("vm_snapshot"):
 			size = sum(row.quantity for row in doc.includes)
 			return f"Snapshot storage: {size:g} GB"
+		if doc.get("public_ip_server"):
+			title = frappe.db.get_value("Virtual Machine", doc.public_ip_server, "title")
+			return f"Public IPv4: {title or doc.public_ip_server}"
 		if doc.pricing_mode == "Composed":
 			from central.billing.catalog.composition import config_summary
 

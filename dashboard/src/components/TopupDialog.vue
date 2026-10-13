@@ -339,7 +339,7 @@ watch(open, (isOpen) => {
 								{{ money(gst, currency) }}
 							</dd>
 						</div>
-						<div class="flex justify-between font-medium">
+						<div class="flex justify-between text-p-sm-medium">
 							<dt class="text-ink-gray-8">You pay</dt>
 							<dd class="tabular-nums text-ink-gray-9">
 								{{ money(payable, currency) }}

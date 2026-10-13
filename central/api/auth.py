@@ -103,5 +103,5 @@ def _required_full_name(full_name: str) -> str:
 
 
 def _known_product(product: str | None) -> str | None:
-	"""A guest names the product only to label funnel events, so an unknown one is dropped."""
+	"""A guest names the product to label funnel events and brand the code email. An unknown one is dropped."""
 	return product if product and frappe.db.exists("Product", product) else None

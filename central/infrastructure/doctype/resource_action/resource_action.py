@@ -290,14 +290,11 @@ class ResourceAction(Document):
 
 	def capture_trial_event(self, event: str, **properties) -> None:
 		"""Send this trial's step to the signup funnel, once per action."""
-		from frappe.utils.telemetry import capture
+		from central.signups.funnel import capture_trial_event
 
 		site = self.get_site_creation()
-		capture(
-			event,
-			"central",
-			user=self.requested_by,
-			properties={"product": site.product if site else None, **properties},
+		capture_trial_event(
+			event, self.team, site.product if site else None, user=self.requested_by, **properties
 		)
 
 	def queue_attention_notification(self, envelope: dict | None) -> None:
@@ -398,6 +395,7 @@ class ResourceAction(Document):
 			configuration.plan,
 			[row.model_dump() for row in configuration.includes],
 			configuration.sub_category,
+			is_trial_site=self.resource_type == "Site",
 		)
 
 	@classmethod

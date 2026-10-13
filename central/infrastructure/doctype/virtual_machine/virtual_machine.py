@@ -35,6 +35,7 @@ class VirtualMachine(Document):
 		firewall_rules: DF.JSON | None
 		frappe_version: DF.Data | None
 		gateway_url: DF.Data | None
+		has_ipv4_internet: DF.Check
 		has_public_ipv6: DF.Check
 		has_site: DF.Check
 		image_offering: DF.Link | None
@@ -111,6 +112,9 @@ class VirtualMachine(Document):
 		if self.has_value_changed("status") or self.has_value_changed("plan"):
 			self.sync_subscription_on_status_change()
 
+		if self.has_value_changed("status") or self.has_value_changed("public_ipv4"):
+			self.sync_public_ipv4_billing()
+
 		if self.has_value_changed("status") and self.status == "Failed":
 			self.queue_status_notification("server_failed")
 
@@ -186,7 +190,12 @@ class VirtualMachine(Document):
 			self.disable_active_subscription()
 
 	def ensure_subscription_enabled(self):
-		"""Create the subscription if missing, else enable it if disabled."""
+		"""Create the subscription if missing, else enable it if disabled. A free trial has none."""
+		from central.signups.trial import is_billing_deferred
+
+		if is_billing_deferred(self.name):
+			return
+
 		existing = frappe.db.get_value(
 			"Subscription", {"team": self.team, "server_id": self.name}, "name", order_by="creation desc"
 		)
@@ -210,6 +219,17 @@ class VirtualMachine(Document):
 			)
 			# The observed server lifecycle owns its system-managed subscription.
 			subscription.insert(ignore_permissions=True)
+
+	def sync_public_ipv4_billing(self) -> None:
+		"""Bill a public IPv4 while Atlas reports one on this server, and stop when it is gone."""
+		from central.billing.catalog import public_ips
+
+		is_billed = bool(self.public_ipv4) and self.status != "Terminated"
+		subscription = frappe.db.get_value("Subscription", {"public_ip_server": self.name, "enabled": 1})
+		if is_billed and not subscription:
+			public_ips.open_public_ipv4_subscription(self)
+		elif subscription and not is_billed:
+			public_ips.close_public_ipv4_subscription(subscription)
 
 	def disable_active_subscription(self):
 		"""Cancel and disable the team's active subscription for this terminated server.
@@ -238,6 +258,7 @@ class VirtualMachine(Document):
 		"gateway_url",
 		"is_firewall_enabled",
 		"firewall_rules",
+		"has_ipv4_internet",
 	)
 
 	@classmethod
@@ -326,6 +347,26 @@ class VirtualMachine(Document):
 
 		self.require_live()
 		set_termination_protection(self, enabled)
+
+	def set_public_ip(self, version: int, is_attached: bool) -> bool:
+		"""Attach or detach a public address. Returns False while Atlas is still applying it."""
+		from central.billing.catalog.public_ips import require_public_ipv4_rate
+		from central.integrations.servers import set_public_ip
+
+		self.require_live()
+		if version == 4 and is_attached:
+			require_public_ipv4_rate(self.team, self.region)
+
+		return set_public_ip(self, version, is_attached)
+
+	def set_ipv4_internet(self, enabled: bool) -> None:
+		from central.integrations.servers import set_ipv4_internet
+
+		self.require_live()
+		if not enabled and self.public_ipv4:
+			frappe.throw(_("Detach the public IPv4 address before you turn off IPv4 internet access."))
+
+		set_ipv4_internet(self, enabled)
 
 	def update_firewall(self, change: FirewallChange) -> None:
 		from central.integrations.servers import update_firewall

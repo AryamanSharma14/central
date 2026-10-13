@@ -305,7 +305,7 @@ watch(open, (isOpen) => {
 							class="size-4 shrink-0 text-ink-gray-7"
 							aria-hidden="true"
 						/>
-						<span class="text-base font-medium text-ink-gray-9"
+						<span class="text-base-medium text-ink-gray-9"
 							>{{ tile.label }}</span
 						>
 						<span

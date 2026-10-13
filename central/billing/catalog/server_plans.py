@@ -74,6 +74,7 @@ def get_server_plans(
 		"max_spend": spend_cap,
 		"current_spend": current_spend,
 		"available": available,
+		"spend_limit_enforced": not is_staging_trial,
 		"capacity": {"gated": False, "available": True, "unmeasured": True, "largest_vm": None},
 	}
 	# A "design your own" config needs the same three things the slider does: the

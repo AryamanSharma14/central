@@ -80,7 +80,7 @@ const copyEndpoint = async (endpoint: string): Promise<void> => {
 		return
 	}
 
-	reportError('The endpoint could not be copied. Select it and copy by hand.')
+	reportError('Could not copy the endpoint. Select it and copy it manually.')
 }
 </script>
 
@@ -165,7 +165,7 @@ const copyEndpoint = async (endpoint: string): Promise<void> => {
 				<BucketFiles
 					v-if="activeTab === 'files'"
 					:bucket="bucket"
-					:can-download="canManageServices"
+					:can-manage="canManageServices"
 					class="mt-4 min-h-0 flex-1"
 				/>
 

@@ -62,6 +62,9 @@ export const API = {
 	renameServer: 'central.api.servers.rename_server',
 	setTerminationProtection: 'central.api.servers.set_termination_protection',
 	updateServerFirewall: 'central.api.servers.update_server_firewall',
+	setServerPublicIp: 'central.api.servers.set_server_public_ip',
+	setServerIpv4Internet: 'central.api.servers.set_server_ipv4_internet',
+	publicIpv4Pricing: 'central.api.servers.public_ipv4_pricing',
 	terminateServer: 'central.api.servers.terminate_server',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',
@@ -102,6 +105,8 @@ export const API = {
 	deleteBucket: 'central.services.api.storage.delete_bucket',
 	listBucketObjects: 'central.services.api.storage.list_objects',
 	bucketObjectUrl: 'central.services.api.storage.get_object_url',
+	bucketUploadUrl: 'central.services.api.storage.get_upload_url',
+	deleteBucketObjects: 'central.services.api.storage.delete_objects',
 
 	getProduct: 'central.api.signups.get_product',
 	sendCode: 'central.api.auth.send_code',

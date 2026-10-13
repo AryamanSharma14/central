@@ -28,7 +28,7 @@ defineSlots<{
 					<th
 						v-for="column in columns"
 						:key="column.key"
-						class="whitespace-nowrap bg-surface-gray-2 px-4 py-2 text-sm font-normal text-ink-gray-5"
+						class="whitespace-nowrap bg-surface-gray-2 px-4 py-2 text-sm text-ink-gray-5"
 						:class="column.class"
 					>
 						{{ column.label }}

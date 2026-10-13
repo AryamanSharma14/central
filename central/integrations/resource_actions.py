@@ -231,6 +231,8 @@ def _create_payload(request) -> dict:
 		"sleep_after_idle_seconds": idle_shutdown_seconds(request.team),
 		"metadata": {"central_action_id": request.name},
 	}
+	if configuration.has_public_ipv4:
+		payload["public_ipv4"] = "auto"
 	if configuration.has_public_ipv6:
 		payload["public_ipv6"] = "auto"
 	if configuration.image_tags.get("purpose") == "pilot":
@@ -256,9 +258,12 @@ def _finalize(request) -> None:
 		server_id = request.server_id
 		if not request.server:
 			from central.billing.catalog.subscriptions import create_server_subscription
+			from central.signups.trial import is_free_trial_creation
 
 			VirtualMachine.create_from_action(request, server_id)
-			create_server_subscription(request, server_id)
+			# A free trial has no subscription. Converting the trial opens it.
+			if not is_free_trial_creation(request.team, request.resource_type):
+				create_server_subscription(request, server_id)
 			PilotCredential.link_server(request.credential, server_id)
 			UserMailAccount.link_server(request.name, server_id)
 			request.db_set({"server": server_id, "resource_id": server_id})

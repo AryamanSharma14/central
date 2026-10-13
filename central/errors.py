@@ -142,6 +142,12 @@ ERROR_CATALOG: dict[str, dict] = {
 		"remediation": "",
 		"retriable": False,
 	},
+	"PAYMENT_METHOD_REQUIRED": {
+		"title": "Add a payment method to create servers",
+		"message": "Your credit does not cover this server, and your team has no payment method.",
+		"remediation": "Add your billing details and a payment method in Billing. You also get the welcome credit.",
+		"retriable": False,
+	},
 	"MAILBOX_POOL_EMPTY": {
 		"title": "The server wasn't created",
 		"message": "This region has no mailbox ready for a new server. No server was created.",

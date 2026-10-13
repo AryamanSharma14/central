@@ -264,6 +264,7 @@ class TestTrialPlanMenu(IntegrationTestCase):
 		plans = {p["plan"] for p in _flat(out)}
 		self.assertTrue({CHEAP, MID, PRICEY}.issubset(plans))  # trial bypasses the headroom filter
 		self.assertEqual(out["profiles"], [])  # composed still suppressed for a trial
+		self.assertFalse(out["spend_limit_enforced"])
 
 	def test_menu_limited_to_configured_trial_plans(self):
 		for name in (CHEAP, MID):
@@ -281,3 +282,4 @@ class TestTrialPlanMenu(IntegrationTestCase):
 		frappe.db.set_value("Team", TEAM, "is_staging_trial", 0)
 		out = get_eligible_plans(cluster=CLUSTER, team=TEAM)
 		self.assertEqual({CHEAP, MID, PRICEY} & {p["plan"] for p in _flat(out)}, set())
+		self.assertTrue(out["spend_limit_enforced"])

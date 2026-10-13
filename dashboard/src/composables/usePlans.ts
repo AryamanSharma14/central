@@ -2,6 +2,7 @@ import { useCall } from 'frappe-ui'
 import { computed, type Ref, watch } from 'vue'
 import { API, method } from '@/api/methods'
 import { useSession } from '@/composables/useSession'
+import { isAbortError } from '@/lib/feedback'
 import type {
 	Capacity,
 	Plan,
@@ -91,9 +92,12 @@ export function usePlans(
 	const groups = computed<Record<string, Plan[]>>(() =>
 		current.value ? (call.data?.plans ?? {}) : {},
 	)
+	// A reload aborts the request in flight, and the aborted request still reports its
+	// error after the newer one succeeds. It is not a failure to show.
+	const error = computed(() => (isAbortError(call.error) ? null : call.error))
 
 	return {
-		error: computed(() => call.error),
+		error,
 		reload: () => call.reload(),
 		groups,
 		classes: computed<string[]>(() => Object.keys(groups.value)),
@@ -101,7 +105,11 @@ export function usePlans(
 		currency: computed<string | null>(() => call.data?.currency ?? null),
 		tier: computed<string | null>(() => call.data?.tier ?? null),
 		// Remaining trust-tier headroom in the team's currency — explains an empty menu.
-		available: computed<number | null>(() => call.data?.available ?? null),
+		available: computed<number | null>(() =>
+			call.data?.spend_limit_enforced === false
+				? Infinity
+				: (call.data?.available ?? null),
+		),
 		// "Design your own" inputs: the per-resource rate card + the profile bounds.
 		rateCard: computed<RateCard>(() =>
 			current.value ? (call.data?.rate_card ?? {}) : {},
@@ -118,7 +126,7 @@ export function usePlans(
 		loading: computed(
 			() =>
 				call.loading ||
-				(!call.error &&
+				(!error.value &&
 					!!region.value &&
 					(!imageSelection || !!imageSelection.value) &&
 					!current.value),

@@ -35,6 +35,7 @@ jobs:
           yarn --cwd dashboard install --frozen-lockfile
           yarn --cwd dashboard type-check
           yarn --cwd dashboard lint
+          node --test dashboard/tests/*.test.mjs
 
       - name: Download Semgrep rules
         run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-rules

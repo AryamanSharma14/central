@@ -11,10 +11,13 @@ fixtures = [
 	# promotion thresholds — reference data every team's caps resolve against.
 	"Trust Tier Level",
 	{"dt": "Team Role", "filters": [["is_system", "=", 1]]},
-	# Warpgate signs in through the Central OpenID Connect provider and checks these roles.
+	# Warpgate signs in through the Central OpenID Connect provider and checks the Atlas roles.
+	# Product Operators create and edit products; only System Managers delete them.
 	{
 		"dt": "Role",
-		"filters": [["name", "in", ["Central User", "Atlas Host Access", "Atlas Warpgate Admin"]]],
+		"filters": [
+			["name", "in", ["Central User", "Atlas Host Access", "Atlas Warpgate Admin", "Product Operator"]]
+		],
 	},
 	"Notification Event Type",
 ]
@@ -187,6 +190,9 @@ doc_events = {
 		# Its email is the alert address of the team's Grove user when set.
 		"on_update": "central.services.ai.on_alert_address_update",
 	},
+	"Payment Method": {
+		"on_update": "central.signups.credit.on_payment_method_update",
+	},
 }
 
 # Scheduled Tasks
@@ -206,6 +212,8 @@ scheduler_events = {
 		# Retry proxy routes that failed or never ran, up to the attempt limit.
 		"*/5 * * * *": [
 			"central.infrastructure.doctype.site_domain.site_domain.retry_failed",
+			# Record readiness of a site the customer left before it answered.
+			"central.infrastructure.doctype.site.site.record_ready_sites",
 			# Snapshots have no region event, so Central reads each one until it settles.
 			"central.infrastructure.doctype.vm_snapshot.vm_snapshot.sync_pending_snapshots",
 			"central.infrastructure.doctype.frappemail_service.frappemail_service.refill_mailboxes",
@@ -220,6 +228,8 @@ scheduler_events = {
 	],
 	"daily": [
 		"central.identity.doctype.team_invitation.team_invitation.expire_pending_invitations",
+		# Warn, stop and terminate trial sites by their dates.
+		"central.signups.trial.run_trials",
 		# Billing (module): retry/dunning + staged suspension for unpaid invoices,
 		# and pruning Payment Attempt / Webhook Event logs.
 		"central.billing.revenue.dunning.run_dunning",

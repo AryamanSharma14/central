@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 import frappe
 from frappe import _
 from frappe.utils import cint, escape_html, random_string, today
@@ -8,6 +11,9 @@ from frappe.utils.telemetry import capture
 from central.geo import warm_country_cache
 from central.identity.email_code import EmailCode
 
+if TYPE_CHECKING:
+	from central.signups.doctype.product.product import Product
+
 CENTRAL_USER_ROLE = "Central User"
 
 
@@ -15,19 +21,41 @@ def send_sign_in_code(email: str, full_name: str | None = None, product: str | N
 	"""Email a code to any address. A new address gets an account when the code is verified.
 
 	A disabled account gets a notice instead of a code, so the caller cannot tell it apart.
-	`product` only labels the signup funnel event."""
+	`product` labels the signup funnel event, and its branding replaces Frappe Cloud's."""
+	from central.signups.doctype.product.product import get_email_product
+
 	user = _find_user(email)
 	if user and not user.enabled:
 		EmailCode(email).hold()
 		_send_disabled_notice(email)
-	elif user:
-		EmailCode(email).send(_("{0} is your Frappe Cloud sign-in code"), _("Sign in to Frappe Cloud"))
-	else:
-		EmailCode(email).send(
-			_("{0} is your Frappe Cloud signup code"), _("Create your Frappe Cloud account"), full_name
-		)
+		return
+
+	subject, heading, brand = get_code_email(get_email_product(product), is_new_user=not user)
+	EmailCode(email).send(subject, heading, None if user else full_name, brand)
+	if not user:
 		capture("signup_code_sent", "central", user=email, properties={"product": product})
 		warm_country_cache()
+
+
+def get_code_email(
+	product: Product | None, is_new_user: bool
+) -> tuple[Callable[[str], str], str, dict | None]:
+	"""The subject builder, heading and header branding of a code email. A product with its own
+	branding names itself instead of Frappe Cloud."""
+	brand = product.get_email_brand() if product else None
+	name = product.title if brand else "Frappe Cloud"
+	if is_new_user:
+		return (
+			lambda code: _("{0} is your {1} signup code").format(code, name),
+			_("Create your {0} account").format(escape_html(name)),
+			brand,
+		)
+
+	return (
+		lambda code: _("{0} is your {1} sign-in code").format(code, name),
+		_("Sign in to {0}").format(escape_html(name)),
+		brand,
+	)
 
 
 def sign_in_with_code(

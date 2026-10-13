@@ -15,7 +15,7 @@ from central.integrations.servers import get_cached_metrics, reconcile
 from central.server_models import FirewallChange
 from central.utils.guards import require_capability
 
-METRICS_PERIOD_DAYS = {"24h": 1, "7d": 7, "14d": 14, "30d": 30}
+METRICS_PERIOD_HOURS = {"1h": 1, "24h": 24, "7d": 168, "14d": 336, "30d": 720}
 
 # `list_instances` reads only these non-secret Region fields — base_url, atlas_region_id
 # and webhook_secret never leave this allowlist for a non-operator caller.
@@ -144,6 +144,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 			"has_public_ipv6": row.has_public_ipv6,
 			"is_firewall_enabled": row.is_firewall_enabled,
 			"is_termination_protected": row.is_termination_protected,
+			"has_ipv4_internet": row.has_ipv4_internet,
 			"firewall_rules": frappe.parse_json(row.firewall_rules) if row.firewall_rules else None,
 			"ssh_command": _ssh_command(row),
 			"ssh_keys": _server_ssh_keys(row.resource_id),
@@ -171,7 +172,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 def server_metrics(
 	team: str | None = None,
 	resource_id: str | None = None,
-	period: str = "24h",
+	period: str = "1h",
 	start: str | None = None,
 	end: str | None = None,
 ) -> dict:
@@ -196,9 +197,9 @@ def server_metrics(
 def _metrics_window(period: str, start: str | None, end: str | None) -> tuple[datetime, datetime | None]:
 	"""A preset period runs until now. A custom window reads `start` and `end` on the site's
 	clock, the way the console's date pickers send them."""
-	if period in METRICS_PERIOD_DAYS:
+	if period in METRICS_PERIOD_HOURS:
 		now = datetime.now(UTC).replace(second=0, microsecond=0)
-		return now - timedelta(days=METRICS_PERIOD_DAYS[period]), None
+		return now - timedelta(hours=METRICS_PERIOD_HOURS[period]), None
 
 	if period != "custom" or not start or not end:
 		frappe.throw(_("Choose a metrics period or a start and end."), frappe.ValidationError)
@@ -213,9 +214,9 @@ def _metrics_window(period: str, start: str | None, end: str | None) -> tuple[da
 	if window_end <= window_start:
 		frappe.throw(_("The end must be after the start."), frappe.ValidationError)
 
-	longest = max(METRICS_PERIOD_DAYS.values())
-	if window_end - window_start > timedelta(days=longest):
-		frappe.throw(_("Choose {0} days or less.").format(longest), frappe.ValidationError)
+	longest = max(METRICS_PERIOD_HOURS.values())
+	if window_end - window_start > timedelta(hours=longest):
+		frappe.throw(_("Choose {0} days or less.").format(longest // 24), frappe.ValidationError)
 
 	return window_start, window_end
 
@@ -289,6 +290,7 @@ def _overview_server_row(resource_id: str, team: str):
 			server.has_public_ipv6,
 			server.is_firewall_enabled,
 			server.is_termination_protected,
+			server.has_ipv4_internet,
 			server.firewall_rules,
 			server.gateway_url,
 			server.creation,
@@ -477,6 +479,51 @@ def set_termination_protection(
 	server.set_termination_protection(bool(frappe.utils.cint(enabled)))
 
 
+@frappe.whitelist(methods=["GET"])
+@require_capability("server:view", _lt("You can't view this team's servers."))
+def public_ipv4_pricing(team: str | None = None, region: str | None = None) -> dict:
+	"""The monthly price of one public IPv4 in `region`, shown before the customer commits."""
+	from central.billing.catalog.public_ips import get_public_ipv4_rate
+
+	rate, currency = get_public_ipv4_rate(team, region)
+	return {"rate": rate, "currency": currency}
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability(
+	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+)
+def set_server_public_ip(
+	team: str | None = None,
+	resource_id: str | None = None,
+	version: int | str = 4,
+	is_attached: bool | int | str = True,
+) -> dict:
+	"""Attach or detach the public IPv4 or IPv6 address. Gated on `server:network`. Returns
+	`is_pending` when Atlas is still applying the change."""
+	version = frappe.utils.cint(version)
+	if version not in (4, 6):
+		frappe.throw(_("Choose IPv4 or IPv6."))
+
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	is_done = server.set_public_ip(version, bool(frappe.utils.cint(is_attached)))
+	return {"is_pending": not is_done}
+
+
+@frappe.whitelist(methods=["POST"])
+@handle_resource_operation
+@require_capability(
+	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+)
+def set_server_ipv4_internet(
+	team: str | None = None, resource_id: str | None = None, enabled: bool | int | str = True
+) -> None:
+	"""Turn IPv4 internet access on or off. Gated on `server:network`."""
+	server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
+	server.set_ipv4_internet(bool(frappe.utils.cint(enabled)))
+
+
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
 @require_capability("server:network", _lt("You can't change the network of this team's servers."))
@@ -546,6 +593,7 @@ def create_server(
 	hostname: str | None = None,
 	ssh_keys: list[str] | None = None,
 	ssh_key_ids: list[str] | None = None,
+	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
 	snapshot: str | None = None,
@@ -564,6 +612,7 @@ def create_server(
 		hostname=hostname,
 		ssh_keys=ssh_keys,
 		ssh_key_ids=ssh_key_ids,
+		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
 		snapshot=snapshot,
@@ -584,6 +633,7 @@ def create_composed_server(
 	hostname: str | None = None,
 	ssh_keys: list[str] | None = None,
 	ssh_key_ids: list[str] | None = None,
+	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
 	snapshot: str | None = None,
@@ -603,6 +653,7 @@ def create_composed_server(
 		hostname=hostname,
 		ssh_keys=ssh_keys,
 		ssh_key_ids=ssh_key_ids,
+		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
 		snapshot=snapshot,

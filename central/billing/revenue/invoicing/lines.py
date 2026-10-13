@@ -54,7 +54,9 @@ def compute_line_items(
 	team's subscriptions once rather than once per cluster.
 	"""
 	subscriptions = frappe.get_all(
-		"Subscription", filters={"team": team}, fields=["name", "server_id", "vm_snapshot"]
+		"Subscription",
+		filters={"team": team},
+		fields=["name", "server_id", "vm_snapshot", "public_ip_server"],
 	)
 	# Resolve every subscription's cluster in one query per kind (not a get_value per
 	# subscription), then keep only the subs that bill in this cluster.
@@ -87,7 +89,9 @@ def team_line_items(team: str, period_start, period_end, explain: bool = False, 
 	its own subscription's cluster. The union of lines is identical either way.
 	"""
 	subscriptions = frappe.get_all(
-		"Subscription", filters={"team": team}, fields=["name", "server_id", "vm_snapshot"]
+		"Subscription",
+		filters={"team": team},
+		fields=["name", "server_id", "vm_snapshot", "public_ip_server"],
 	)
 	clusters = _subscription_clusters(subscriptions)
 	changes_by_sub = _resolve_changes([s.name for s in subscriptions], changes)
@@ -105,15 +109,16 @@ def team_line_items(team: str, period_start, period_end, explain: bool = False, 
 
 
 def _subscription_clusters(subscriptions: list) -> dict[str, str]:
-	"""Map each subscription to the cluster it bills in: its server's, or its snapshot's.
-	A service subscription has neither and bills only through metered usage."""
+	"""Map each subscription to the cluster it bills in: its server's, its snapshot's, or the
+	server's whose public IPv4 it bills. A service subscription has none and bills only through
+	metered usage."""
 	from central.billing.catalog.snapshots import snapshot_regions
 
-	servers = _server_clusters([s.server_id for s in subscriptions])
+	servers = _server_clusters([s.server_id or s.public_ip_server for s in subscriptions])
 	snapshots = snapshot_regions([s.vm_snapshot for s in subscriptions])
 	clusters = {}
 	for sub in subscriptions:
-		cluster = servers.get(sub.server_id) or snapshots.get(sub.vm_snapshot)
+		cluster = servers.get(sub.server_id or sub.public_ip_server) or snapshots.get(sub.vm_snapshot)
 		if cluster:
 			clusters[sub.name] = cluster
 	return clusters

@@ -130,7 +130,7 @@ const { selectedKey, selected, select, clear } = useTeamRowSelection(
 				</div>
 
 				<div class="min-w-0">
-					<p class="truncate font-medium text-ink-gray-9">
+					<p class="truncate text-sm-medium text-ink-gray-9">
 						{{ row.role_name }}
 					</p>
 					<p class="truncate text-p-sm text-ink-gray-5">

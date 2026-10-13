@@ -124,7 +124,8 @@ Plan Configurator ─→ Category, Sub-Category, [C]base_rates, [C]rungs(─→P
 ```
 Subscription ──team, ──project─→ Project, ──plan, ──sub_category, ──includes─→ [C]Plan Includes,
              ──default_payment_method, ──gateway, ──server_id─→ Virtual Machine,
-             ──vm_snapshot─→ VM Snapshot, cluster (read-only, from server_id.region), service_subject
+             ──vm_snapshot─→ VM Snapshot, ──public_ip_server─→ Virtual Machine (its public IPv4),
+             cluster (read-only, from server_id.region), service_subject
 Subscription Change ──subscription, ──team, ──currency      (append-only history + locked_rate)
 Project ──team, ──title, ──enabled, ──spending_limit          (cost-tag + run-rate cap; see §2.1)
 ```
@@ -388,7 +389,7 @@ central.api.servers.create_server | create_composed_server
   → central.resource_actions.submit_request         (locks the Team row)
       → validate_purchase
           → plan from get_server_plans, or composition.validate_composition + pricing.resolve_config_rate
-          → billing_profile.require_billing_profile_or_credit(team, rate + reserved_rate(team))
+          → resource_actions.require_payment_method_or_credit(team, rate + reserved_rate(team))
           → spending-limit check against the catalog's available headroom
       → Resource Action (carries reserved_monthly_rate)
   → central/integrations → Atlas creates the VM
@@ -590,10 +591,10 @@ get_team_caps resolves caps live (no per-team Trust Tier doctype — dropped)
 | Invoice wrong amount | `lines.compute_line_items` (day-weighting), `metering.metered_line_items`, `commitments` discount, `tax.resolve_tax`; verify Subscription Change `locked_rate` segments |
 | Charge stuck "Open"/unpaid | `payments/webhooks.py` (signature failed? Webhook Event row?), `charges.apply_webhook`, `collection.collect_invoice` fallback chain |
 | Webhook ignored | `webhooks.process_webhook` signature check; gateway `verify_webhook_signature`; dedupe against existing Webhook Event |
-| Money movement blocked | `settlement.can_accept_spend` / `effective_spend_cap`; Billing Profile complete? Credits can fund a create without a profile (`billing_profile.require_billing_profile_or_credit`); currency set? `collection_mode.evaluate` (INR ₹15k gate) |
+| Money movement blocked | `settlement.can_accept_spend` / `effective_spend_cap`; Billing Profile complete? Credits can fund a create without a profile; otherwise a payment method is needed (`resource_actions.require_payment_method_or_credit`); currency set? `collection_mode.evaluate` (INR ₹15k gate) |
 | Wrong price | rate resolution: `catalog/pricing.py` (`resolve_rate`/`resolve_config_rate`), `rate_card`, Plan Configurator is the single pricing authority (ADR 0011) |
 | Tier/cap wrong | `catalog.entitlements` (`get_team_caps`, `evaluate_tier`, per-currency Trust Tier Threshold) |
-| Provisioning failed | `central.resource_actions.submit_request` / `validate_purchase` (`require_billing_profile_or_credit`, `reserved_rate`, spending limit), the Resource Action record, `composition.validate_composition` bounds |
+| Provisioning failed | `central.resource_actions.submit_request` / `validate_purchase` (`require_payment_method_or_credit`, `reserved_rate`, spending limit), the Resource Action record, `composition.validate_composition` bounds |
 | Invoice stuck in Draft | `lifecycle._hold_for_billing_details` / `held_drafts`: is the Billing Profile incomplete? `platform.alerts.held_invoices` lists drafts held past `billing_details_grace_days` |
 | Card declined repeatedly | `collection` (escalate don't repeat), `mandates.effective_cap`, dunning Day 1/3/7 |
 | A line's Project breakdown is missing/wrong | `generate._tag_projects`/`_resource_project_map` — is the resource's Subscription tagged, is its Project `enabled`? A disabled Project's lines carry no tag by design (§2.1); check `Invoice Line Item.project`/`project_title` on a real invoice, or the same fields on a forecast line |

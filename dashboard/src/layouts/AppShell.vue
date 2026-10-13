@@ -3,6 +3,7 @@ import {
 	BottomSheet,
 	Breadcrumbs,
 	DesktopShell,
+	Dialogs,
 	MobileNav,
 	MobileNavItem,
 	ToastProvider,
@@ -14,7 +15,6 @@ import Sidebar from '@/components/navigation/Sidebar.vue'
 import NotificationsPanel from '@/components/notifications/NotificationsPanel.vue'
 import OnboardingDialog from '@/components/onboarding/OnboardingDialog.vue'
 import SettingsModal from '@/components/settings/SettingsModal.vue'
-import SwitchTeamDialog from '@/components/team/SwitchTeamDialog.vue'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
 import { useIsMobile } from '@/composables/useIsMobile'
 import { useNotificationsRealtime } from '@/composables/useNotifications'
@@ -44,6 +44,9 @@ const { items, resetBreadcrumbs } = useBreadcrumbs()
 const isMobile = useIsMobile()
 
 const mobileNavDrawer = ref(false)
+watch(teamSwitcherOpen, (open) => {
+	if (open && isMobile.value) mobileNavDrawer.value = true
+})
 watch(
 	() => route.name,
 	() => {
@@ -122,10 +125,10 @@ const breadcrumbs = computed(
 	</BottomSheet>
 
 	<ErrorAlertHost />
+	<Dialogs />
 	<!-- Toasts are reserved for short success and non-actionable status updates. -->
 	<ToastProvider />
 	<SettingsModal v-if="!isMobile" />
 	<SearchDialog v-if="searchMounted" v-model:open="searchOpen" />
-	<SwitchTeamDialog v-model:open="teamSwitcherOpen" />
 	<OnboardingDialog />
 </template>

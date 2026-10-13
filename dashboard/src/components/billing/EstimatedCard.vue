@@ -190,9 +190,7 @@ async function submitAlert(): Promise<void> {
 
 		<template v-else>
 			<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-				<span
-					class="text-8xl-semibold leading-none tracking-tight tabular-nums text-ink-gray-9"
-				>
+				<span class="text-8xl-semibold tabular-nums text-ink-gray-9">
 					{{ money(soFar, currency) }}
 				</span>
 				<span class="text-base text-ink-gray-5">

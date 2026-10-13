@@ -56,7 +56,27 @@ yarn install
 yarn dev
 ```
 
+## Switch teams in the console
+
+Open the team selector at the top of the sidebar and select a team. The console reloads the current section with that team's data. A server detail or creation page returns to Servers. A bucket detail page returns to Object Storage. Browser storage must be available to retain the selected team. The profile menu contains Theme with System, Light, and Dark options.
+
+The selector shows full names in tooltips. Teams with the same name show their owner, or their unique team ID when the owner is the same. With more than six teams, use search to filter by name or identifier. The list scrolls while Create team stays available.
+
+Use Enter or Space to open the selector. Use Up and Down to move between actions, Home and End to reach the first or last action, and Enter or Space to select. Tab reaches the search field and each action. Escape closes the selector and returns focus to its button.
+
+Server usage opens with the last hour selected. You can select 24 hours, 7 days, 14 days, 30 days, or a custom window of up to 30 days. Switching tabs preserves the content alignment when a scrollbar is needed.
+
+The map uses theme-aware contrast for world dots and region controls. The team selector uses standard Frappe UI typography with a small gap between the product name and team name.
+
 ## Run checks and tests
+
+The dashboard uses the installed Frappe UI typography tokens. Use `text-<size>-<weight>` for labels and headings, and `text-p-<size>` for paragraphs. These classes set size, weight, line height, and spacing together. Provider fallback initials use the same type scale at each avatar size.
+
+Run the team session checks with `node --test dashboard/tests/team-session.test.mjs`. These checks verify team selection, section navigation, and browser storage failures without a running site.
+
+Run presentation checks with `node --test dashboard/tests/team-labels.test.mjs`. These checks verify duplicate team names, full team identities, and readable permission labels.
+
+Run all frontend regression checks with `node --test dashboard/tests/*.test.mjs`. These checks also cover menu keyboard navigation, invitation rows, role permission states, and snapshot error dialogs. They render Vue components without a browser or site data.
 
 Run the linters from `apps/central`:
 
@@ -75,6 +95,8 @@ pilot frappe --site central-test.localhost run-tests --app central
 ```
 
 See [`e2e/README.md`](e2e/README.md) for the Playwright suite.
+
+Run the isolated server control checks with `yarn test:server-controls`. These checks render the resize and firewall components with mocked API responses. They do not change a server. Install the Playwright browser first, or set `PLAYWRIGHT_CHANNEL=chrome` to use an installed Chrome browser.
 
 ## Documentation
 

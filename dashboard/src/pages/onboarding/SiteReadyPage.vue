@@ -101,10 +101,10 @@ onUnmounted(() => clearTimeout(timer))
 			>
 				<span class="lucide-check size-5" aria-hidden="true" />
 			</div>
-			<h1 class="text-2xl font-semibold text-ink-gray-9">Your site is ready</h1>
+			<h1 class="text-2xl-semibold text-ink-gray-9">Your site is ready</h1>
 			<p class="mt-2 text-p-base text-ink-gray-5">
 				Signing you in to
-				<span class="font-medium text-ink-gray-8">{{ site.url }}</span>…
+				<span class="text-p-base-medium text-ink-gray-8">{{ site.url }}</span>…
 			</p>
 
 			<div class="mt-8 flex items-center gap-3 text-ink-gray-5">
@@ -114,7 +114,7 @@ onUnmounted(() => clearTimeout(timer))
 		</template>
 
 		<template v-else-if="error && site?.ready">
-			<h1 class="text-2xl font-semibold text-ink-gray-9">Your site is ready</h1>
+			<h1 class="text-2xl-semibold text-ink-gray-9">Your site is ready</h1>
 			<p class="mt-2 text-p-base text-ink-gray-5">
 				We couldn't sign you in automatically, but your site is up. Open it and
 				sign in as Administrator.
@@ -130,9 +130,7 @@ onUnmounted(() => clearTimeout(timer))
 		</template>
 
 		<template v-else-if="isFailed">
-			<h1
-				class="flex items-center gap-2 text-2xl font-semibold text-ink-gray-9"
-			>
+			<h1 class="flex items-center gap-2 text-2xl-semibold text-ink-gray-9">
 				<ProductLogo />
 				Setup didn't finish
 			</h1>
@@ -145,16 +143,14 @@ onUnmounted(() => clearTimeout(timer))
 		</template>
 
 		<template v-else>
-			<h1
-				class="flex items-center gap-2 text-2xl font-semibold text-ink-gray-9"
-			>
+			<h1 class="flex items-center gap-2 text-2xl-semibold text-ink-gray-9">
 				<ProductLogo />
 				Setting up your site…
 			</h1>
 			<p class="mt-2 text-p-base text-ink-gray-5">
 				<template v-if="site?.url">
 					We're getting
-					<span class="font-medium text-ink-gray-8">{{ site.url }}</span>
+					<span class="text-p-base-medium text-ink-gray-8">{{ site.url }}</span>
 					ready. This takes a moment.
 				</template>
 				<template v-else>

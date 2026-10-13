@@ -3,15 +3,15 @@
 """One-time provisioning when a team completes its billing profile.
 
 Setting up a billing profile is the moment a team becomes a real paying customer,
-so three things are wired up here, once, off that event:
+so two things are wired up here, once, off that event:
 
   - the entry Trust Tier (the ladder rung every team starts on, so its caps resolve);
-  - a Tax Profile (GST for India, untaxed elsewhere at launch);
-  - a welcome grant of promotional credits.
+  - a Tax Profile (GST for India, untaxed elsewhere at launch).
 
 Each step is independently idempotent and guarded, so this is safe to re-run on
 every save of the profile — a step that has already happened (tier linked, tax
-profile exists, credits granted) is skipped.
+profile exists) is skipped. Welcome credits are granted when a payment method
+becomes active (`central.signups.credit`), not here.
 """
 
 import frappe
@@ -20,13 +20,12 @@ from central.billing import settings
 
 
 def provision_billing_profile(team: str) -> None:
-	"""Assign the entry tier, a tax profile, and welcome credits for `team`.
+	"""Assign the entry tier and a tax profile for `team`.
 
 	Idempotent and best-effort per step; call it after a billing profile is
 	created/updated."""
 	assign_entry_tier(team)
 	ensure_tax_profile(team)
-	grant_welcome_credits(team)
 
 
 def provision_signup_billing(team: str, country: str | None) -> None:
@@ -34,8 +33,9 @@ def provision_signup_billing(team: str, country: str | None) -> None:
 
 	Stamps a minimal Billing Profile with the country and the currency it implies
 	(India → INR, everything else → USD), then runs the standard provisioning so
-	the team gets its entry tier, tax profile, and welcome credits in that currency
-	right away — no waiting for the full address.
+	the team gets its entry tier and tax profile right away — no waiting for the
+	full address. A staging trial also gets its welcome credits now, because it
+	runs servers on them before it has a payment method.
 
 	The profile is created with `ignore_mandatory`: at signup we only know the
 	country, and the legal name / address are filled in later from the dashboard.
@@ -55,6 +55,8 @@ def provision_signup_billing(team: str, country: str | None) -> None:
 		profile.insert(ignore_permissions=True, ignore_mandatory=True)
 
 	provision_billing_profile(team)
+	if frappe.db.get_value("Team", team, "is_staging_trial"):
+		grant_welcome_credits(team)
 	complete_trial_billing_profile(team)
 
 
@@ -176,11 +178,12 @@ def grant_welcome_credits(team: str) -> None:
 	credits.grant_promotional_credits(team, amount, currency)
 
 
-def has_owner_received_welcome_credits(team: str) -> bool:
+def has_owner_received_welcome_credits(team: str, lock: bool = True) -> bool:
 	"""Whether any team of this team's owner already holds a Promotion grant."""
 	owner = frappe.db.get_value("Team", team, "owner_user")
-	# Lock the owner so two of their teams provisioning at once cannot both pass this check.
-	frappe.db.get_value("User", owner, "name", for_update=True)
+	if lock:
+		# Lock the owner so two of their teams provisioning at once cannot both pass this check.
+		frappe.db.get_value("User", owner, "name", for_update=True)
 	owned_teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name")
 	return bool(
 		frappe.db.exists("Credit Ledger Entry", {"team": ["in", owned_teams], "reference_type": "Promotion"})

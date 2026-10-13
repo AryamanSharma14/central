@@ -159,7 +159,7 @@ const products = computed(() => {
 
 		<div
 			v-else-if="!history"
-			class="flex items-center justify-between gap-3 rounded-5 bg-surface-gray-1 px-4 py-3"
+			class="flex items-center justify-between gap-3 rounded-5 px-4 py-3"
 		>
 			<p class="text-p-sm text-ink-gray-6">Couldn't load your spend.</p>
 			<Button label="Retry" @click="reports.reload()" />
@@ -167,7 +167,7 @@ const products = computed(() => {
 
 		<p
 			v-else-if="reports.neverBilled.value"
-			class="rounded-5 bg-surface-gray-1 px-4 py-3 text-p-sm text-ink-gray-6"
+			class="rounded-5 px-4 py-3 text-p-sm text-ink-gray-6"
 		>
 			Your spend, payments and tax show up here after your first invoice.
 		</p>
@@ -177,7 +177,7 @@ const products = computed(() => {
 				<div
 					v-for="stat in stats"
 					:key="stat.label"
-					class="rounded-5 bg-surface-gray-1 px-4 py-3.5"
+					class="rounded-5 px-4 py-3.5"
 				>
 					<dt class="text-sm text-ink-gray-5">{{ stat.label }}</dt>
 					<dd

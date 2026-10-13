@@ -16,11 +16,14 @@ from central.utils.guards import require_capability
 
 @frappe.whitelist(methods=["GET"])
 @require_capability("server:create", _lt("You can't create sites for this Team."))
-def site_domain(team: str | None = None) -> dict:
-	"""The zone a new site is named in, so the console can show the suffix as they type."""
+def site_domain(team: str | None = None, product: str | None = None) -> dict:
+	"""The zone a new site of this product is named in, so the console can show the suffix as
+	they type. It is the zone of the region that the trial is then created in."""
+	from central.signups.doctype.product.product import get_signup_product
 	from central.site_provisioning import trial_zone
 
-	return {"domain": trial_zone()}
+	signup_app = get_signup_product(product).signup_app if product else None
+	return {"domain": trial_zone(team, signup_app)}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -161,10 +164,11 @@ def terminate_site(name: str) -> dict:
 
 def site_state(site: Site, with_login: bool = True) -> dict:
 	"""The site's readiness: its machine is awake and the site answers.
-	A login is minted only when asked, because each one starts a real Administrator session."""
+	A login is minted only when asked, because each one starts a real Administrator session.
+	Only the POST calls that ask for a login record readiness, because Frappe rolls back a GET."""
 	status = site.status
 	ready = is_site_reachable(site.url)
-	if ready:
+	if ready and with_login:
 		site.record_ready()
 	login_url = None
 	login_pending = False

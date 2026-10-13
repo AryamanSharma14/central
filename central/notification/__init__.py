@@ -5,7 +5,7 @@ import frappe
 from frappe.query_builder import Criterion, Order
 from frappe.query_builder.functions import Count
 
-CATEGORIES = ("Billing", "Server", "Team")
+CATEGORIES = ("Billing", "Server", "Team", "Trial")
 SEVERITIES = ("Info", "Success", "Warning", "Error")
 # Records that point at one server through their `server` field.
 SERVER_LINKED_DOCTYPES = ("Resource Action", "VM Snapshot", "Site", "Site Domain")

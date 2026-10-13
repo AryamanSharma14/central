@@ -32,7 +32,7 @@ export interface ServerActions {
 	/** Sign in to the server's bench or site, which is an Administrator session. */
 	open: boolean
 	power: boolean
-	/** Change the firewall. */
+	/** Change the firewall and public addresses. */
 	network?: boolean
 	resize: boolean
 	snapshot: boolean
@@ -73,7 +73,9 @@ export function groupCapabilitiesByCategory(
 	const byLabel = new Map<string, CapabilityInfo[]>()
 	for (const cap of palette) {
 		const prefix = cap.name.split(':')[0]
-		const label = CATEGORY_LABEL[prefix] ?? capitalise(prefix)
+		const label =
+			CATEGORY_LABEL[prefix] ??
+			capitalise(prefix.replace(/_/g, ' ').toLowerCase())
 		const list = byLabel.get(label) ?? []
 		list.push(cap)
 		byLabel.set(label, list)
@@ -89,7 +91,10 @@ export function groupCapabilitiesByCategory(
 /** Backend capability descriptions end with a full stop; in the role builder
  *  and the capability panel they read as list items, so drop it for display. */
 export function capabilityLabel(cap: CapabilityInfo): string {
-	return cap.description.replace(/\.\s*$/, '')
+	const label = cap.description.replace(/\.\s*$/, '')
+	return /^[A-Z][A-Z_]+$/.test(label)
+		? capitalise(label.replace(/_/g, ' ').toLowerCase())
+		: label
 }
 
 // The area nouns for derived role descriptions, in reading order.

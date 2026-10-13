@@ -196,6 +196,32 @@ class TestAuth(IntegrationTestCase):
 		self.assertIn("Create your Frappe Cloud account", html)
 		self.assertIn("It expires in 10 minutes.", html)
 
+	def test_a_branded_product_names_itself_in_the_code_email(self):
+		frappe.set_user("Administrator")
+		frappe.get_doc(
+			{
+				"doctype": "Product",
+				"product_key": "raven-code",
+				"title": "Raven",
+				"signup_app": "raven",
+				"use_own_email_branding": 1,
+				"logo": "/files/raven.png",
+			}
+		).insert()
+		self.addCleanup(frappe.delete_doc, "Product", "raven-code", force=True)
+		frappe.set_user("Guest")
+
+		with patch(SENDMAIL) as sendmail:
+			send_code(self.email, "Branded Person", product="raven-code")
+
+		html = frappe.render_template(
+			"templates/emails/verification_code.html", sendmail.call_args.kwargs["args"]
+		)
+		self.assertIn("is your Raven signup code", sendmail.call_args.kwargs["subject"])
+		self.assertIn("Create your Raven account", html)
+		self.assertIn("/files/raven.png", html)
+		self.assertNotIn("Frappe Cloud", html.split("fc-footer")[0])
+
 	def test_sending_is_limited_per_email_whatever_its_spelling(self):
 		spellings = [self.email, self.email.upper(), f" {self.email} ", self.email.title(), self.email]
 		other = f"other.{frappe.generate_hash(length=8)}@example.test"

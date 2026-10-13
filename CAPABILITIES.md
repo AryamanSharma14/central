@@ -35,7 +35,7 @@ The distinction matters:
 | `team:manage_members` | Invite, suspend, and change team members. |
 | `team:delete` | Delete a team. |
 | `service:view` | View managed service configuration. |
-| `service:manage` | Create and delete storage buckets, set bucket quotas, rotate bucket credentials, and download stored objects. |
+| `service:manage` | Create and delete storage buckets, set bucket quotas, rotate bucket credentials, and download, upload, and delete stored objects. |
 | `server:ssh-key` | Add, rotate, and remove Team SSH keys for selected servers. |
 
 ### `atlas` plane (9)
@@ -46,7 +46,7 @@ The distinction matters:
 | `server:view` | List servers and sites; view status, specs, and metrics. |
 | `server:create` | Provision a new server. |
 | `server:power` | Start, stop, and restart a server. |
-| `server:network` | Change the firewall of a server. |
+| `server:network` | Change the firewall and public addresses of a server. |
 | `server:resize` | Resize, rebuild, or rename a server. |
 | `server:snapshot` | Create and restore server snapshots. |
 | `server:terminate` | Destroy a server. |

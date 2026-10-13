@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { Badge, Button, Skeleton } from 'frappe-ui'
 import { computed } from 'vue'
-import CopyableValue from '@/components/common/CopyableValue.vue'
-import {
-	createListViewQuery,
-	ListView,
-	type ListViewColumn,
-} from '@/components/common/list-view'
 import SettingsSection from '@/components/common/SettingsSection.vue'
+import AddressesSection from '@/components/servers/detail/AddressesSection.vue'
 import FirewallSection from '@/components/servers/firewall/FirewallSection.vue'
 import { useServerHostnames } from '@/composables/useServerHostnames'
 import type { VirtualMachineRow } from '@/composables/useServers'
@@ -28,68 +23,15 @@ const emit = defineEmits<{ changed: [] }>()
 const { hostnames, loading, error } = useServerHostnames(
 	computed(() => props.server),
 )
-
-interface Address {
-	label: string
-	value: string
-	reach: string
-}
-
-const addresses = computed(() =>
-	[
-		{
-			label: 'Public IPv6',
-			value: props.overview.server.public_ipv6,
-			reach: 'Anyone on the internet',
-		},
-		{
-			label: 'Public IPv4',
-			value: props.overview.server.public_ipv4,
-			reach: 'Anyone on the internet',
-		},
-		{
-			label: 'Private IPv6',
-			value: props.overview.server.ipv6_address,
-			reach: 'Your servers in this region',
-		},
-	].filter((row): row is Address => !!row.value),
-)
-
-const addressQuery = createListViewQuery()
-const addressColumns: ListViewColumn<Address>[] = [
-	{ accessorKey: 'label', header: 'Type', size: 120, enableSorting: false },
-	{ accessorKey: 'value', header: 'Address', size: 260, enableSorting: false },
-	{
-		accessorKey: 'reach',
-		header: 'Reachable by',
-		size: 220,
-		enableSorting: false,
-	},
-]
 </script>
 
 <template>
 	<div class="divide-y divide-outline-gray-1">
-		<SettingsSection title="Addresses" help="Click an address to copy it.">
-			<ListView
-				v-if="addresses.length"
-				:query="addressQuery"
-				:rows="addresses"
-				:columns="addressColumns"
-				:row-key="(row) => row.label"
-				:paginated="false"
-				:show-count="false"
-				item-label="address"
-			>
-				<template #value="{ row }">
-					<CopyableValue :value="row.value" :label="`${row.label} address`" />
-				</template>
-			</ListView>
-
-			<p v-else class="text-p-sm text-ink-gray-5">
-				This server has no address yet. It gets one when it finishes setting up.
-			</p>
-		</SettingsSection>
+		<AddressesSection
+			:server="overview.server"
+			:can-edit="canManageNetwork"
+			@changed="emit('changed')"
+		/>
 
 		<FirewallSection
 			:resource-id="overview.server.resource_id"
