@@ -471,13 +471,13 @@
   "required_cap": "server:view",
   "direct_recipients": "None",
   "create_in_app": 1,
-  "in_app_title": "Site ready: {{ reference_title }}",
+  "in_app_title": "{% if context and context.product %}Your {{ context.product }} site is ready{% else %}Site ready: {{ reference_title }}{% endif %}",
   "in_app_body": "Site {{ reference_title }} is ready.",
   "action_label": "View site",
   "action_route": "/servers",
   "doctype": "Notification Event Type",
   "docstatus": 0,
-  "modified": "2026-10-04 00:00:00"
+  "modified": "2026-10-13 12:00:00"
  },
  {
   "name": "resource_limit_breached",
