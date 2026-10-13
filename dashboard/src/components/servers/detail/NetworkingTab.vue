@@ -137,7 +137,7 @@ const addressColumns: ListViewColumn<Address>[] = [
 						icon="lucide-arrow-up-right"
 						:label="`Open ${entry.hostname}`"
 						tooltip="Open"
-						:link="`https://${entry.hostname}`"
+						:href="`https://${entry.hostname}`"
 					/>
 				</li>
 			</ul>
