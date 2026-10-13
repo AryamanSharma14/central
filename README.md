@@ -74,6 +74,8 @@ Run the team session checks with `node --test dashboard/tests/team-session.test.
 
 Run presentation checks with `node --test dashboard/tests/team-labels.test.mjs`. These checks verify duplicate team names, full team identities, and readable permission labels.
 
+Run all frontend regression checks with `node --test dashboard/tests/*.test.mjs`. These checks also cover menu keyboard navigation, invitation rows, role permission states, and snapshot error dialogs. They render Vue components without a browser or site data.
+
 Run the linters from `apps/central`:
 
 ```bash

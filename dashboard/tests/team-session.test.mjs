@@ -6,7 +6,10 @@ import { runInNewContext } from 'node:vm'
 import typescript from 'typescript'
 
 const require = createRequire(import.meta.url)
-const source = readFileSync(new URL('../src/composables/useSession.ts', import.meta.url), 'utf8')
+const source = readFileSync(
+	new URL('../src/composables/useSession.ts', import.meta.url),
+	'utf8',
+)
 const compiled = typescript.transpileModule(source, {
 	compilerOptions: { module: typescript.ModuleKind.CommonJS },
 }).outputText
@@ -15,7 +18,10 @@ const storageKey = 'central.console.activeTeam'
 function startSession(pathname, storage, storageBlocked = false) {
 	const navigations = []
 	const exports = {}
-	const roster = [{ name: 'team-a', label: 'Acme' }, { name: 'team-b', label: 'Pied Piper' }]
+	const roster = [
+		{ name: 'team-a', label: 'Acme' },
+		{ name: 'team-b', label: 'Pied Piper' },
+	]
 	const localStorage = {
 		getItem: (key) => storage.get(key) ?? null,
 		setItem(key, value) {
@@ -38,17 +44,24 @@ function startSession(pathname, storage, storageBlocked = false) {
 		exports,
 		require: (name) => dependencies[name],
 		localStorage,
-		window: { location: {
-			pathname,
-			reload: () => navigations.push('reload'),
-			replace: (path) => navigations.push(path),
-		} },
+		window: {
+			location: {
+				pathname,
+				reload: () => navigations.push('reload'),
+				replace: (path) => navigations.push(path),
+			},
+		},
 	})
 	return { session: exports.useSession(), navigations }
 }
 
 test('switching preserves a section and boots with the new team before reads start', () => {
-	for (const path of ['/dashboard/llm', '/dashboard/billing/invoices', '/dashboard/team/members', '/dashboard/servers/snapshots']) {
+	for (const path of [
+		'/dashboard/llm',
+		'/dashboard/billing/invoices',
+		'/dashboard/team/members',
+		'/dashboard/servers/snapshots',
+	]) {
 		const storage = new Map([[storageKey, 'team-a']])
 		const { session, navigations } = startSession(path, storage)
 		session.setActiveTeam('team-b')
@@ -78,7 +91,10 @@ test('resource pages return to their section when the selected team changes', ()
 test('a storage failure keeps the existing team and prevents navigation', () => {
 	const storage = new Map([[storageKey, 'team-a']])
 	const { session, navigations } = startSession('/dashboard/llm', storage, true)
-	assert.throws(() => session.setActiveTeam('team-b'), /Could not save the selected team/)
+	assert.throws(
+		() => session.setActiveTeam('team-b'),
+		/Could not save the selected team/,
+	)
 	assert.equal(session.activeTeam.value, 'team-a')
 	assert.equal(storage.get(storageKey), 'team-a')
 	assert.deepEqual(navigations, [])

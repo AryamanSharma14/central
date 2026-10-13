@@ -15,9 +15,14 @@ function loadModule(path, dependencies = {}) {
 }
 
 const { getTeamSwitcherRows } = loadModule('../src/lib/teamSwitcher.ts')
-const { capabilityLabel, groupCapabilitiesByCategory } = loadModule('../src/lib/capabilities.ts', {
-	'@/lib/format': { capitalise: (text) => text.charAt(0).toUpperCase() + text.slice(1) },
-})
+const { capabilityLabel, groupCapabilitiesByCategory } = loadModule(
+	'../src/lib/capabilities.ts',
+	{
+		'@/lib/format': {
+			capitalise: (text) => text.charAt(0).toUpperCase() + text.slice(1),
+		},
+	},
+)
 
 test('duplicate labels use distinct owners, including case and surrounding spaces', () => {
 	const rows = getTeamSwitcherRows([
