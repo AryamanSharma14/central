@@ -32,7 +32,11 @@
   "trial_servers_per_team",
   "trial_days",
   "trial_deletion_days",
-  "trial_notice_days"
+  "trial_notice_days",
+  "app_rollout_tab",
+  "app_rollout_start_percent",
+  "app_rollout_step_percent",
+  "app_rollout_interval_hours"
  ],
  "fields": [
   {
@@ -217,13 +221,42 @@
    "fieldtype": "Int",
    "label": "Trial Notice Days",
    "non_negative": 1
+  },
+  {
+   "fieldname": "app_rollout_tab",
+   "fieldtype": "Tab Break",
+   "label": "App Rollout"
+  },
+  {
+   "default": "5",
+   "description": "Percent of Pilot servers that see a new app update first.",
+   "fieldname": "app_rollout_start_percent",
+   "fieldtype": "Int",
+   "label": "Start Percent",
+   "non_negative": 1
+  },
+  {
+   "default": "5",
+   "description": "Percent of Pilot servers added after each interval, until all servers see the update.",
+   "fieldname": "app_rollout_step_percent",
+   "fieldtype": "Int",
+   "label": "Step Percent",
+   "non_negative": 1
+  },
+  {
+   "default": "8",
+   "description": "Hours between two steps.",
+   "fieldname": "app_rollout_interval_hours",
+   "fieldtype": "Int",
+   "label": "Interval (Hours)",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-11 10:00:00.000000",
+ "modified": "2026-10-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",

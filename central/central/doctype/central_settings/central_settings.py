@@ -21,6 +21,9 @@ class CentralSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		app_rollout_interval_hours: DF.Int
+		app_rollout_start_percent: DF.Int
+		app_rollout_step_percent: DF.Int
 		central_id: DF.Int
 		common_site_config: DF.JSON | None
 		enable_addons: DF.Check
@@ -45,6 +48,7 @@ class CentralSettings(Document):
 	def validate(self) -> None:
 		self.validate_limits()
 		self.validate_common_site_config()
+		self.validate_app_rollout()
 
 	def validate_limits(self) -> None:
 		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""
@@ -63,6 +67,17 @@ class CentralSettings(Document):
 			frappe.throw(_('Common Site Config must be a JSON object, such as {"key": "value"}.'))
 		if len(json.dumps(config).encode()) > MAXIMUM_METADATA_BYTES:
 			frappe.throw(_("Common Site Config must fit in {0} bytes.").format(MAXIMUM_METADATA_BYTES))
+
+	def validate_app_rollout(self) -> None:
+		for fieldname in ("app_rollout_start_percent", "app_rollout_step_percent"):
+			value = self.get(fieldname)
+			if not 1 <= value <= 100:
+				label = _(self.meta.get_label(fieldname))
+				frappe.throw(_("{0} must be between 1 and 100, not {1}.").format(label, value))
+
+		if self.app_rollout_interval_hours < 1:
+			label = _(self.meta.get_label("app_rollout_interval_hours"))
+			frappe.throw(_("{0} must be at least 1, not {1}.").format(label, self.app_rollout_interval_hours))
 
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
