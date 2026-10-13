@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from contextlib import contextmanager
 
 import frappe
@@ -38,12 +39,19 @@ class EmailCode:
 	def pending(self) -> dict | None:
 		return frappe.cache.get_value(self.cache_key, use_local_cache=False)
 
-	def send(self, subject: str, heading: str, full_name: str | None = None) -> None:
-		"""Email a fresh code. Failed attempts carry over, so a resend cannot reset the lock."""
+	def send(
+		self,
+		subject: Callable[[str], str],
+		heading: str,
+		full_name: str | None = None,
+		brand: dict | None = None,
+	) -> None:
+		"""Email a fresh code. Failed attempts carry over, so a resend cannot reset the lock.
+		`subject` builds the subject from the code, and `brand` replaces Frappe Cloud's header."""
 		pending = self._next_pending()
 		code = f"{secrets.randbelow(900_000) + 100_000}"
 		self._store({**pending, "code": code, "full_name": full_name or pending["full_name"]})
-		self._mail(code, subject.format(code), heading)
+		self._mail(code, subject(code), heading, brand)
 
 	def hold(self) -> None:
 		"""Store a code that never matches, so an address that may not sign in answers like any other."""
@@ -95,13 +103,18 @@ class EmailCode:
 	def _store(self, pending: dict) -> None:
 		frappe.cache.set_value(self.cache_key, pending, expires_in_sec=self.get_expiry_seconds())
 
-	def _mail(self, code: str, subject: str, heading: str) -> None:
+	def _mail(self, code: str, subject: str, heading: str, brand: dict | None) -> None:
 		try:
 			frappe.sendmail(
 				recipients=[self.email],
 				subject=subject,
 				template="verification_code",
-				args={"code": code, "heading": heading, "expires_minutes": self.get_expiry_seconds() // 60},
+				args={
+					"code": code,
+					"heading": heading,
+					"brand": brand,
+					"expires_minutes": self.get_expiry_seconds() // 60,
+				},
 				now=True,
 			)
 		except Exception:

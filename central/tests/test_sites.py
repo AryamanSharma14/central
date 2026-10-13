@@ -266,6 +266,7 @@ class TestSiteRoutes(SiteOnAMachine):
 		queue_event.assert_called_once_with(
 			site.team,
 			"site_ready",
+			context=None,
 			reference_doctype="Site",
 			reference_name=site.name,
 		)

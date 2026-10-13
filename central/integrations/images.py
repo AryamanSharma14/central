@@ -52,11 +52,11 @@ def list_images(
 def preview_images(
 	offering: str, region: str, offset: int = 0, extra_tags: dict[str, str] | None = None
 ) -> dict:
-	"""Check an operator's saved selector without creating a regional resource."""
+	"""Check an operator's saved selector without creating a regional resource. The caller
+	checks that the operator may edit what is previewed."""
 	instance = frappe.get_doc("Region", region)
 	client = AtlasClient.for_operator(instance)
 	document = frappe.get_doc("Image Offering", offering)
-	document.check_permission("write")
 
 	return client.list_system_images({**document.get_image_tags(), **(extra_tags or {})}, offset)
 

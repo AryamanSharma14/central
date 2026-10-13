@@ -125,9 +125,11 @@ class Site(Document):
 		self.capture_ready()
 		from central.notification.engine import queue_event
 
+		product = frappe.db.get_value("Product", self.product, "title") if self.product else None
 		queue_event(
 			self.team,
 			"site_ready",
+			context={"product": product} if product else None,
 			reference_doctype=self.doctype,
 			reference_name=self.name,
 		)
