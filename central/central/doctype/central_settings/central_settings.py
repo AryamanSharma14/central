@@ -82,6 +82,14 @@ class CentralSettings(Document):
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
 
+	def app_rollout(self) -> dict[str, int]:
+		"""The steps Pilot uses to offer a new app update to more servers over time."""
+		return {
+			"start_percent": self.app_rollout_start_percent,
+			"step_percent": self.app_rollout_step_percent,
+			"interval_hours": self.app_rollout_interval_hours,
+		}
+
 	def feature_flags(self) -> dict[str, bool]:
 		"""The console's feature flags as a plain {name: bool} map for window boot.
 		`addons` gates the whole area; the rest are per-service rollout switches the
