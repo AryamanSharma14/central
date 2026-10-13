@@ -147,7 +147,7 @@ async function createSite() {
 
 <template>
 	<AuthShell show-progress :step="3">
-		<h1 class="flex items-center gap-2 text-2xl font-semibold text-ink-gray-9">
+		<h1 class="flex items-center gap-2 text-2xl-semibold text-ink-gray-9">
 			<ProductLogo />
 			Name your site
 		</h1>

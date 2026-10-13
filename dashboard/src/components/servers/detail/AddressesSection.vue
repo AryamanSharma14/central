@@ -208,7 +208,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 				icon-left="lucide-plus"
 				:label="priceLabel ? `Attach IPv4 · ${priceLabel}` : 'Attach IPv4'"
 				:disabled="!priceLabel || isSaving"
-				:tooltip="priceLabel ? undefined : 'Public IPv4 has no price in this region yet.'"
+				:tooltip="priceLabel ? undefined : 'IPv4 pricing unavailable'"
 				@click="confirmChange({ version: 4, isAttached: true })"
 			/>
 			<Button
@@ -230,7 +230,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 					? 'Stays on while the server has a public IPv4 address.'
 					: 'Lets the server reach sites that only have IPv4 addresses.'
 			"
-			class="rounded-6 bg-surface-gray-1 px-4 py-3"
+			class="rounded-6 px-4 py-3"
 			@update:model-value="toggleIpv4Internet"
 		/>
 

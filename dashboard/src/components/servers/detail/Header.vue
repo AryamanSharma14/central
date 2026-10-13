@@ -58,7 +58,7 @@ const addresses = computed(() =>
 			label: 'Private address',
 			value: props.server.ipv6_address,
 			icon: 'lucide-lock',
-			help: 'Private, this region only',
+			help: 'Private address within this region',
 		},
 	].filter((row): row is typeof row & { value: string } => !!row.value),
 )
@@ -87,7 +87,7 @@ const facts = computed(() => {
 				: `Frappe ${server.frappe_version || ''}`.trim(),
 		},
 		{
-			icon: 'lucide-receipt',
+			icon: 'lucide-package',
 			label:
 				details &&
 				formatPlanLabel({
@@ -131,7 +131,7 @@ const menu = computed(() =>
 
 <template>
 	<header
-		class="flex flex-col gap-4 rounded-6 bg-surface-gray-1 p-4 md:flex-row md:items-center md:justify-between"
+		class="flex flex-col gap-4 rounded-6 p-4 md:flex-row md:items-center md:justify-between"
 	>
 		<div class="flex min-w-0 items-center gap-3">
 			<ProviderAvatar

@@ -146,7 +146,7 @@ const checkedAgo = computed(() => {
 					<span aria-hidden="true">·</span>
 					<button
 						type="button"
-						class="shrink-0 rounded-2 font-medium text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-outline-gray-4 disabled:text-ink-gray-5"
+						class="shrink-0 rounded-2 text-sm-medium text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-outline-gray-4 disabled:text-ink-gray-5"
 						:disabled="checking"
 						@click="emit('check')"
 					>

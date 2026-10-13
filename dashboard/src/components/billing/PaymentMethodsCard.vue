@@ -323,8 +323,7 @@ const onTopUp = () => {
 				class="lucide-arrow-down-wide-narrow mt-0.5 size-3.5 shrink-0 text-ink-gray-4"
 				aria-hidden="true"
 			/>
-			Invoices are paid from credits first, then each method in order until one
-			goes through.
+			Invoices use credits first, then payment methods in the order shown.
 		</p>
 
 		<ConfirmDialog

@@ -2,7 +2,6 @@ import { type ColorScheme, useColorScheme } from 'frappe-ui'
 import { computed, h } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { openSettings } from '@/composables/useSettings'
-import { openTeamSwitcher } from '@/composables/useTeamSwitcher'
 
 const themeOptions: { label: string; icon: string; value: ColorScheme }[] = [
 	{ label: 'System', icon: 'lucide-monitor', value: 'system' },
@@ -19,42 +18,46 @@ export const useAppMenu = () => {
 		window.location.replace('/dashboard/login')
 	}
 
-	const headerMenuItems = computed(() => [
-		{
-			label: 'Switch team',
-			icon: 'lucide-repeat',
-			onClick: openTeamSwitcher,
-		},
-		{
-			label: 'Theme',
-			icon: 'lucide-sun-moon',
-			submenu: themeOptions.map((theme) => ({
-				label: theme.label,
-				icon: theme.icon,
-				selected: colorScheme.value === theme.value,
-				onClick: () => setColorScheme(theme.value),
-				slots: {
-					suffix: ({ selected }: { selected: boolean }) =>
-						selected
-							? h('span', { class: 'lucide-check size-4 text-ink-gray-6' })
-							: null,
-				},
-			})),
-		},
-	])
+	const themeMenuItems = computed(() =>
+		themeOptions.map((theme) => ({
+			label: theme.label,
+			icon: theme.icon,
+			selected: colorScheme.value === theme.value,
+			onClick: () => setColorScheme(theme.value),
+			slots: {
+				suffix: ({ selected }: { selected: boolean }) =>
+					selected
+						? h('span', { class: 'lucide-check size-4 text-ink-gray-6' })
+						: null,
+			},
+		})),
+	)
 
-	const footerMenuItems = [
+	const footerMenuItems = computed(() => [
 		{
 			label: 'My profile',
 			icon: 'lucide-user',
 			onClick: () => openSettings('profile'),
 		},
+		{
+			label: 'Theme',
+			icon: 'lucide-sun-moon',
+			submenu: themeMenuItems.value,
+			slots: {
+				suffix: () =>
+					h('span', { class: 'flex size-4 items-center justify-center' }, [
+						h('span', {
+							class: 'lucide-chevron-right size-3.5 text-ink-gray-6',
+							'aria-hidden': 'true',
+						}),
+					]),
+			},
+		},
 		{ label: 'Sign out', icon: 'lucide-log-out', onClick: logoutAndRedirect },
-	]
+	])
 
 	return {
 		themeOptions,
-		headerMenuItems,
 		footerMenuItems,
 		currentUser,
 		logoutAndRedirect,

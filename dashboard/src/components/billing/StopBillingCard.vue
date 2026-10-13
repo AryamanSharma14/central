@@ -63,7 +63,7 @@ const suspendAll = async () => {
 	}
 
 	open.value = false
-	successToast(`Suspending ${serverCount.value}`)
+	successToast(`Stop requested for ${serverCount.value}`)
 }
 </script>
 
@@ -74,35 +74,33 @@ const suspendAll = async () => {
 	>
 		<div class="min-w-0 flex-[1_1_20rem]">
 			<h2 id="suspend-heading" class="text-base-semibold text-ink-gray-8">
-				Suspend all servers
+				Stop all servers
 			</h2>
 			<p class="mt-0.5 text-p-sm text-ink-gray-5">
 				<template v-if="running.length">
-					Powers down {{ running.length === 1 ? 'your' : 'all' }}
-					{{ serverCount }}
-					so charges stop.
+					Stops {{ serverCount }}. Sites will be unavailable. Data is retained,
+					and you can restart the servers.
 				</template>
-				<template v-else>No servers are running right now.</template>
-				Sites go offline; nothing is deleted. Restart any time.
+				<template v-else>No servers are running.</template>
 			</p>
 		</div>
 		<Button
 			v-if="canPowerServer"
 			theme="red"
-			label="Suspend all"
+			label="Stop all"
 			:disabled="!running.length"
 			@click="open = true"
 		/>
 
 		<Dialog
 			v-model:open="open"
-			:title="`Suspend ${running.length === 1 ? 'your server' : `all ${serverCount}`}?`"
+			:title="`Stop ${running.length === 1 ? 'your server' : `all ${serverCount}`}?`"
 		>
 			<template #default>
 				<Alert v-if="error" class="mb-4" theme="red" :title="error" />
 				<p class="text-p-base text-ink-gray-6">
-					Every site on these servers goes offline until you start them again.
-					Data, backups and configuration are kept.
+					Sites on these servers will be unavailable until you restart them.
+					Data, snapshots, and configuration are retained.
 				</p>
 				<TextInput
 					v-model="confirmText"
@@ -118,7 +116,7 @@ const suspendAll = async () => {
 					<Button
 						variant="solid"
 						theme="red"
-						label="Suspend servers"
+						label="Stop servers"
 						:disabled="!confirmed"
 						:loading="suspending"
 						@click="suspendAll"

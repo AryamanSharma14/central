@@ -57,7 +57,7 @@ const shownModels = computed(() =>
 			</div>
 
 			<template v-else>
-				<h2 class="text-base font-semibold text-ink-gray-8">This month</h2>
+				<h2 class="text-base-semibold text-ink-gray-8">This month</h2>
 
 				<p class="mt-0.5 text-p-sm text-ink-gray-5">
 					Across every key of the team, as of
@@ -80,9 +80,7 @@ const shownModels = computed(() =>
 					<NumberCard title="Requests" :value="usage?.requests ?? null" />
 					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
 						<template #actions>
-							<Tooltip
-								text="Prompt and completion tokens together, across every model and key."
-							>
+							<Tooltip text="Total input and output tokens">
 								<lucide-circle-help
 									class="size-4 text-ink-gray-5"
 									aria-label="What counts as a token"
@@ -93,14 +91,14 @@ const shownModels = computed(() =>
 				</div>
 
 				<h2
-					class="text-base font-semibold text-ink-gray-8 mt-8 border-t border-outline-gray-2 pt-8"
+					class="text-base-semibold text-ink-gray-8 mt-8 border-t border-outline-gray-2 pt-8"
 				>
 					Accessible models
 				</h2>
 
 				<p class="mt-0.5 text-p-sm text-ink-gray-5">
-					The models your keys can call, what each one takes and gives, and the
-					APIs it answers on.
+					Available models, supported input and output formats, and API
+					endpoints.
 				</p>
 
 				<table v-if="models.length" class="mt-3 w-full border-collapse">
@@ -108,20 +106,16 @@ const shownModels = computed(() =>
 						<tr
 							class="border-b border-outline-gray-2 text-p-xs text-ink-gray-5"
 						>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">Model</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">Input</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">
-								Output
-							</th>
-							<th scope="col" class="py-2 text-right font-normal">API</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Model</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Input</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Output</th>
+							<th scope="col" class="py-2 text-right text-xs">API</th>
 						</tr>
 					</thead>
 
 					<tbody class="divide-y divide-outline-gray-1">
 						<tr v-for="model in shownModels" :key="model.name">
-							<td
-								class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9"
-							>
+							<td class="py-3 pr-3 font-mono text-sm-medium text-ink-gray-9">
 								{{ model.name }}
 							</td>
 

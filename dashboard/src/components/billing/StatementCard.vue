@@ -102,7 +102,7 @@ const hidden = computed(() =>
 
 		<p
 			v-if="!loading && statement"
-			class="border-t border-outline-gray-1 bg-surface-gray-1 px-5 py-3 text-p-sm text-ink-gray-5"
+			class="border-t border-outline-gray-1 px-5 py-3 text-p-sm text-ink-gray-5"
 		>
 			For reconciling against your own records. Tax invoices are issued
 			separately.

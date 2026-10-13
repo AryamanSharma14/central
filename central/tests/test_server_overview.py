@@ -157,12 +157,13 @@ class TestServerOverview(IntegrationTestCase):
 		self.assertNotIn("bearer-marker-", logged.error)
 
 	def test_preset_period_runs_until_now(self):
-		start, end = _metrics_window("7d", None, None)
-
-		self.assertAlmostEqual(
-			(datetime.now(UTC) - start).total_seconds(), timedelta(days=7).total_seconds(), delta=60
-		)
-		self.assertIsNone(end)
+		for period, duration in [("1h", timedelta(hours=1)), ("7d", timedelta(days=7))]:
+			with self.subTest(period=period):
+				start, end = _metrics_window(period, None, None)
+				self.assertAlmostEqual(
+					(datetime.now(UTC) - start).total_seconds(), duration.total_seconds(), delta=60
+				)
+				self.assertIsNone(end)
 
 	def test_custom_window_reads_the_site_clock(self):
 		start, end = _metrics_window("custom", "2026-10-08 10:00:00", "2026-10-08 11:00:00")

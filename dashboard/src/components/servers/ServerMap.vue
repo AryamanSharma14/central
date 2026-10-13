@@ -244,7 +244,7 @@ function clickNode(node: MapNode): void {
 								:is-settled="isSettled(node)"
 							/>
 							<span
-								class="relative grid size-11 place-items-center rounded-full bg-[var(--sm-cluster-bg)] text-base font-semibold text-ink-gray-9 shadow-md transition-transform duration-150 ease-out group-active:scale-95"
+								class="relative grid size-11 place-items-center rounded-full bg-[var(--sm-cluster-bg)] text-base-semibold text-ink-gray-9 shadow-md transition-transform duration-150 ease-out group-active:scale-95"
 								:class="isHot(node) && 'scale-105'"
 							>
 								{{ node.members.length }}

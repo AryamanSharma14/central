@@ -71,7 +71,7 @@ onBeforeUnmount(() => window.clearTimeout(cascadeTimer))
 <template>
 	<section class="flex min-h-0 flex-col" role="region" :aria-label="title">
 		<div class="flex shrink-0 items-center gap-1.5 px-4 pb-2 pt-4">
-			<h2 class="truncate text-base font-semibold text-ink-gray-9">
+			<h2 class="truncate text-base-semibold text-ink-gray-9">
 				{{ title }}
 			</h2>
 			<Badge
@@ -101,7 +101,7 @@ onBeforeUnmount(() => window.clearTimeout(cascadeTimer))
 		>
 			<span class="min-w-0 truncate text-sm text-ink-gray-5">
 				Filtering for
-				<span class="font-medium text-ink-gray-8"
+				<span class="text-sm-medium text-ink-gray-8"
 					>{{ locationFilter.label }}</span
 				>
 			</span>
@@ -146,7 +146,7 @@ onBeforeUnmount(() => window.clearTimeout(cascadeTimer))
 				</span>
 				<span class="min-w-0 flex-1">
 					<span class="flex h-5 items-center gap-1.5">
-						<span class="truncate text-sm font-medium text-ink-gray-9"
+						<span class="truncate text-sm-medium text-ink-gray-9"
 							>{{ row.name }}</span
 						>
 						<Badge

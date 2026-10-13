@@ -83,7 +83,7 @@ const open = computed({
 				class="flex flex-col items-center gap-3 py-10 text-center"
 			>
 				<LoadingIndicator class="h-6 w-6 text-ink-gray-5" />
-				<p class="text-p-base font-medium text-ink-gray-8">Starting resize…</p>
+				<p class="text-p-base-medium text-ink-gray-8">Starting resize…</p>
 				<p class="max-w-xs text-p-sm text-ink-gray-5">
 					The reshape runs in the background. The server shows “Resizing” in the
 					list and comes back on its own when it’s done.
@@ -218,7 +218,7 @@ const open = computed({
 						class="lucide-arrow-right mx-1 inline-block size-3.5 align-[-2px]"
 						aria-label="to"
 					/>
-					<span class="font-medium text-ink-gray-9">{{ totalPrice }}</span>
+					<span class="text-p-sm-medium text-ink-gray-9">{{ totalPrice }}</span>
 				</p>
 				<Button
 					variant="solid"

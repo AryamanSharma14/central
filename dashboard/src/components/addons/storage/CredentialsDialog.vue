@@ -50,7 +50,9 @@ const copy = async (value: string, label: string): Promise<void> => {
 		return
 	}
 
-	reportError(`${label} could not be copied. Select it and copy by hand.`)
+	reportError(
+		`Could not copy ${label.toLowerCase()}. Select it and copy it manually.`,
+	)
 }
 </script>
 

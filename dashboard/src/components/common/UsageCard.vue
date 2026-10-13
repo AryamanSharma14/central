@@ -26,7 +26,7 @@ const theme = computed(() => {
 </script>
 
 <template>
-	<div class="space-y-4 rounded-6 bg-surface-gray-1 p-4">
+	<div class="space-y-4 rounded-6 p-4">
 		<div class="flex h-5 items-center justify-between gap-3">
 			<span class="flex items-center gap-2 text-sm text-ink-gray-6">
 				<span :class="icon" class="size-4 text-ink-gray-5" />

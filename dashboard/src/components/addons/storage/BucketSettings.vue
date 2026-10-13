@@ -115,7 +115,8 @@ const remove = async (target: StorageBucket): Promise<void> => {
 	<div class="divide-y divide-outline-gray-1">
 		<SettingsSection
 			title="Quota"
-			:help="`Cap how much this bucket can hold. ${quotaSummary}`"
+			help="Bucket storage limit"
+			:description="quotaSummary"
 			:aria-busy="usageLoading"
 		>
 			<template v-if="canManage" #actions>
@@ -144,7 +145,8 @@ const remove = async (target: StorageBucket): Promise<void> => {
 
 		<SettingsSection
 			title="Connection"
-			help="Point any S3 client at these. The secret key is shown once, when the bucket is created or its key is rotated."
+			help="S3 connection details"
+			description="Use these values in your S3 client. The secret key is shown only when you create or rotate it."
 		>
 			<template v-if="canManage" #actions>
 				<Button label="Rotate key" @click="rotateTarget = bucket" />
@@ -168,7 +170,7 @@ const remove = async (target: StorageBucket): Promise<void> => {
 		<SettingsSection
 			v-if="canManage"
 			title="Delete bucket"
-			help="Removes the bucket and its key for good. Empty it first: a bucket that still holds objects can't be deleted."
+			description="Permanently deletes the bucket and its access key. Delete all objects first."
 		>
 			<template #actions>
 				<Button

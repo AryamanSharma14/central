@@ -87,7 +87,7 @@
   },
   {
    "default": "10",
-   "description": "Minutes a trial server may sit idle before its region puts it to sleep. Customer traffic wakes it. Set 0 to keep trial servers awake. A paid server never sleeps, and a resize ends sleep for good.",
+   "description": "Minutes a trial server may sit idle before its region puts it to sleep. Customer traffic wakes it. Set 0 to keep trial servers awake. Paid servers do not use idle sleep. Resizing disables idle sleep.",
    "fieldname": "trial_idle_shutdown_minutes",
    "fieldtype": "Int",
    "label": "Trial Idle Shutdown (Minutes)",

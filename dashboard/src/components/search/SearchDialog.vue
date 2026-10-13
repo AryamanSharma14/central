@@ -72,7 +72,7 @@ function select(item: SearchItem): void {
 						>
 							<ListboxItem
 								:value="`${name}-${item.name}`"
-								class="flex w-full min-w-0 items-center gap-2 rounded-4 px-2 py-2 text-base font-medium text-ink-gray-7 outline-none data-[highlighted]:bg-surface-gray-3"
+								class="flex w-full min-w-0 items-center gap-2 rounded-4 px-2 py-2 text-base-medium text-ink-gray-7 outline-none data-[highlighted]:bg-surface-gray-3"
 								@select="select(item)"
 							>
 								<span
@@ -85,7 +85,7 @@ function select(item: SearchItem): void {
 								/>
 								<span
 									v-if="item.description"
-									class="shrink-0 truncate pl-2 text-xs font-normal text-ink-gray-5"
+									class="shrink-0 truncate pl-2 text-xs text-ink-gray-5"
 								>
 									{{ item.description }}
 								</span>
@@ -133,15 +133,12 @@ function select(item: SearchItem): void {
 :deep(mark) {
 	background: var(--surface-gray-3);
 	color: var(--ink-gray-9);
-	font-weight: 500;
+	@apply text-base-medium;
 }
 
 /* Matches the frappe-ui docs command palette's key caps. */
 kbd {
 	@apply inline-flex items-center gap-0.5 whitespace-nowrap rounded-1;
-	@apply bg-surface-gray-2 p-0.5 font-sans font-medium text-ink-gray-5;
-	font-size: 11px;
-	line-height: normal;
-	letter-spacing: 0.02em;
+	@apply bg-surface-gray-2 p-0.5 font-sans text-2xs-medium text-ink-gray-5;
 }
 </style>

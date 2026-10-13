@@ -43,7 +43,7 @@ const columns = computed<ListViewColumn<InvitationRow>[]>(() => [
 	{
 		accessorKey: 'email',
 		header: 'Email',
-		meta: { cellClass: 'truncate font-medium' },
+		meta: { cellClass: 'truncate text-sm-medium' },
 	},
 	{
 		id: 'role',

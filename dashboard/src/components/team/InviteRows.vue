@@ -29,10 +29,9 @@ function addRow(): void {
 	})
 }
 
-// The list always keeps one row, so removing the last one clears it instead.
 function removeRow(index: number): void {
+	if (rows.value.length === 1) return
 	rows.value.splice(index, 1)
-	if (!rows.value.length) addRow()
 }
 </script>
 
@@ -45,7 +44,7 @@ function removeRow(index: number): void {
 			<span class="min-w-0 flex-1">Email</span>
 			<span class="w-36 shrink-0">Role</span>
 			<span v-if="resourceOptions" class="w-44 shrink-0">Resource</span>
-			<span class="w-7 shrink-0" />
+			<span v-if="rows.length > 1" class="w-7 shrink-0" />
 		</div>
 
 		<div class="space-y-3">
@@ -78,6 +77,7 @@ function removeRow(index: number): void {
 						:disabled="disabled"
 					/>
 					<Button
+						v-if="rows.length > 1"
 						variant="ghost"
 						icon="lucide-x"
 						:aria-label="`Remove ${row.email || `row ${index + 1}`}`"

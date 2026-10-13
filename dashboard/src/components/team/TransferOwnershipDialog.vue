@@ -68,9 +68,11 @@ const dialogOptions = computed(() => ({
 		<div class="space-y-4">
 			<Alert v-if="error" theme="red" :title="error" />
 			<p class="text-p-base text-ink-gray-7">
-				<span class="font-medium text-ink-gray-9">{{ expected }}</span>
+				<span class="text-p-base-medium text-ink-gray-9">{{ expected }}</span>
 				becomes the owner of
-				<span class="font-medium text-ink-gray-9">{{ activeTeamLabel }}</span>
+				<span class="text-p-base-medium text-ink-gray-9"
+					>{{ activeTeamLabel }}</span
+				>
 				and you drop to Admin. Only the new owner can hand it back.
 			</p>
 			<TextInput

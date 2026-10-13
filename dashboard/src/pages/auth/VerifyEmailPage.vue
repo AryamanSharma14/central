@@ -96,7 +96,7 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 <template>
 	<AuthShell>
 		<template v-if="needsName">
-			<h1 class="flex items-center gap-2 text-xl font-semibold text-ink-gray-9">
+			<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 				<ProductLogo />
 				Set up your profile
 			</h1>
@@ -129,14 +129,14 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 		</template>
 
 		<template v-else>
-			<h1 class="flex items-center gap-2 text-xl font-semibold text-ink-gray-9">
+			<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 				<ProductLogo />
 				Check your email
 			</h1>
 			<p class="mt-1 text-p-base text-ink-gray-5">
 				We sent a 6-digit code to
-				<span class="font-medium text-ink-gray-8">{{ email }}</span>. If it is
-				not in your inbox, check your spam folder.
+				<span class="text-p-base-medium text-ink-gray-8">{{ email }}</span>. If
+				it is not in your inbox, check your spam folder.
 			</p>
 
 			<form class="mt-6 space-y-4" @submit.prevent="verify">
@@ -164,14 +164,14 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 
 			<div class="mt-6 flex items-center justify-between text-p-sm">
 				<RouterLink
-					class="font-medium text-ink-gray-8 hover:text-ink-gray-9"
+					class="text-p-sm-medium text-ink-gray-8 hover:text-ink-gray-9"
 					:to="backTo"
 				>
 					Use a different email
 				</RouterLink>
 				<button
 					type="button"
-					class="font-medium text-ink-gray-8 hover:text-ink-gray-9 disabled:text-ink-gray-4"
+					class="text-p-sm-medium text-ink-gray-8 hover:text-ink-gray-9 disabled:text-ink-gray-4"
 					:disabled="loading || resendWait > 0"
 					@click="resend"
 				>
