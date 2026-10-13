@@ -37,7 +37,6 @@ function switchTeam(name: string | null): void {
 		)
 	}
 
-	// A new document discards page state and in-flight requests from the previous team.
 	const path = window.location.pathname
 	if (
 		path.startsWith('/dashboard/servers/') &&

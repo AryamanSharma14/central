@@ -2,6 +2,7 @@
 import { Alert, Avatar, Button, Popover, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import frappeCloudLogo from '@/assets/fc-logo.svg'
+import { useMenuKeyboardNavigation } from '@/composables/useMenuKeyboardNavigation'
 import { useSession } from '@/composables/useSession'
 import { teamSwitcherOpen } from '@/composables/useTeamSwitcher'
 import { getErrorMessage } from '@/lib/feedback'
@@ -62,31 +63,9 @@ function createTeam(): void {
 	createTeamOpen.value = true
 }
 
-function navigateTeams(event: KeyboardEvent): void {
-	if (event.key === 'Escape') {
-		teamSwitcherOpen.value = false
-		return
-	}
-	if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-	const target = event.target as HTMLElement
-	if (target.tagName === 'INPUT' && ['Home', 'End'].includes(event.key)) return
-
-	const container = event.currentTarget as HTMLElement
-	const buttons = Array.from(
-		container.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-	)
-	if (!buttons.length) return
-
-	const current = buttons.indexOf(target.closest('button') as HTMLButtonElement)
-	let next = event.key === 'ArrowUp' ? current - 1 : current + 1
-	if (event.key === 'Home') next = 0
-	if (event.key === 'End' || next < 0) next = buttons.length - 1
-	if (next >= buttons.length) next = 0
-
-	event.preventDefault()
-	buttons[next].focus()
-}
+const { onKeydown } = useMenuKeyboardNavigation(() => {
+	teamSwitcherOpen.value = false
+})
 </script>
 
 <template>
@@ -127,11 +106,7 @@ function navigateTeams(event: KeyboardEvent): void {
 				</Button>
 			</template>
 
-			<div
-				class="w-64 max-w-full p-1"
-				aria-label="Teams"
-				@keydown="navigateTeams"
-			>
+			<div class="w-64 max-w-full p-1" aria-label="Teams" @keydown="onKeydown">
 				<TextInput
 					v-if="searchable"
 					v-model="query"
