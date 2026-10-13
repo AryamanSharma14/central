@@ -4,7 +4,6 @@ Central is the control plane for Frappe Cloud V2. It signs people in, decides wh
 
 <img width="3080" height="1954" alt="CleanShot 2026-10-03 at 2 50 02 PM@2x" src="https://github.com/user-attachments/assets/7644da1f-ae09-42e3-9a5e-e0130b409995" />
 
-
 Central does not run servers. [Atlas](https://github.com/frappe/atlas) runs the virtual machines in each region, [Pilot](https://github.com/frappe/pilot) runs the benches and sites on a server, and Cargo builds the server images. See [Integrations](spec/INTEGRATIONS.md) for the contracts.
 
 ## Requirements
@@ -56,7 +55,19 @@ yarn install
 yarn dev
 ```
 
+## Switch teams in the console
+
+Open the team selector at the top of the sidebar and select a team. The console reloads the current section with that team's data. A server detail or creation page returns to Servers. A bucket detail page returns to Object Storage. Browser storage must be available to retain the selected team. The profile menu contains Theme with System, Light, and Dark options.
+
+The selector shows full names in tooltips. Teams with the same name show their owner, or their unique team ID when the owner is the same. With more than six teams, use search to filter by name or identifier. The list scrolls while Create team stays available.
+
+Use Enter or Space to open the selector. Use Up and Down to move between actions, Home and End to reach the first or last action, and Enter or Space to select. Tab reaches the search field and each action. Escape closes the selector and returns focus to its button.
+
 ## Run checks and tests
+
+Run the team session checks with `node --test dashboard/tests/team-session.test.mjs`. These checks verify team selection, section navigation, and browser storage failures without a running site.
+
+Run presentation checks with `node --test dashboard/tests/team-labels.test.mjs`. These checks verify duplicate team names, full team identities, and readable permission labels.
 
 Run the linters from `apps/central`:
 

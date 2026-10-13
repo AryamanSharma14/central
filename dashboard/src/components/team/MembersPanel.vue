@@ -215,7 +215,9 @@ const roleFilters = computed<ListViewFilter[]>(() => [
 				/>
 				<div class="min-w-0">
 					<div class="flex items-center gap-2">
-						<p class="truncate font-medium text-ink-gray-9">{{ row.name }}</p>
+						<p class="truncate text-sm-medium text-ink-gray-9">
+							{{ row.name }}
+						</p>
 						<Badge v-if="row.invite" theme="amber" label="Invited" />
 						<Badge
 							v-else-if="row.member?.status === 'Suspended'"
@@ -236,7 +238,7 @@ const roleFilters = computed<ListViewFilter[]>(() => [
 					class="flex min-w-0 items-center gap-2"
 				>
 					<p class="truncate text-p-sm text-ink-gray-8">
-						<span class="font-medium">{{ roleLabel(grant.role) }}</span>
+						<span class="text-p-sm-medium">{{ roleLabel(grant.role) }}</span>
 						<span class="text-ink-gray-5">
 							on {{ resourceScopeLabel(grant, registry) }}
 						</span>

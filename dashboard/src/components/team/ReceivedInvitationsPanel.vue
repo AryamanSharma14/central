@@ -30,12 +30,14 @@ const { invitations, loading, busy, accept, decline } = useMyInvitations()
 				<div class="flex items-start gap-3">
 					<Avatar :label="invite.team_name" size="xl" shape="square" />
 					<div class="min-w-0 flex-1">
-						<h2 class="truncate text-base font-semibold text-ink-gray-9">
+						<h2 class="truncate text-base-semibold text-ink-gray-9">
 							{{ invite.team_name }}
 						</h2>
 						<p class="mt-0.5 text-p-sm text-ink-gray-5">
 							Invited as
-							<span class="font-medium text-ink-gray-7">{{ invite.role }}</span>
+							<span class="text-p-sm-medium text-ink-gray-7"
+								>{{ invite.role }}</span
+							>
 							<template v-if="invite.invited_by">
 								by {{ invite.invited_by }}</template
 							>

@@ -67,7 +67,7 @@ const dialogOptions = computed(() => ({
 			<Alert v-if="formError" theme="red" :title="formError" />
 			<p class="text-p-base text-ink-gray-7">
 				They'll immediately lose access to
-				<span class="font-semibold text-ink-gray-9"
+				<span class="text-p-base-semibold text-ink-gray-9"
 					>{{ activeTeamLabel }}'s</span
 				>
 				team and all its servers and sites. You can re-invite them at any time.

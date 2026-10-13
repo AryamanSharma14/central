@@ -3,11 +3,6 @@ import { computed, ref } from 'vue'
 import { API, method } from '@/api/methods'
 import type { Team } from '@/types/api'
 
-// Identity for the console: which teams the signed-in user belongs to, and which
-// one is active. Module-level singletons so every screen + composable scopes its
-// reads (registry, capabilities) to the same team, and a single switch re-drives
-// all of them. The active team is persisted so a refresh keeps your context.
-
 const STORAGE_KEY = 'central.console.activeTeam'
 
 function storedTeam(): string | null {
@@ -24,8 +19,35 @@ function selectTeam(name: string | null) {
 	activeTeam.value = name
 	try {
 		if (name) localStorage.setItem(STORAGE_KEY, name)
+		else localStorage.removeItem(STORAGE_KEY)
 	} catch {
 		/* storage unavailable (private mode) — in-memory selection still works */
+	}
+}
+
+function switchTeam(name: string | null): void {
+	if (name === activeTeam.value) return
+
+	try {
+		if (name) localStorage.setItem(STORAGE_KEY, name)
+		else localStorage.removeItem(STORAGE_KEY)
+	} catch {
+		throw new Error(
+			'Could not save the selected team. Allow browser storage and try again.',
+		)
+	}
+
+	// A new document discards page state and in-flight requests from the previous team.
+	const path = window.location.pathname
+	if (
+		path.startsWith('/dashboard/servers/') &&
+		path !== '/dashboard/servers/snapshots'
+	) {
+		window.location.replace('/dashboard/servers')
+	} else if (path.startsWith('/dashboard/object-storage/')) {
+		window.location.replace('/dashboard/object-storage')
+	} else {
+		window.location.reload()
 	}
 }
 
@@ -50,6 +72,7 @@ export function useSession() {
 	return {
 		teams: computed<Team[]>(() => teamsCall.data ?? []),
 		loading: computed(() => teamsCall.loading),
+		error: computed(() => teamsCall.error),
 		// False until my_teams answers, so "no teams" is never read from a pending call.
 		isLoaded: computed(() => teamsCall.data != null),
 		activeTeam,
@@ -63,7 +86,7 @@ export function useSession() {
 				(teamsCall.data ?? []).find((t) => t.name === activeTeam.value)?.logo ??
 				null,
 		),
-		setActiveTeam: selectTeam,
+		setActiveTeam: switchTeam,
 		reload: () => teamsCall.reload(),
 	}
 }
