@@ -66,6 +66,8 @@ Use Enter or Space to open the selector. Use Up and Down to move between actions
 
 Server usage opens with the last hour selected. You can select 24 hours, 7 days, 14 days, 30 days, or a custom window of up to 30 days. Switching tabs preserves the content alignment when a scrollbar is needed.
 
+The map uses theme-aware contrast for world dots and region controls. The team selector uses standard Frappe UI typography with a small gap between the product name and team name.
+
 ## Run checks and tests
 
 The dashboard uses the installed Frappe UI typography tokens. Use `text-<size>-<weight>` for labels and headings, and `text-p-<size>` for paragraphs. These classes set size, weight, line height, and spacing together. Provider fallback initials use the same type scale at each avatar size.

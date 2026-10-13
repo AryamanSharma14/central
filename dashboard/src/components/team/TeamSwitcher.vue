@@ -89,7 +89,7 @@ const { onKeydown } = useMenuKeyboardNavigation(() => {
 							class="size-6 shrink-0"
 						/>
 					</template>
-					<span v-if="!collapsed" class="flex min-w-0 flex-col">
+					<span v-if="!collapsed" class="flex min-w-0 flex-col gap-0.5">
 						<span class="truncate text-sm-medium text-ink-gray-8"
 							>Frappe Cloud</span
 						>

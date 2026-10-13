@@ -392,12 +392,12 @@ function clickNode(node: MapNode): void {
 	opacity: 0;
 }
 
-/* Dark mode raises each colour a step: its gray scale is compressed near the base. */
+/* Dark surfaces need stronger node fills to separate controls from the map. */
 .sm-tokens {
-	--sm-dot: var(--ink-gray-2);
+	--sm-dot: var(--ink-gray-3);
 	--sm-node-bg: var(--surface-elevation-1);
-	--sm-node-border: var(--outline-gray-2);
-	--sm-node-ink: var(--ink-gray-6);
+	--sm-node-border: var(--outline-gray-3);
+	--sm-node-ink: var(--ink-gray-7);
 	--sm-cluster-bg: var(--surface-gray-1);
 	--sm-label-ink: var(--ink-gray-7);
 }
