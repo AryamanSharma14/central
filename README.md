@@ -68,6 +68,8 @@ Server usage opens with the last hour selected. You can select 24 hours, 7 days,
 
 ## Run checks and tests
 
+The dashboard uses the installed Frappe UI typography tokens. Use `text-<size>-<weight>` for labels and headings, and `text-p-<size>` for paragraphs. These classes set size, weight, line height, and spacing together. Provider fallback initials use the same type scale at each avatar size.
+
 Run the team session checks with `node --test dashboard/tests/team-session.test.mjs`. These checks verify team selection, section navigation, and browser storage failures without a running site.
 
 Run presentation checks with `node --test dashboard/tests/team-labels.test.mjs`. These checks verify duplicate team names, full team identities, and readable permission labels.

@@ -50,7 +50,7 @@ async function submit() {
 
 <template>
 	<AuthShell>
-		<h1 class="flex items-center gap-2 text-xl font-semibold text-ink-gray-9">
+		<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 			<ProductLogo />
 			Create your account
 		</h1>
@@ -93,7 +93,7 @@ async function submit() {
 			<p>
 				Already have an account?
 				<RouterLink
-					class="font-medium text-ink-gray-8 hover:underline"
+					class="text-p-sm-medium text-ink-gray-8 hover:underline"
 					:to="{ path: '/login', query: carriedQuery(route.query) }"
 				>
 					Sign in

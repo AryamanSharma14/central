@@ -14,7 +14,7 @@ const copied = ref(false)
 
 const copy = async (): Promise<void> => {
 	if (!(await copyToClipboard(props.text))) {
-		reportError('Could not copy. Select the text and copy it by hand.')
+		reportError('Could not copy. Select the text and copy it manually.')
 
 		return
 	}

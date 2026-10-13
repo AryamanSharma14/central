@@ -39,7 +39,7 @@ withDefaults(defineProps<AuthShellProps>(), {
 				alt=""
 				class="h-6 w-6 rounded-4 object-contain"
 			/>
-			<span class="text-base font-semibold text-ink-gray-8">Frappe Cloud</span>
+			<span class="text-base-semibold text-ink-gray-8">Frappe Cloud</span>
 		</footer>
 	</main>
 </template>
