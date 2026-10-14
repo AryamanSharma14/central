@@ -81,26 +81,24 @@ async function onPhotoChange(fileUrl: string | null): Promise<void> {
 		</div>
 
 		<Alert v-if="nameError" class="mb-3" theme="red" :title="nameError" />
-		<div class="flex items-end gap-2">
-			<TextInput
-				v-model="name"
-				v-focus
-				label="Full name"
-				class="flex-1"
-				@keydown.enter="onSave"
-			/>
-			<!-- Save only exists once there's something to save. -->
-			<Button
-				v-if="changed"
-				variant="solid"
-				label="Save"
-				:loading="saving"
-				@click="onSave"
-			/>
+		<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+			<div class="flex min-w-0 items-end gap-2">
+				<TextInput
+					v-model="name"
+					v-focus
+					label="Full name"
+					class="min-w-0 flex-1"
+					@keydown.enter="onSave"
+				/>
+				<Button
+					v-if="changed"
+					variant="solid"
+					label="Save"
+					:loading="saving"
+					@click="onSave"
+				/>
+			</div>
+			<TextInput :model-value="profile?.user ?? ''" label="Email" disabled />
 		</div>
-
-		<!-- Identity, not a setting — disabled (not readonly) so it can't be
-		     focused or clicked into at all. -->
-		<TextInput :model-value="profile?.user ?? ''" label="Email" disabled />
 	</div>
 </template>

@@ -728,13 +728,43 @@ class TestSiteNaming(SiteOnAMachine):
 		site = self.site()
 		site.db_set("rename_task", "task-2")
 
-		with patch(
-			"central.integrations.pilot.fetch_site_login_url",
-			side_effect=[None, "https://site.local/desk?sid=abc"],
-		) as login:
-			self.assertTrue(site.get_login_url())
+		with (
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				side_effect=[None, "https://site.local/desk?sid=abc"],
+			) as login,
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
 
 		self.assertEqual([call.args[2] for call in login.call_args_list], [site.rename_target, "site.local"])
+
+	def test_central_redirects_to_the_renamed_host_when_ready(self):
+		site = self.site()
+		site.db_set("rename_task", "task-2")
+		with (
+			patch("central.integrations.pilot.is_site_reachable", return_value=True) as probe,
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				return_value="https://site.local/desk?sid=abc",
+			) as login,
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
+		probe.assert_called_once_with(f"https://{site.rename_target}")
+		self.assertEqual(login.call_args.args[2], site.rename_target)
+
+	def test_pending_route_keeps_the_automatic_redirect(self):
+		site = self.site()
+		site.db_set("rename_task", "task-2")
+		with (
+			patch("central.integrations.pilot.is_site_reachable", return_value=False),
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				return_value="https://site.local/desk?sid=abc",
+			) as login,
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
+		self.assertEqual(login.call_args.args[2], "site.local")
 
 	def test_the_address_stays_ours_and_theirs_is_only_a_rename_target(self):
 		site = self.site()

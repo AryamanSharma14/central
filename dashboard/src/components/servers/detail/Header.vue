@@ -60,7 +60,9 @@ const addresses = computed(() =>
 			icon: 'lucide-lock',
 			help: 'Private address within this region',
 		},
-	].filter((row): row is typeof row & { value: string } => !!row.value),
+	]
+		.filter((row): row is typeof row & { value: string } => !!row.value)
+		.slice(0, 1),
 )
 
 const isProtected = computed(() => !!props.details?.is_termination_protected)
@@ -82,9 +84,7 @@ const facts = computed(() => {
 		},
 		{
 			icon: 'lucide-layers',
-			label: isUbuntu.value
-				? 'Ubuntu'
-				: `Frappe ${server.frappe_version || ''}`.trim(),
+			label: isUbuntu.value ? 'Ubuntu' : null,
 		},
 		{
 			icon: 'lucide-package',

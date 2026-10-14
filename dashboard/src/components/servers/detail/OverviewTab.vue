@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Button, DateTimePicker, dayjs, Select, Skeleton } from 'frappe-ui'
-import { AreaChart, ChartCard, useChartTokens } from 'frappe-ui/charts'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import UsageCard from '@/components/common/UsageCard.vue'
 import { usePlans } from '@/composables/usePlans'
@@ -9,11 +8,9 @@ import { formatBytes, usagePercent } from '@/lib/bytes'
 import { timeAgo } from '@/lib/datetime'
 import {
 	formatSampleInterval,
-	getChartSummary,
 	getChartTimeGrain,
 	getMetricCharts,
 	METRIC_PERIODS,
-	type MetricChart,
 } from '@/lib/serverMetrics'
 import { formatVcpu } from '@/lib/units'
 import type {
@@ -21,6 +18,7 @@ import type {
 	ServerMonitoring,
 	ServerOverview,
 } from '@/types/servers'
+import ServerMetricChart from './ServerMetricChart.vue'
 
 interface Props {
 	overview: ServerOverview
@@ -87,26 +85,6 @@ const charts = computed(() =>
 		? getMetricCharts(points.value, memoryTotal.value / 1024 ** 3)
 		: [],
 )
-
-const GRID = {
-	show: true,
-	lineStyle: { type: 'dashed', color: 'var(--outline-gray-2)' },
-}
-
-const { tokens } = useChartTokens(ref())
-
-const getSeriesConfig = (chart: MetricChart) =>
-	Object.fromEntries(
-		chart.series.map((name, index) => [
-			name,
-			{
-				color: tokens.value.categorical[chart.colors[index] - 1],
-				smooth: true,
-				showDataPoints: false,
-				echartOptions: { areaStyle: { opacity: 0.2 } },
-			},
-		]),
-	)
 
 const { plans } = usePlans(computed(() => server.value.region))
 
@@ -265,32 +243,12 @@ const usage = computed(() => {
 		</div>
 
 		<div v-if="charts.length" class="grid gap-3 md:grid-cols-2 md:gap-4">
-			<ChartCard
+			<ServerMetricChart
 				v-for="chart in charts"
 				:key="chart.key"
-				:card="false"
-				class="h-64 rounded-6 border border-outline-gray-2 p-4"
-			>
-				<AreaChart
-					:title="chart.title"
-					:subtitle="getChartSummary(chart)"
-					:data="chart.rows"
-					x="time"
-					:y="chart.series"
-					:series-config="getSeriesConfig(chart)"
-					:x-axis="{
-						type: 'time',
-						timeGrain,
-						echartOptions: { splitLine: GRID },
-					}"
-					:y-axis="{
-						min: 0,
-						max: chart.max,
-						format: chart.format,
-						echartOptions: { splitLine: GRID },
-					}"
-				/>
-			</ChartCard>
+				:chart="chart"
+				:time-grain="timeGrain"
+			/>
 		</div>
 
 		<EmptyState

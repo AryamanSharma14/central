@@ -73,7 +73,7 @@ Nothing is provisioned during signup, so readiness is not a build finishing. A s
 
 ## Sign-in
 
-Central mints the session and puts the returned session on `Site.url`, because the public name is Central's. The token names the site by the name Pilot has for it: the customer's name once the rename task was accepted, then the image name `site.local` when Pilot does not know the new name yet. A Pilot token for one name does not reach a site that now answers to that name under another one, so Central must ask for the current name.
+Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
 
 On a trial site, a member of the site's team signs in as their own user. Pilot creates the user as a System Manager the first time they open the site, so they can finish the app's own setup. An operator outside the team, and every other site, signs in as Administrator.
 
