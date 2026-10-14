@@ -343,3 +343,63 @@ test('invitation dismissal has no extra close button and is blocked while sendin
 	)
 	control.unmount()
 })
+
+test('chart summary controls hide and restore one series while keeping a visible series', async () => {
+	const metrics = loadSource('../src/lib/serverMetrics.ts')
+	const ServerMetricChart = loadSource(
+		'../src/components/servers/detail/ServerMetricChart.vue',
+		{
+			'frappe-ui': ui,
+			'frappe-ui/charts': {
+				AreaChart: stub('AreaChart'),
+				ChartCard: stub('ChartCard'),
+				useChartTokens: () => ({
+					tokens: ref({ categorical: Array(9).fill('#123456') }),
+				}),
+			},
+			'@/lib/serverMetrics': metrics,
+		},
+	).default
+	const chart = metrics.getMetricCharts(
+		[{ time: 1, received_bytes_per_second: 2048, sent_bytes_per_second: 512 }],
+		1,
+	)[2]
+	const control = mount(ServerMetricChart, () => ({
+		chart,
+		timeGrain: 'minute',
+	}))
+	const hideReceived = control.find(
+		'Button',
+		(props) => props['aria-label'] === 'Hide Received',
+	)
+	assert.equal(hideReceived.props['aria-pressed'], true)
+	hideReceived.props.onClick()
+	await nextTick()
+	assert.equal(
+		control.find('Button', (props) => props['aria-label'] === 'Show Received')
+			.props['aria-pressed'],
+		false,
+	)
+	assert.equal(
+		control.find('Button', (props) => props['aria-label'] === 'Hide Sent').props
+			.disabled,
+		true,
+	)
+	assert.deepEqual(
+		Array.from(control.find('AreaChart').props['hidden-series']),
+		['Received'],
+	)
+	control
+		.find('Button', (props) => props['aria-label'] === 'Show Received')
+		.props.onClick()
+	await nextTick()
+	assert.equal(
+		control.find('Button', (props) => props['aria-label'] === 'Hide Sent').props
+			.disabled,
+		false,
+	)
+	assert.equal(control.find('AreaChart').props['hidden-series'].length, 0)
+	assert.match(control.text(), /2 KB\/s/)
+	assert.match(control.text(), /512 B\/s/)
+	control.unmount()
+})

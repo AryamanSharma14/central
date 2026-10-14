@@ -187,7 +187,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 
 		<div
 			v-if="canEdit && (!server.public_ipv4 || !server.public_ipv6)"
-			class="flex flex-wrap gap-2"
+			class="flex flex-wrap gap-2 px-2"
 		>
 			<Button
 				v-if="!server.public_ipv4"
@@ -217,7 +217,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 					? 'Stays on while the server has a public IPv4 address.'
 					: 'Lets the server reach sites that only have IPv4 addresses.'
 			"
-			class="rounded-6 px-4 py-3"
+			class="rounded-6 px-2 py-3"
 			@update:model-value="toggleIpv4Internet"
 		/>
 
