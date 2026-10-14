@@ -20,6 +20,7 @@ A team without a payment method can only have free trial sites. To create any ot
 | Billing Settings | Welcome Credit Amounts | USD 10, INR 1000 |
 | Billing Settings | Validity (Days) | 60 |
 | Billing Settings | Provision Teams as Trial | Off. This is for staging only. |
+| Plan | Available on Trial | On for each active plan that signup may select. The cheapest eligible marked plan is selected. Its disk must fit the trial image. |
 | Central Settings | Trial Days | 14 |
 | Central Settings | Trial Deletion Days | 14 |
 | Central Settings | Trial Notice Days | 3 |
