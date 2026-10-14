@@ -103,7 +103,7 @@ The patch removes a Site only when the request of its server names an image with
 | Signup image | `Image Offering.available_in` = `Signup` or `Both` | one offering, lowest title, `Signup` preferred |
 | Signup image tags | `SIGNUP_IMAGE_TAGS` in `central/site_provisioning.py` | `has_site=1`, `frappe_version=develop` |
 | Product app tag | [`Product.signup_app`](../../../signups/doctype/product/SPEC.md) | `app=raven` |
-| Trial region and plan | `Plan.available_on_trial` | the first Active region, by name, that has a proxy zone, offers a trial plan, and has a trial image for the signup. Central takes that region's cheapest trial plan. |
+| Trial region and plan | `Plan.available_on_trial` | the first Active region, by name, that has a proxy zone, offers a trial plan, and has a trial image for the signup. Central takes that region's cheapest active plan marked Available on Trial that is eligible for the Team. This applies to production and staging Teams. No marked eligible plan means no trial is available. |
 
 Cargo must bake the image site as `site.local`, or Pilot does not recognise the site and no login can be minted.
 

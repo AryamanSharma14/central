@@ -4,6 +4,7 @@ import frappe
 from frappe import _
 
 from central.billing.catalog.server_plans import get_server_plans
+from central.billing.catalog.trials import trial_plan_names
 from central.iam import get_user_team_names, resolve_team
 from central.identity.doctype.team.team import Team
 from central.integrations.images import list_images
@@ -197,9 +198,15 @@ def signup_offering() -> str:
 
 
 def get_cheapest_trial_plan(team: str, region: str) -> str | None:
-	"""The region's cheapest plan for this team's trial, or None.
+	"""The cheapest marked trial plan in the Team's regional catalog, or None."""
+	trial_plans = trial_plan_names()
+	if not trial_plans:
+		return None
 
-	The catalog decides which plans qualify, because it already narrows a trial team's
-	menu to the ones an operator flagged Available on Trial."""
-	plans = [row for rows in get_server_plans(team, cluster=region)["plans"].values() for row in rows]
+	plans = [
+		row
+		for rows in get_server_plans(team, cluster=region)["plans"].values()
+		for row in rows
+		if row["plan"] in trial_plans
+	]
 	return min(plans, key=lambda plan: plan["rate"])["plan"] if plans else None
