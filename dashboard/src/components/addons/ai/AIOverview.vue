@@ -80,7 +80,9 @@ const shownModels = computed(() =>
 					<NumberCard title="Requests" :value="usage?.requests ?? null" />
 					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
 						<template #actions>
-							<Tooltip text="Total input and output tokens">
+							<Tooltip
+								text="Total tokens processed across the team's API keys, including input and output. Tokens measure model usage."
+							>
 								<lucide-circle-help
 									class="size-4 text-ink-gray-5"
 									aria-label="What counts as a token"
@@ -154,7 +156,8 @@ const shownModels = computed(() =>
 				</table>
 
 				<p v-else class="mt-3 text-p-sm text-ink-gray-5">
-					No models accessible yet.
+					No models are available to this team. Contact support to check model
+					access.
 				</p>
 
 				<Button

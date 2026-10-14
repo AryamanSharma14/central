@@ -61,7 +61,10 @@ def sign_up_with_invitation(token: str, full_name: str) -> dict:
 	full_name = _required_full_name(full_name)
 	invitation = get_invitation_by_token(token)
 	if not invitation.is_pending:
-		frappe.throw(_("This invitation is no longer valid."), frappe.ValidationError)
+		frappe.throw(
+			_("This invitation is no longer valid. Ask a team admin to send a new invitation."),
+			frappe.ValidationError,
+		)
 	if frappe.db.exists("User", invitation.email):
 		frappe.throw(
 			_("An account with this email already exists. Sign in to accept."), frappe.ValidationError
@@ -97,7 +100,10 @@ def _required_full_name(full_name: str) -> str:
 
 	full_name = full_name.strip()
 	if len(full_name) > FULL_NAME_MAX_LENGTH:
-		frappe.throw(_("Use a shorter name."), frappe.ValidationError)
+		frappe.throw(
+			_("Enter a full name with {0} characters or fewer.").format(FULL_NAME_MAX_LENGTH),
+			frappe.ValidationError,
+		)
 
 	return full_name
 

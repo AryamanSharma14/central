@@ -37,8 +37,16 @@ class TeamRole(Document):
 		if self.flags.from_team_delete:
 			return
 		if not user_has_operator_bypass() and not can(frappe.session.user, self.team, "team:manage_members"):
-			frappe.throw(_("You can't manage roles for this team."), frappe.PermissionError)
+			frappe.throw(
+				_("You can't manage roles for this team. Ask a team admin to review your access."),
+				frappe.PermissionError,
+			)
 		if frappe.db.exists("Team Member", {"role": self.name}):
 			frappe.throw(_("Reassign members off this role before deleting it."), frappe.ValidationError)
 		if frappe.db.exists("Team Invitation", {"role": self.name, "status": "Pending"}):
-			frappe.throw(_("A pending invitation still uses this role."), frappe.ValidationError)
+			frappe.throw(
+				_(
+					"This role is used by a pending invitation. Revoke the invitation before deleting the role."
+				),
+				frappe.ValidationError,
+			)

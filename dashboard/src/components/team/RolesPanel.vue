@@ -103,7 +103,12 @@ const { selectedKey, selected, select, clear } = useTeamRowSelection(
 		:show-page-size="false"
 		:show-count="false"
 		:active-key="selectedKey"
-		:empty-state="{ title: 'No roles yet', description: 'Create a role to grant capabilities to members.' }"
+		:empty-state="{
+			title: 'No roles yet',
+			description: canManageMembers
+				? 'Create a role to choose what team members can view and change.'
+				: 'Roles define what team members can view and change. Ask a team admin to create a role.',
+		}"
 		@retry="reload"
 		@row-click="select"
 	>

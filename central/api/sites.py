@@ -15,7 +15,9 @@ from central.utils.guards import require_capability
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:create", _lt("You can't create sites for this Team."))
+@require_capability(
+	"server:create", _lt("You can't create sites for this Team. Ask a team admin to review your access.")
+)
 def site_domain(team: str | None = None, product: str | None = None) -> dict:
 	"""The zone a new site of this product is named in, so the console can show the suffix as
 	they type. It is the zone of the region that the trial is then created in."""
@@ -27,7 +29,9 @@ def site_domain(team: str | None = None, product: str | None = None) -> dict:
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:create", _lt("You can't create sites for this Team."))
+@require_capability(
+	"server:create", _lt("You can't create sites for this Team. Ask a team admin to review your access.")
+)
 def check_subdomain(subdomain: str, team: str | None = None) -> dict:
 	"""Whether a name is free, while the customer is still typing it."""
 	from central.site_provisioning import subdomain_availability
@@ -100,7 +104,9 @@ def login_site(name: str) -> dict:
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's sites."))
+@require_capability(
+	"server:view", _lt("You can't view this team's sites. Ask a team admin to review your access.")
+)
 def onboarding_status(team: str | None = None, product: str | None = None) -> dict:
 	"""Resume this product's site or creation within the authorized team."""
 	if product:
@@ -194,7 +200,9 @@ def authorized_site(name: str, capability: str) -> Site:
 	row = frappe.db.get_value("Site", name, ["team", "server"], as_dict=True)
 	# One answer for a missing site and a foreign one, so a name cannot be probed.
 	if not row or not row.team or not can(frappe.session.user, row.team, capability, server=row.server):
-		frappe.throw(_("You can't manage this site."), frappe.PermissionError)
+		frappe.throw(
+			_("You can't manage this site. Ask a team admin to review your access."), frappe.PermissionError
+		)
 
 	site = frappe.get_doc("Site", name)
 	site.check_permission("read")

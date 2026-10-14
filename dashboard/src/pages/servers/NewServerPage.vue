@@ -128,7 +128,8 @@ watch(
 			<div class="vt-server-form w-full p-4 md:p-6 lg:w-1/2">
 				<p v-if="loading" class="text-p-sm text-ink-gray-5">Loading regions…</p>
 				<p v-else-if="!regions.length" class="text-p-sm text-ink-gray-5">
-					No active regions are available right now.
+					No regions are accepting new servers right now. Try again later, or
+					contact support.
 				</p>
 
 				<div v-else class="space-y-8">
@@ -188,7 +189,8 @@ watch(
 								v-else-if="snapshotOptions.length < 2"
 								class="text-p-sm text-ink-gray-5"
 							>
-								No snapshots are available in this region.
+								No snapshots are available in this region. Select another
+								region, or choose Image to create a server without a snapshot.
 							</p>
 							<Select
 								v-else
@@ -321,7 +323,8 @@ watch(
 
 						<p v-else-if="nothingToShow" class="text-p-sm text-ink-gray-5">
 							No plans are available for this region within your current
-							spending limit.
+							spending limit. Select another region, or contact support to
+							review your limit.
 						</p>
 
 						<Tabs v-else-if="hasTabs" v-model="activeTab" :tabs="classTabs">

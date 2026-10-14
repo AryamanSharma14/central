@@ -212,9 +212,7 @@ scheduler_events = {
 		# Retry proxy routes that failed or never ran, up to the attempt limit.
 		"*/5 * * * *": [
 			"central.infrastructure.doctype.site_domain.site_domain.retry_failed",
-			# Record readiness of a site the customer left before it answered.
 			"central.infrastructure.doctype.site.site.record_ready_sites",
-			# Snapshots have no region event, so Central reads each one until it settles.
 			"central.infrastructure.doctype.vm_snapshot.vm_snapshot.sync_pending_snapshots",
 			"central.infrastructure.doctype.frappemail_service.frappemail_service.refill_mailboxes",
 		],
@@ -228,65 +226,30 @@ scheduler_events = {
 	],
 	"daily": [
 		"central.identity.doctype.team_invitation.team_invitation.expire_pending_invitations",
-		# Warn, stop and terminate trial sites by their dates.
 		"central.signups.trial.run_trials",
-		# Billing (module): retry/dunning + staged suspension for unpaid invoices,
-		# and pruning Payment Attempt / Webhook Event logs.
 		"central.billing.revenue.dunning.run_dunning",
 		"central.billing.payments.charges.cleanup_payment_logs",
 		"central.billing.projection.batch.prune",
-		# E-mandate (INR ≤₹15k): send the pre-debit notice, then debit after 24h.
 		"central.billing.payments.emandate.run_emandate_cycle",
-		# Backfill Subscriptions for any Running VirtualMachine missing an active one.
 		"central.billing.catalog.subscriptions.backfill_missing_subscriptions",
-		# Ask teams running on credits for the billing details their invoice will
-		# need, so the hold at issue time is never the first they hear of it.
 		"central.billing.payments.settlement.run_billing_details_reminder",
-		# Write off promotional credit that has run out of time. Ordered after
-		# collection on purpose: credit that was still good this morning settles
-		# today's invoice before it is swept, so the customer gets the full benefit
-		# of the last day they were given.
 		"central.billing.revenue.credits.run_credit_expiry",
-		# Keep stored GSTIN statuses fresh for invoicing, a paced and capped batch a day.
 		"central.billing.revenue.gst_status.run_gst_status_refresh",
-		# Retry billing profiles whose customer records never finished syncing.
 		"central.billing.ingester.customer.sync_pending_profiles",
-		# Retry wallet top-ups whose advance never reached the accounting system.
 		"central.billing.ingester.advance.sync_pending_advances",
-		# Assert the money invariants that no DB constraint can hold (they span
-		# tables): wallet == its ledger, invoice == its lines, captured == amount_paid.
-		# Silence is the success case; a violation is logged with its team and amount.
-		# Read it as the "Billing Invariant Violations" report.
 		"central.billing.platform.invariants.run_invariant_audit",
 	],
 	"hourly": [
-		# Billing: ERPNext sync retries whose backoff window has elapsed.
 		"central.billing.ingester.erpnext_sync.retry_failed_syncs",
-		# A charge whose outcome we don't know is money in the air: ask the gateway and
-		# settle it. It waits 30 minutes for the webhook first, so a daily sweep left it
-		# hanging for up to a day — and the key it needs to re-send safely expires in
-		# about one (ADR 0017).
 		"central.billing.payments.reconciliation.run_reconciliation",
-		# The sweeps above detect what they cannot fix; this is what pages a human
-		# about it — unresolved invariants, failed webhooks, attempts still in flight.
 		"central.billing.platform.alerts.run_operator_alerts",
 	],
 	"monthly": [
-		# Billing: on the 1st, bill the just-closed month end-to-end for every team —
-		# draft one consolidated invoice per team, then open + collect (credits→card).
-		# The production trigger for the two-phase invoicing (#09/#10).
 		"central.billing.revenue.invoicing.run_monthly_billing",
-		# Billing: cards expire at the end of their printed month; flip lapsed ones.
 		"central.billing.payments.payments.expire_payment_methods",
 	],
 }
 
-# Billing (module): authorisation is Central's capability IAM (ADR 0004) — no
-# billing-owned roles or User->team field to provision. The catalog taxonomy masters,
-# however, are reference data the catalog can't run without, so re-assert them on every
-# migrate too (idempotent — ADR 0007). The money CHECK constraints are re-asserted for
-# the same reason: a dropped or never-applied constraint must heal on migrate, not wait
-# for someone to notice the balance went negative (ADR 0018).
 after_migrate = [
 	"central.billing.catalog.taxonomy_setup.ensure_catalog_masters",
 	"central.billing.settings.ensure_snapshot_settings",

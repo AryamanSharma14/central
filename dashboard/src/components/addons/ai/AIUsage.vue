@@ -154,7 +154,9 @@ const asOf = computed(() =>
 				v-else-if="usage && !models.length && !usageLoading"
 				class="rounded-6 border border-outline-gray-2 p-8 text-center text-p-sm text-ink-gray-5"
 			>
-				No data available
+				{{ isFiltered
+					? 'No AI requests were recorded for these filters. Choose another period or reset the filters.'
+					: 'No AI requests were recorded in the last 7 days. Use an API key from the API keys tab to send your first request, or choose another period to view earlier usage.' }}
 			</p>
 
 			<template v-else>
