@@ -261,6 +261,11 @@
    "link_fieldname": "region"
   },
   {
+   "group": "Fleet",
+   "link_doctype": "Metal Server",
+   "link_fieldname": "region"
+  },
+  {
    "group": "Routing",
    "link_doctype": "Site Domain",
    "link_fieldname": "region"
