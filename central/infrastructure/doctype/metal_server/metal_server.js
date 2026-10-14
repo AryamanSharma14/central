@@ -3,6 +3,9 @@
 
 frappe.ui.form.on("Metal Server", {
 	refresh(frm) {
+		frm.sidebar.clear_user_actions();
+		if (frm.doc.bmc_url) frm.add_web_link(frm.doc.bmc_url, __("Open BMC"));
+
 		if (frm.is_new() || !frappe.user.has_role("System Manager")) return;
 
 		for (const [kind, label] of [["root", __("Root")], ["bmc", __("BMC")]]) {

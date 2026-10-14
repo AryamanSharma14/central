@@ -46,7 +46,6 @@
   {
    "fieldname": "region",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Region",
    "options": "Region",
@@ -69,7 +68,6 @@
   {
    "fieldname": "cost_per_month_inr",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Cost per Month (INR)",
    "options": "INR"
   },
@@ -85,13 +83,11 @@
   {
    "fieldname": "vcpus",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "vCPUs"
   },
   {
    "fieldname": "memory_gib",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "Memory (GiB)"
   },
   {
@@ -106,7 +102,9 @@
   {
    "fieldname": "private_ipv4",
    "fieldtype": "Data",
-   "label": "Private IPv4"
+   "label": "Private IPv4",
+   "in_standard_filter": 1,
+   "search_index": 1
   },
   {
    "fieldname": "column_break_network",
@@ -116,7 +114,9 @@
    "fieldname": "public_ipv4",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Public IPv4"
+   "label": "Public IPv4",
+   "in_standard_filter": 1,
+   "search_index": 1
   },
   {
    "collapsible": 1,
