@@ -70,24 +70,11 @@ const addresses = computed(() =>
 
 const query = createListViewQuery()
 const columns = computed<ListViewColumn<Address>[]>(() => [
-	{ accessorKey: 'label', header: 'Type', size: 120, enableSorting: false },
-	{ accessorKey: 'value', header: 'Address', size: 260, enableSorting: false },
-	{
-		accessorKey: 'reach',
-		header: 'Reachable by',
-		size: 220,
-		enableSorting: false,
-	},
+	{ key: 'label', label: 'Type', width: '9rem' },
+	{ key: 'value', label: 'Address' },
+	{ key: 'reach', label: 'Reachable by', width: '14rem' },
 	...(props.canEdit
-		? [
-				{
-					id: 'actions',
-					header: '',
-					size: 48,
-					enableSorting: false,
-					meta: { align: 'end' as const },
-				},
-			]
+		? [{ key: 'actions', label: '', width: '2.5rem', align: 'end' as const }]
 		: []),
 ])
 

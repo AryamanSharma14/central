@@ -54,28 +54,16 @@ const onDeleteRole = async (role: TeamRoleRow): Promise<void> => {
 	}
 }
 
-// Columns declare id/header/sorting only — the Role/Members/Actions markup is
-// filled in by the matching #role/#members/#actions slots in the template below.
-const columns = computed<ListViewColumn<TeamRoleRow>[]>(() => [
+const columns: ListViewColumn<TeamRoleRow>[] = [
 	{
-		id: 'role',
-		header: 'Role',
-		accessorKey: 'role_name',
-		meta: { cellClass: 'truncate' },
+		key: 'role',
+		label: 'Role',
+		value: (role) => role.role_name,
+		sortable: true,
 	},
-	{
-		id: 'members',
-		header: 'Members',
-		enableSorting: false,
-	},
-	{
-		id: 'actions',
-		header: '',
-		enableSorting: false,
-		size: 1,
-		meta: { align: 'end' },
-	},
-])
+	{ key: 'members', label: 'Members' },
+	{ key: 'actions', label: '', width: '2.5rem', align: 'end' },
+]
 
 const getRoleKey = (role: TeamRoleRow): string => role.name
 

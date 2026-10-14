@@ -76,56 +76,47 @@ const SERVER_SCOPED_HIDDEN = ['type', 'cost']
 const columns = computed<ListViewColumn<VMSnapshotRow>[]>(() =>
 	allColumns.value.filter(
 		(column) =>
-			!props.serverScoped || !SERVER_SCOPED_HIDDEN.includes(column.id ?? ''),
+			!props.serverScoped || !SERVER_SCOPED_HIDDEN.includes(column.key),
 	),
 )
 
 const allColumns = computed<ListViewColumn<VMSnapshotRow>[]>(() => [
 	{
-		id: 'snapshot',
-		accessorFn: (row) => `${row.title} ${row.server_title}`,
-		header: 'Snapshot',
-		size: 320,
+		key: 'snapshot',
+		label: 'Snapshot',
+		value: (row) => `${row.title} ${row.server_title}`,
+		sortable: true,
 	},
 	{
-		id: 'type',
-		accessorFn: (row) => row.snapshot_type,
-		header: 'Type',
-		size: 100,
+		key: 'type',
+		label: 'Type',
+		value: (row) => row.snapshot_type,
+		width: '6rem',
+		sortable: true,
 	},
 	{
-		id: 'size',
-		accessorFn: (row) => row.size_mib,
-		header: 'Size',
-		size: 90,
+		key: 'size',
+		label: 'Size',
+		value: (row) => row.size_mib,
+		width: '5.5rem',
+		sortable: true,
 	},
 	{
-		id: 'created',
-		accessorFn: (row) => row.creation,
-		header: 'Created',
-		size: 120,
-		meta: { cellClass: 'max-md:hidden', headerClass: 'max-md:hidden' },
+		key: 'created',
+		label: 'Created',
+		value: (row) => row.creation,
+		width: '7.5rem',
+		sortable: true,
+		class: 'max-md:hidden',
 	},
 	{
-		id: 'cost',
-		accessorFn: (row) => snapshotCostLabel(row, props.currency),
-		header: 'Cost',
-		size: 160,
-		enableSorting: false,
+		key: 'cost',
+		label: 'Cost',
+		value: (row) => snapshotCostLabel(row, props.currency),
+		width: '10rem',
 	},
-	{
-		accessorKey: 'status',
-		header: 'Status',
-		size: 110,
-	},
-	{
-		id: 'actions',
-		header: '',
-		size: 48,
-		enableSorting: false,
-		enableGlobalFilter: false,
-		meta: { align: 'end' },
-	},
+	{ key: 'status', label: 'Status', width: '7rem', sortable: true },
+	{ key: 'actions', label: '', width: '2.5rem', align: 'end' },
 ])
 
 const visibleFilters = computed(() =>
