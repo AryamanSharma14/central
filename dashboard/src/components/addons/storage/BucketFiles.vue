@@ -134,17 +134,10 @@ const fileRows = computed<FileRow[]>(() =>
 const rows = computed(() => [...folderRows.value, ...fileRows.value])
 
 const columns = computed<ListViewColumn<FileRow>[]>(() => [
-	{ accessorKey: 'name', header: 'Name', size: 500, enableSorting: false },
-	{ accessorKey: 'size', header: 'Size', size: 100, enableSorting: false },
-	{
-		accessorKey: 'modified',
-		header: 'Last modified',
-		size: 140,
-		enableSorting: false,
-	},
-	...(props.canManage
-		? [{ id: 'actions', header: '', size: 40, enableSorting: false }]
-		: []),
+	{ key: 'name', label: 'Name' },
+	{ key: 'size', label: 'Size', width: '6rem' },
+	{ key: 'modified', label: 'Last modified', width: '9rem' },
+	...(props.canManage ? [{ key: 'actions', label: '', width: '2.5rem' }] : []),
 ])
 
 const download = async (key: string): Promise<void> => {

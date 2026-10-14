@@ -169,7 +169,7 @@ const asOf = computed(() =>
 						:data="daily"
 						x="day"
 						y="cost"
-						series="model"
+						split-by="model"
 						:series-config="modelSeries"
 						stacked
 						:x-axis="dayAxis"
