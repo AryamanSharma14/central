@@ -244,6 +244,39 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 		self.assertIn("https://raven.example.test/start", html)
 		self.assertNotIn("https://raven.example.test/start", expiring)
 
+	def test_welcome_emails_link_the_created_site_and_product_landing_route(self):
+		product = self.product(landing_route="/raven")
+		for event_type in ("site_ready", "trial_unopened"):
+			with self.subTest(event_type=event_type):
+				self.event = engine.get_event_type(event_type)
+				html = self.email_for(product)
+				self.assertIn(f'href="{self.site().url}/raven"', html)
+
+	def test_plain_site_ready_email_links_the_created_site(self):
+		context = engine._resolve_context(self.team.name, "site_ready", {}, self.site().name, "Site")
+		_, html = engine._notification_email(self.event, context)
+		self.assertIn(f'href="{self.site().url}"', html)
+
+	def test_billing_emails_link_central_and_deleted_email_has_no_site_link(self):
+		product = self.product(landing_route="/raven")
+		with patch("central.notification.engine.central_url", return_value="https://central.example.test"):
+			for event_type in ("trial_expiring", "trial_ended", "trial_deletion_soon", "trial_converted"):
+				with self.subTest(event_type=event_type):
+					self.event = engine.get_event_type(event_type)
+					html = self.email_for(product)
+					self.assertIn('href="https://central.example.test/dashboard/billing"', html)
+					self.assertNotIn(f'href="{self.site().url}', html)
+		self.event = engine.get_event_type("trial_deleted")
+		self.assertNotIn(f'href="{self.site().url}', self.email_for(product))
+
+	def test_welcome_email_preview_uses_sample_site_and_product_landing_route(self):
+		product = self.product(landing_route="/raven")
+		address = product.get_preview_context()["context"]["address"]
+		for event_type in ("site_ready", "trial_unopened"):
+			with self.subTest(event_type=event_type):
+				html = product.preview_email(event_type)["html"]
+				self.assertIn(f'href="https://{address}/raven"', html)
+
 	def test_a_pilot_message_is_escaped_in_the_email(self):
 		self.event = engine.get_event_type("site_ready")
 		context = engine._resolve_context(self.team.name, "site_ready", {"product": "<i>Raven</i>"}, "", "")
@@ -262,3 +295,4 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 
 		self.assertNotIn("channel", html)
 		self.assertNotIn("/files/raven.png", html)
+		self.assertNotIn(f'href="{self.site().url}', html)

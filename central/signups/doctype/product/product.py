@@ -130,7 +130,12 @@ class Product(Document):
 		if not event:
 			frappe.throw(_("Choose one of the product's emails to preview."))
 
-		return render_notification_email(event, self.get_preview_context(), self.get_email_extras(event_type))
+		context = self.get_preview_context()
+		extras = self.get_email_extras(event_type)
+		if event_type in GETTING_STARTED_EMAILS:
+			extras["site_url"] = f"https://{context['context']['address']}{self.landing_route or ''}"
+
+		return render_notification_email(event, context, extras)
 
 	@frappe.whitelist(methods=["POST"])
 	def send_test_email(self, event_type: str) -> None:
