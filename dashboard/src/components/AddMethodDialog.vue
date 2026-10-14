@@ -337,7 +337,7 @@ watch(open, (isOpen) => {
 						v-model="phone"
 						label="Phone number"
 						placeholder="Mobile number"
-						description="A recurring card on this rail needs a contact number. Saved to your billing profile."
+						description="A phone number is required to set up automatic card payments. It will be saved to your billing profile."
 					/>
 				</div>
 

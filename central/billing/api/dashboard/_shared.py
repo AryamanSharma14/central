@@ -51,7 +51,7 @@ def _resolve_team(team: str | None, require: str = authz.VIEW) -> str:
 	mutation endpoint that takes a `team` argument."""
 	team = team or _default_team()
 	if not team:
-		frappe.throw(_("No billing team in context."), frappe.ValidationError)
+		frappe.throw(_("Select a team before opening Billing."), frappe.ValidationError)
 	authz.require_capability(team, require)
 	return team
 
@@ -135,7 +135,10 @@ def _gateway_for_currency(currency: str) -> str:
 		return resolve_gateway_for_currency(currency)
 	except GatewayNotFound:
 		frappe.throw(
-			_("No payment gateway configured for {0} top-ups.").format(currency), frappe.ValidationError
+			_(
+				"No payment gateway is configured for {0} top-ups. Contact support to add credit to this team."
+			).format(currency),
+			frappe.ValidationError,
 		)
 
 
@@ -163,7 +166,9 @@ def _paypal_gateway_for_currency(currency: str) -> str:
 	if gw:
 		return gw
 	frappe.throw(
-		_("PayPal top-ups need an enabled PayPal gateway that handles {0}.").format(currency),
+		_(
+			"No enabled PayPal gateway supports {0} top-ups. Choose another payment method, or contact support."
+		).format(currency),
 		frappe.ValidationError,
 	)
 

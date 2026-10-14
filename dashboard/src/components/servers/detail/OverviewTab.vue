@@ -297,7 +297,7 @@ const usage = computed(() => {
 			v-else
 			icon="lucide-chart-area"
 			title="No samples in this period"
-			description="The region has no measurements for this server in the chosen period."
+			description="The region has no measurements for this server in the chosen period. Choose another period, or wait for the next update if the server has just started."
 		/>
 	</div>
 

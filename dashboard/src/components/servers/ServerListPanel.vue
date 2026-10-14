@@ -202,7 +202,9 @@ onBeforeUnmount(() => window.clearTimeout(cascadeTimer))
 				:description="
 					hasRows
 						? 'Try a different search or clear the filters.'
-						: 'Create your first server to host your sites. Pick a region on the map, or start here.'
+						: canCreate
+							? 'Create your first server to host your sites. Pick a region on the map, or start here.'
+							: 'This team has no servers you can view. Ask a team admin to create a server or check your access.'
 				"
 			>
 				<template v-if="canCreate && !hasRows" #action>

@@ -6,8 +6,8 @@ from central.integrations.grove import GroveClient
 from central.services import ai
 from central.utils.guards import require_capability
 
-VIEW_DENIED = _lt("You can't view this team's AI.")
-MANAGE_DENIED = _lt("You can't manage this team's AI.")
+VIEW_DENIED = _lt("You can't view this team's AI. Ask a team admin to review your access.")
+MANAGE_DENIED = _lt("You can't manage this team's AI. Ask a team admin to review your access.")
 KEY_FIELDS = ("name", "title", "status", "creation", "revocable_at", "masked", "can_read_balance")
 
 # Grove owns the keys. Central keeps none: a secret is shown once, in the answer that mints it.
@@ -48,7 +48,7 @@ def create_api_key(team: str | None = None, label: str | None = None) -> dict:
 	require_ai(team)
 	label = (label or "").strip()
 	if not label:
-		frappe.throw(_("A label is required."))
+		frappe.throw(_("Enter a name for the API key so you can identify it later."))
 
 	key = GroveClient.from_settings().provision_key(team, label)
 
@@ -104,7 +104,7 @@ def add_credit(team: str, amount: float, reference: str | None = None) -> dict:
 
 def require_ai(team: str) -> None:
 	if not ai.get_ai_service(team):
-		frappe.throw(_("AI is not enabled for this team."))
+		frappe.throw(_("AI is not enabled for this team. Ask a team admin to enable it on the LLM page."))
 
 
 def get_key_hash(team: str, key: str) -> str:
@@ -112,4 +112,9 @@ def get_key_hash(team: str, key: str) -> str:
 	for row in GroveClient.from_settings().list_keys(team):
 		if row["name"] == key:
 			return row["key_hash"]
-	frappe.throw(_("Unknown API key."), frappe.DoesNotExistError)
+	frappe.throw(
+		_(
+			"This API key is not available on this team. Refresh the API keys list and select a key from this team."
+		),
+		frappe.DoesNotExistError,
+	)

@@ -37,7 +37,7 @@ function reload(): void {
 			class="w-full max-w-xl text-left"
 			theme="red"
 			title="This page ran into a problem"
-			description="Reloading usually fixes it. If it keeps happening, check back in a few minutes."
+			description="Reload the page to try again. If the problem continues, contact support with the page address and what you were doing."
 			:primary-action="{ label: 'Reload page', onClick: reload }"
 		/>
 	</div>

@@ -65,7 +65,12 @@ class VirtualMachine(Document):
 		"""The server `resource_id` of `team`, or a not-found error."""
 		name = frappe.db.get_value("Virtual Machine", {"team": team, "resource_id": resource_id}, "name")
 		if not name:
-			frappe.throw(_("No server '{0}' for this team.").format(resource_id), frappe.DoesNotExistError)
+			frappe.throw(
+				_(
+					"Server '{0}' is not available on this team. Return to Servers and refresh the list."
+				).format(resource_id),
+				frappe.DoesNotExistError,
+			)
 
 		return name
 
@@ -318,18 +323,31 @@ class VirtualMachine(Document):
 		if self.status != "Running":
 			frappe.throw(_("Server is {0}, not running.").format(self.status.lower()), frappe.ValidationError)
 		if frappe.db.get_value("Region", self.region, "status") != "Active":
-			frappe.throw(_("That region is not active."), frappe.ValidationError)
+			frappe.throw(
+				_("This region is not active. Contact support if you need access to this server."),
+				frappe.ValidationError,
+			)
 
 		gateway = (self.gateway_url or "").rstrip("/")
 		if not gateway:
-			frappe.throw(_("This server has no bench gateway yet."), frappe.ValidationError)
+			frappe.throw(
+				_(
+					"This server has no bench gateway yet. Wait for setup to finish before opening the server dashboard. Contact support if setup does not finish."
+				),
+				frappe.ValidationError,
+			)
 
 		# The bench verifies the SID against its own audience id, which its Pilot Credential holds.
 		audience = frappe.db.get_value(
 			"Pilot Credential", {"server": self.resource_id, "status": "Active"}, "audience_id"
 		)
 		if not audience:
-			frappe.throw(_("This server's pilot hasn't enrolled yet."), frappe.ValidationError)
+			frappe.throw(
+				_(
+					"This server's Pilot has not enrolled yet. Wait for setup to finish before opening the server dashboard. Contact support if setup does not finish."
+				),
+				frappe.ValidationError,
+			)
 
 		return f"{gateway}/?sid={mint_bench_login(audience)}"
 

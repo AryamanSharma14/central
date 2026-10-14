@@ -163,13 +163,19 @@ export async function mountPayPalButtons(
 	order: PaypalOrder,
 	{ onApprove, onError }: PayPalCallbacks = {},
 ): Promise<unknown> {
-	if (!order?.client_id) throw new Error('PayPal client id missing.')
+	if (!order?.client_id)
+		throw new Error(
+			'The PayPal client ID is missing, so PayPal payments cannot start. Choose another payment method, or contact support.',
+		)
 	// PayPal's SDK is keyed by client id + currency; load it once per pair.
 	await loadScript(
 		`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(order.client_id)}` +
 			`&currency=${encodeURIComponent(order.currency ?? '')}&intent=capture`,
 	)
-	if (!window.paypal) throw new Error('PayPal SDK failed to load.')
+	if (!window.paypal)
+		throw new Error(
+			'The PayPal payment library could not load. Check your connection and reload the page before starting a payment.',
+		)
 	return window.paypal
 		.Buttons({
 			createOrder: () => order.order_id,

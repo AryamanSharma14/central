@@ -109,11 +109,20 @@ class TeamInvitation(Document):
 		if self.status == "Accepted" and self.accepted_by == user:
 			return {"team": self.team, "role": self.role, "accepted": False}
 		if self.email != user:
-			frappe.throw(_("This invitation belongs to another user."), frappe.PermissionError)
+			frappe.throw(
+				_(
+					"This invitation was sent to a different email address. Sign in with the invited email to continue."
+				),
+				frappe.PermissionError,
+			)
 		if self.status != "Pending":
-			frappe.throw(_("This invitation is no longer pending."))
+			frappe.throw(
+				_(
+					"This invitation has already been answered or revoked. Ask a team admin for a new invitation if you still need access."
+				)
+			)
 		if self._is_expired():
-			frappe.throw(_("This invitation has expired."))
+			frappe.throw(_("This invitation has expired. Ask a team admin to resend it."))
 
 		team = frappe.get_doc("Team", self.team)
 		team.add_member_from_invitation(
@@ -173,7 +182,12 @@ class TeamInvitation(Document):
 	# Internal; the HTTP surface is central.api.teams.decline_invitation.
 	def decline(self) -> bool:
 		if self.email != frappe.session.user and not user_has_operator_bypass():
-			frappe.throw(_("This invitation belongs to another user."), frappe.PermissionError)
+			frappe.throw(
+				_(
+					"This invitation was sent to a different email address. Sign in with the invited email to continue."
+				),
+				frappe.PermissionError,
+			)
 		if self.status != "Pending":
 			frappe.throw(_("Only a pending invitation can be declined."))
 
@@ -227,7 +241,11 @@ class TeamInvitation(Document):
 			{"team": self.team, "email": self.email, "status": "Pending"},
 		)
 		if existing:
-			frappe.throw(_("A pending invitation already exists for this user and team."))
+			frappe.throw(
+				_(
+					"This person already has a pending invitation. Resend it from the Invitations list instead of creating another."
+				)
+			)
 
 	def _validate_update(self) -> None:
 		if self.is_new() or self.flags.from_invitation_action or user_has_operator_bypass():
@@ -283,7 +301,12 @@ def get_expiry_days() -> int:
 def get_invitation_by_token(token: str) -> TeamInvitation:
 	name = frappe.db.get_value("Team Invitation", {"token": token}) if token else None
 	if not name:
-		frappe.throw(_("This invitation link is not valid."), frappe.DoesNotExistError)
+		frappe.throw(
+			_(
+				"This invitation link is not valid. Open the link in your latest invitation email, or ask a team admin to send a new invitation."
+			),
+			frappe.DoesNotExistError,
+		)
 
 	return frappe.get_doc("Team Invitation", name)
 

@@ -55,7 +55,8 @@ function logoFor(option: ImageChoice): string | null {
 			</template>
 		</ChoiceCards>
 		<p v-if="!options.length" class="text-p-sm text-ink-gray-5">
-			No images are configured.
+			No server images are configured. Contact support to check image
+			availability.
 		</p>
 	</div>
 </template>

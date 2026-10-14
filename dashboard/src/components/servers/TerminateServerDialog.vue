@@ -76,7 +76,8 @@ const snapshotNote = computed(() => {
 			<p class="text-p-base text-ink-gray-7">
 				Permanently destroy
 				<span class="text-p-base-semibold text-ink-gray-9">{{ name }}</span>?
-				This can't be undone.
+				The server and all data on its disk will be deleted. This can't be
+				undone.
 			</p>
 
 			<div

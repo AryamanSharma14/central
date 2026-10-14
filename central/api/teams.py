@@ -112,7 +112,7 @@ def skip_onboarding(team: str) -> dict[str, Any]:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("team:edit", _lt("You can't rename this team."))
+@require_capability("team:edit", _lt("You can't rename this team. Ask a team admin to review your access."))
 def rename_team(team: str, team_name: str) -> dict[str, Any]:
 	"""Rename a team. Team.validate re-checks team:edit on save."""
 	doc = frappe.get_doc("Team", team)
@@ -123,7 +123,9 @@ def rename_team(team: str, team_name: str) -> dict[str, Any]:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("team:edit", _lt("You can't change this team's logo."))
+@require_capability(
+	"team:edit", _lt("You can't change this team's logo. Ask a team admin to review your access.")
+)
 def set_team_logo(team: str, file_url: str | None = None) -> dict[str, Any]:
 	"""Set the team logo to an uploaded image, or clear it. Team.validate re-checks team:edit."""
 	doc = frappe.get_doc("Team", team)
@@ -142,7 +144,7 @@ def transfer_team_ownership(team: str, user: str) -> dict[str, Any]:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("team:delete", _lt("You can't delete this team."))
+@require_capability("team:delete", _lt("You can't delete this team. Ask a team admin to review your access."))
 def delete_team(team: str) -> dict[str, Any]:
 	"""Delete a team. The Team lifecycle validates and removes owned access records."""
 	frappe.delete_doc("Team", team)
@@ -227,7 +229,10 @@ def leave_team(team: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("team:manage_members", _lt("You can't manage roles for this team."))
+@require_capability(
+	"team:manage_members",
+	_lt("You can't manage roles for this team. Ask a team admin to review your access."),
+)
 def create_custom_role(team: str, role_name: str, capabilities: list | str) -> dict:
 	"""Create a team-scoped custom Team Role granting exactly `capabilities`."""
 	capabilities = frappe.parse_json(capabilities)  # the console posts a JSON-encoded array
@@ -243,7 +248,9 @@ def create_custom_role(team: str, role_name: str, capabilities: list | str) -> d
 	missing = [c for c in granted if not can(frappe.session.user, team, c)]
 	if missing:
 		frappe.throw(
-			_("You can't grant {0}, because you don't hold it.").format(", ".join(missing)),
+			_(
+				"You can't grant {0}, because you don't hold it. Ask a team admin to review your access."
+			).format(", ".join(missing)),
 			frappe.PermissionError,
 		)
 

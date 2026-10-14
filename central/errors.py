@@ -137,15 +137,15 @@ ERROR_CATALOG: dict[str, dict] = {
 		"retriable": False,
 	},
 	"VALIDATION_ERROR": {
-		"title": "Please check and try again",
-		"message": "We couldn't complete that action.",
-		"remediation": "",
+		"title": "Check the request details",
+		"message": "The request could not be completed with these details.",
+		"remediation": "Review the information you entered. Contact support if you cannot resolve the problem.",
 		"retriable": False,
 	},
 	"PAYMENT_METHOD_REQUIRED": {
 		"title": "Add a payment method to create servers",
 		"message": "Your credit does not cover this server, and your team has no payment method.",
-		"remediation": "Add your billing details and a payment method in Billing. You also get the welcome credit.",
+		"remediation": "Open Billing to add your billing details and a payment method. Ask a team admin if you cannot manage billing.",
 		"retriable": False,
 	},
 	"MAILBOX_POOL_EMPTY": {
