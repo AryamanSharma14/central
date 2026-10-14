@@ -74,7 +74,7 @@ class TestGroveClientCalls(IntegrationTestCase):
 		self.assertEqual(
 			sent(post),
 			(
-				"grove.api.create_control_client",
+				"grove.api.control.create_control_client",
 				{"email": f"central@{frappe.local.site}", "token": "bootstrap-xyz"},
 			),
 		)
@@ -87,7 +87,7 @@ class TestGroveClientCalls(IntegrationTestCase):
 
 		self.assertEqual(
 			sent(post),
-			("grove.api.provision_team", {"team": "TEAM-1"}),
+			("grove.api.teams.provision_team", {"team": "TEAM-1"}),
 		)
 		self.assertEqual(
 			post.call_args.kwargs["headers"], {"Authorization": "token control-key:control-secret"}
@@ -98,37 +98,37 @@ class TestGroveClientCalls(IntegrationTestCase):
 			self.client.provision_key("TEAM-1", "n8n prod", "eu", 5)
 		self.assertEqual(
 			sent(post),
-			("grove.api.provision_key", {"team": "TEAM-1", "title": "n8n prod", "geography": "eu", "cap": 5}),
+			("grove.api.keys.provision_key", {"team": "TEAM-1", "title": "n8n prod", "geography": "eu", "cap": 5}),
 		)
 
 		with grove_replies([LISTED]) as post:
 			self.client.list_keys("TEAM-1")
-		self.assertEqual(sent(post), ("grove.api.keys", {"team": "TEAM-1"}))
+		self.assertEqual(sent(post), ("grove.api.keys.keys", {"team": "TEAM-1"}))
 
 		with grove_replies([LISTED]) as post:
 			self.client.update_caps("TEAM-1", {"k1": 7.5})
-		self.assertEqual(sent(post), ("grove.api.update_caps", {"team": "TEAM-1", "caps": {"k1": 7.5}}))
+		self.assertEqual(sent(post), ("grove.api.keys.update_caps", {"team": "TEAM-1", "caps": {"k1": 7.5}}))
 
 		with grove_replies("Revoked.") as post:
 			self.client.revoke_key("TEAM-1", "k1")
-		self.assertEqual(sent(post), ("grove.api.revoke_key", {"team": "TEAM-1", "key": "k1"}))
+		self.assertEqual(sent(post), ("grove.api.keys.revoke_key", {"team": "TEAM-1", "key": "k1"}))
 
 	def test_models_geographies_spend_and_usage_name_the_team(self):
 		calls = [
 			(
 				lambda: self.client.list_models("TEAM-1", "k1"),
-				("grove.api.available_models", {"team": "TEAM-1", "key": "k1", "geography": None}),
+				("grove.api.catalog.available_models", {"team": "TEAM-1", "key": "k1", "geography": None}),
 			),
 			(
 				lambda: self.client.list_models(geography="eu"),
-				("grove.api.available_models", {"team": None, "key": None, "geography": "eu"}),
+				("grove.api.catalog.available_models", {"team": None, "key": None, "geography": "eu"}),
 			),
-			(lambda: self.client.list_geographies(), ("grove.api.geographies", {})),
-			(lambda: self.client.get_spend("TEAM-1"), ("grove.api.spend", {"team": "TEAM-1"})),
+			(lambda: self.client.list_geographies(), ("grove.api.catalog.geographies", {})),
+			(lambda: self.client.get_spend("TEAM-1"), ("grove.api.usage.spend", {"team": "TEAM-1"})),
 			(
 				lambda: self.client.get_usage(["TEAM-1"], period="Last 7 Days"),
 				(
-					"grove.api.usage",
+					"grove.api.usage.usage",
 					{
 						"teams": ["TEAM-1"],
 						"month": None,
@@ -141,7 +141,7 @@ class TestGroveClientCalls(IntegrationTestCase):
 			),
 			(
 				lambda: self.client.update_team("TEAM-1", tier="Growth"),
-				("grove.api.update_team", {"team": "TEAM-1", "suspended": None, "tier": "Growth"}),
+				("grove.api.teams.update_team", {"team": "TEAM-1", "suspended": None, "tier": "Growth"}),
 			),
 		]
 		for call, expected in calls:
