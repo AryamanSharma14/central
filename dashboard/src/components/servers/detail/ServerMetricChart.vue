@@ -2,11 +2,7 @@
 import { Button } from 'frappe-ui'
 import { AreaChart, ChartCard, useChartTokens } from 'frappe-ui/charts'
 import { computed, ref } from 'vue'
-import {
-	getChartSeriesSummaries,
-	getChartSummary,
-	type MetricChart,
-} from '@/lib/serverMetrics'
+import { getChartSeriesSummaries, type MetricChart } from '@/lib/serverMetrics'
 
 interface ServerMetricChartProps {
 	chart: MetricChart
@@ -15,6 +11,13 @@ interface ServerMetricChartProps {
 
 const props = defineProps<ServerMetricChartProps>()
 const hiddenSeries = ref<string[]>([])
+// Reads leave the disk; writes enter it.
+const seriesIcons: Record<string, string> = {
+	Received: 'lucide-arrow-down-left',
+	Sent: 'lucide-arrow-up-right',
+	Read: 'lucide-hard-drive-upload',
+	Write: 'lucide-hard-drive-download',
+}
 const { tokens } = useChartTokens(ref())
 const summaries = computed(() => getChartSeriesSummaries(props.chart))
 const seriesConfig = computed(() =>
@@ -51,64 +54,63 @@ const grid = {
 		:card="false"
 		role="group"
 		:aria-label="chart.title"
-		class="server-metric-chart flex flex-col gap-4 rounded-6 border border-outline-gray-2 p-4"
+		class="server-metric-chart flex min-h-0 flex-col gap-2 rounded-6 border border-outline-gray-2 p-3"
 	>
-		<header class="space-y-3">
-			<h3 class="text-base-medium text-ink-gray-8">{{ chart.title }}</h3>
+		<header class="flex shrink-0 flex-wrap items-start justify-between gap-3">
+			<h3
+				class="shrink-0 text-base-medium text-ink-gray-8"
+				:class="{ 'mt-0.5': chart.series.length > 1 }"
+			>
+				{{ chart.title }}
+			</h3>
 			<dl
-				v-if="chart.series.length > 1"
-				class="grid grid-cols-2 gap-x-4 gap-y-3"
+				class="ms-auto grid min-w-0 gap-x-4 gap-y-2"
+				:class="chart.series.length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
 			>
 				<div
 					v-for="summary in summaries"
 					:key="summary.name"
-					class="min-w-0 space-y-1"
+					class="min-w-0"
+					:class="{ 'grid grid-cols-[1.5rem_max-content] items-center gap-x-1': chart.series.length > 1 }"
 				>
-					<dt>
+					<dt :class="{ 'sr-only': chart.series.length === 1 }">
 						<Button
+							v-if="chart.series.length > 1"
 							variant="ghost"
 							size="sm"
-							class="-ms-1 !justify-start !px-1"
+							class="server-series-toggle !size-6 !p-1"
+							:tooltip="summary.name"
+							:icon="hiddenSeries.includes(summary.name) ? 'lucide-eye-off' : seriesIcons[summary.name]"
+							:style="{ '--series-color': seriesConfig[summary.name].color }"
 							:aria-pressed="!hiddenSeries.includes(summary.name)"
 							:aria-label="`${hiddenSeries.includes(summary.name) ? 'Show' : 'Hide'} ${summary.name}`"
 							:disabled="!hiddenSeries.includes(summary.name) && hiddenSeries.length === chart.series.length - 1"
 							@click="toggleSeries(summary.name)"
-						>
-							<span
-								class="flex items-center gap-1.5 text-sm-medium text-ink-gray-6"
-							>
-								<span
-									v-if="hiddenSeries.includes(summary.name)"
-									class="lucide-eye-off size-3 shrink-0"
-									aria-hidden="true"
-								/>
-								<span
-									v-else
-									class="h-0 w-3 shrink-0 border-t-2"
-									:class="seriesConfig[summary.name].lineType === 'dashed' ? 'border-dashed' : 'border-solid'"
-									:style="{ borderColor: seriesConfig[summary.name].color }"
-									aria-hidden="true"
-								/>
-								{{ summary.name }}
-							</span>
-						</Button>
+						/>
+
+						<span v-else>Current value</span>
 					</dt>
 					<dd
-						class="flex flex-wrap items-baseline gap-x-2 gap-y-1 tabular-nums"
+						class="tabular-nums"
+						:class="chart.series.length > 1 ? 'contents' : 'flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1'"
 					>
-						<span class="text-lg-medium text-ink-gray-8">
-							<span class="sr-only">Current rate: </span
-							><bdi dir="ltr">{{ summary.current }}</bdi>
-						</span>
-						<span v-if="summary.hasSamples" class="text-sm text-ink-gray-5">
-							<bdi>Peak {{ summary.peak }}</bdi>
-						</span>
+						<bdi
+							dir="ltr"
+							class="whitespace-nowrap text-base-medium text-ink-gray-8"
+							:class="chart.series.length > 1 ? 'justify-self-start' : 'justify-self-end'"
+							>{{ summary.current }}</bdi
+						>
+						<span
+							v-if="summary.hasSamples"
+							class="whitespace-nowrap text-xs text-ink-gray-5"
+							:class="chart.series.length > 1 ? 'col-start-2 justify-self-start' : 'justify-self-end'"
+							><bdi>Peak {{ summary.peak }}</bdi></span
+						>
 					</dd>
 				</div>
 			</dl>
-			<p v-else class="text-sm text-ink-gray-5">{{ getChartSummary(chart) }}</p>
 		</header>
-		<div class="h-44 min-w-0">
+		<div class="h-44 min-w-0 lg:h-auto lg:min-h-0 lg:flex-1">
 			<AreaChart
 				v-model:hidden-series="hiddenSeries"
 				:echart-options="{ animation: false }"
@@ -129,7 +131,7 @@ const grid = {
 						interval: chart.interval ?? (chart.max ? chart.max / 4 : undefined),
 						splitNumber: 4,
 						splitLine: grid,
-						axisLabel: { formatter: chart.format },
+						axisLabel: { formatter: chart.format, hideOverlap: true },
 					},
 				}"
 			/>
@@ -138,6 +140,10 @@ const grid = {
 </template>
 
 <style scoped>
+.server-metric-chart :deep(.server-series-toggle) {
+	color: color-mix(in srgb, var(--series-color) 70%, var(--ink-gray-9));
+}
+
 /* The summary labels own the series controls, so the plot needs no second legend. */
 .server-metric-chart :deep([data-slot="chart-legend"]) {
 	display: none;
