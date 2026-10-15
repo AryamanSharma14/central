@@ -51,6 +51,15 @@ class TestCargoEnrollment(IntegrationTestCase):
 		self.assertTrue(secret)
 		self.assertEqual(self.post.call_args.kwargs["json"]["webhook_secret"], secret)
 
+	def test_the_cargo_secret_survives_a_later_save(self):
+		"""Frappe deletes a Password whose column is empty when the document is saved."""
+		self.instance.enroll_cargo()
+		secret = self.instance.reload().get_password("cargo_webhook_secret")
+
+		self.instance.save()
+
+		self.assertEqual(self.instance.reload().get_password("cargo_webhook_secret"), secret)
+
 	def test_enroll_raises_when_cargo_has_not_answered_yet(self):
 		self.get.return_value = self.response({}, 503)
 
