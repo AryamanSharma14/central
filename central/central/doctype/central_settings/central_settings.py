@@ -22,6 +22,7 @@ class CentralSettings(Document):
 		from frappe.types import DF
 
 		app_rollout_interval_hours: DF.Int
+		app_rollout_max_percent: DF.Int
 		app_rollout_start_percent: DF.Int
 		app_rollout_step_percent: DF.Int
 		central_id: DF.Int
@@ -79,6 +80,12 @@ class CentralSettings(Document):
 			label = _(self.meta.get_label("app_rollout_interval_hours"))
 			frappe.throw(_("{0} must be at least 1, not {1}.").format(label, self.app_rollout_interval_hours))
 
+		if not 0 <= self.app_rollout_max_percent <= 100:
+			label = _(self.meta.get_label("app_rollout_max_percent"))
+			frappe.throw(
+				_("{0} must be between 0 and 100, not {1}.").format(label, self.app_rollout_max_percent)
+			)
+
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
 
@@ -88,6 +95,7 @@ class CentralSettings(Document):
 			"start_percent": self.app_rollout_start_percent,
 			"step_percent": self.app_rollout_step_percent,
 			"interval_hours": self.app_rollout_interval_hours,
+			"max_percent": self.app_rollout_max_percent,
 		}
 
 	def feature_flags(self) -> dict[str, bool]:

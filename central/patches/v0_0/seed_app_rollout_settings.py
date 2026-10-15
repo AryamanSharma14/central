@@ -4,6 +4,7 @@ DEFAULTS = {
 	"app_rollout_start_percent": 5,
 	"app_rollout_step_percent": 5,
 	"app_rollout_interval_hours": 8,
+	"app_rollout_max_percent": 100,
 }
 
 

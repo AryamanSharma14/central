@@ -36,7 +36,8 @@
   "app_rollout_tab",
   "app_rollout_start_percent",
   "app_rollout_step_percent",
-  "app_rollout_interval_hours"
+  "app_rollout_interval_hours",
+  "app_rollout_max_percent"
  ],
  "fields": [
   {
@@ -250,13 +251,21 @@
    "fieldtype": "Int",
    "label": "Interval (Hours)",
    "non_negative": 1
+  },
+  {
+   "default": "100",
+   "description": "Highest percent of Pilot servers that see an update. Set 0 to stop all rollouts.",
+   "fieldname": "app_rollout_max_percent",
+   "fieldtype": "Int",
+   "label": "Max Percent",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-13 10:00:00.000000",
+ "modified": "2026-10-15 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",

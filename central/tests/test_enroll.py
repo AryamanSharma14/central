@@ -90,6 +90,7 @@ class TestEnrollment(IntegrationTestCase):
 			"app_rollout_start_percent": 10,
 			"app_rollout_step_percent": 20,
 			"app_rollout_interval_hours": 4,
+			"app_rollout_max_percent": 50,
 		}
 		# enroll() commits, so a rollback alone would not undo these values.
 		original = {field: frappe.db.get_single_value("Central Settings", field) for field in steps}
@@ -99,5 +100,6 @@ class TestEnrollment(IntegrationTestCase):
 			method="GET", path="/api/method/central.api.pilot.config", headers={"X-Pilot-Token": token}
 		)
 		self.assertEqual(
-			config()["app_rollout"], {"start_percent": 10, "step_percent": 20, "interval_hours": 4}
+			config()["app_rollout"],
+			{"start_percent": 10, "step_percent": 20, "interval_hours": 4, "max_percent": 50},
 		)
