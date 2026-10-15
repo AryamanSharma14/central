@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from central.errors import handle_resource_operation
 from central.iam import can, get_server_capabilities
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import get_cached_metrics, reconcile
 from central.server_models import FirewallChange
@@ -79,7 +80,11 @@ def registry(team: str | None = None) -> dict:
 	creations = ResourceAction.open_creations(team)
 
 	rows = frappe.get_list(
-		"Site", filters={"team": team}, fields=["name", "server"], order_by="name asc", limit_page_length=0
+		"Site",
+		filters={"team": team},
+		fields=["name", "server", "subdomain", "renamed_at"],
+		order_by="name asc",
+		limit_page_length=0,
 	)
 
 	return {"team": team, "servers": servers, "sites": _sites(rows, servers, pending), "creations": creations}
@@ -103,9 +108,9 @@ def _sites(rows: list[dict], servers: list[dict], pending: dict[str, str]) -> li
 	return [
 		{
 			"name": row["name"],
-			"subdomain": row["name"].split(".")[0],
+			"subdomain": row["subdomain"] or row["name"].split(".")[0],
 			"server": row["server"],
-			"url": f"https://{row['name']}",
+			"url": Site.get_primary_url(row["name"], row["subdomain"], row["renamed_at"]),
 			"status": machine["status"],
 			"region": machine["region"],
 			# A site's actions run against its machine, so its in-flight label is the machine's.

@@ -187,7 +187,7 @@ def site_state(site: Site, with_login: bool = True) -> dict:
 	return {
 		"name": site.name,
 		"status": status,
-		"url": site.url,
+		"url": site.primary_url,
 		"ready": ready,
 		"login_url": login_url,
 		"login_pending": login_pending,
