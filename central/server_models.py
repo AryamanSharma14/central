@@ -4,12 +4,14 @@ import ipaddress
 import re
 from typing import Annotated, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, StringConstraints, model_validator
 
 SSHKey = Annotated[str, Field(min_length=1, max_length=16_384)]
 
 
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+# Atlas refuses larger cloud-init user data.
+MAXIMUM_USER_DATA_BYTES = 16 * 1024
 PORTS = re.compile(r"([1-9][0-9]{0,4})(?:-([1-9][0-9]{0,4}))?")
 
 
@@ -49,6 +51,8 @@ class CreateServerInput(BaseModel):
 	has_public_ipv4: bool = False
 	has_public_ipv6: bool = False
 	is_firewall_enabled: bool = False
+	# Cloud-init reads the script as sent, so keep its whitespace.
+	user_data: Annotated[str, StringConstraints(strip_whitespace=False)] = ""
 
 
 class SiteCreation(BaseModel):
@@ -77,6 +81,7 @@ class ServerCreation(BaseModel):
 	has_public_ipv4: bool = False
 	has_public_ipv6: bool = False
 	is_firewall_enabled: bool = False
+	user_data: str = ""
 	image_tags: dict[str, str]
 	site: SiteCreation | None = None
 	cpu_millicores: int = Field(ge=100, le=32000)
