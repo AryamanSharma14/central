@@ -143,6 +143,12 @@ def _digest(alerts: list[dict]) -> str:
 	return ", ".join(f"{n} {name}" for name, n in sorted(counts.items()))
 
 
+def _email_row(alert: dict) -> list[str]:
+	"""Kind, reference and detail as escaped text, because a detail can carry a gateway error."""
+	reference = f"{alert['subject']} ({alert['team']})" if alert["team"] else alert["subject"]
+	return [frappe.utils.escape_html(str(value)) for value in (alert["alert"], reference, alert["detail"])]
+
+
 def _recently_sent(signature: str) -> bool:
 	"""True if this exact digest already went out inside the repeat window."""
 	return frappe.cache().get_value(_CACHE_KEY) == signature
@@ -166,7 +172,8 @@ def run_operator_alerts() -> dict:
 		frappe.sendmail(
 			recipients=recipients,
 			subject=f"Billing needs attention: {signature}",
-			message=frappe.as_json(alerts[:50], indent=1),
+			template="operator_alert",
+			args={"count": len(alerts), "rows": [_email_row(alert) for alert in alerts[:50]]},
 			delayed=True,
 		)
 	frappe.cache().set_value(_CACHE_KEY, signature, expires_in_sec=REPEAT_AFTER_HOURS * 3600)
