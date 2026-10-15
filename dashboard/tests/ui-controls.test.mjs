@@ -367,7 +367,13 @@ test('chart summary controls hide and restore one series while keeping a visible
 	const control = mount(ServerMetricChart, () => ({
 		chart,
 		timeGrain: 'minute',
+		averageLabel: 'Average over 1 hour',
 	}))
+	assert.equal(
+		control.find('Tooltip', (props) => props.text === 'Average over 1 hour')
+			.props.disabled,
+		false,
+	)
 	const hideReceived = control.find(
 		'Button',
 		(props) => props['aria-label'] === 'Hide Received',

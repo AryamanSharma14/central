@@ -43,6 +43,12 @@ const period = computed(() =>
 	METRIC_PERIODS.find((option) => option.value === range.value.period),
 )
 
+const averageLabel = computed(() =>
+	isCustom.value
+		? 'Average over the selected date range'
+		: `Average over ${period.value?.label.toLowerCase() ?? 'the selected duration'}`,
+)
+
 const setRange = (change: Partial<MetricsRange>): void => {
 	range.value = { ...range.value, ...change }
 }
@@ -267,6 +273,7 @@ const usage = computed(() => {
 				:key="chart.key"
 				:chart="chart"
 				:time-grain="timeGrain"
+				:average-label="averageLabel"
 			/>
 		</div>
 

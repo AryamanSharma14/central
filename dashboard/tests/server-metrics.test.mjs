@@ -77,9 +77,9 @@ test('summaries and tooltips preserve small rates alongside MB/s spikes', () => 
 		1,
 	)[2]
 	const summaries = exports.getChartSeriesSummaries(chart)
-	assert.equal(summaries[0].current, '8.5 KB/s')
+	assert.equal(summaries[0].value, '1 MB/s')
 	assert.equal(summaries[0].peak, '2 MB/s')
-	assert.equal(summaries[1].current, '512 B/s')
+	assert.equal(summaries[1].value, '450 KB/s')
 	assert.equal(summaries[1].peak, '900 KB/s')
 	assert.equal(chart.formatValue(chart.rows[1].Received), '8.5 KB/s')
 	assert.equal(chart.formatValue(0), '0 B/s')
@@ -91,7 +91,7 @@ test('summaries and tooltips preserve small rates alongside MB/s spikes', () => 
 	)
 })
 
-test('a missing latest sample is not replaced by an older reading', () => {
+test('averages ignore missing samples and keep measured zeroes', () => {
 	const chart = exports.getMetricCharts(
 		[
 			point({ received_bytes_per_second: 2048 }),
@@ -100,8 +100,77 @@ test('a missing latest sample is not replaced by an older reading', () => {
 		1,
 	)[2]
 	const summaries = exports.getChartSeriesSummaries(chart)
-	assert.equal(summaries[0].current, 'No sample')
+	assert.equal(summaries[0].value, '2 KB/s')
 	assert.equal(summaries[0].peak, '2 KB/s')
-	assert.equal(summaries[1].current, 'No sample')
+	assert.equal(summaries[1].value, '0 B/s')
 	assert.equal(exports.formatRate(0.01), '0.01 B/s')
+})
+
+test('all four rate series average their samples and keep their peaks', () => {
+	const charts = exports
+		.getMetricCharts(
+			[
+				point({
+					received_bytes_per_second: 2048,
+					sent_bytes_per_second: 4096,
+					disk_read_bytes_per_second: 0,
+					disk_write_bytes_per_second: 2048,
+				}),
+				point({
+					received_bytes_per_second: 6144,
+					sent_bytes_per_second: 0,
+					disk_read_bytes_per_second: 8192,
+					disk_write_bytes_per_second: 6144,
+				}),
+			],
+			4,
+		)
+		.slice(2)
+	const summaries = charts.flatMap(exports.getChartSeriesSummaries)
+	assert.deepEqual(
+		Array.from(summaries, (summary) => summary.value),
+		['4 KB/s', '2 KB/s', '4 KB/s', '4 KB/s'],
+	)
+	assert.deepEqual(
+		Array.from(summaries, (summary) => summary.peak),
+		['6 KB/s', '4 KB/s', '8 KB/s', '6 KB/s'],
+	)
+})
+
+test('CPU and memory retain the latest reading, including missing CPU samples', () => {
+	const points = [
+		point({ cpu_percent: 70, memory_bytes: 1024 ** 3 }),
+		point({ cpu_percent: 20, memory_bytes: 2 * 1024 ** 3 }),
+	]
+	const charts = exports.getMetricCharts(points, 4)
+	assert.equal(exports.getChartSeriesSummaries(charts[0])[0].value, '20%')
+	assert.equal(exports.getChartSeriesSummaries(charts[0])[0].peak, '70%')
+	assert.equal(exports.getChartSeriesSummaries(charts[1])[0].value, '2 GB')
+	points.push(point({ cpu_percent: null }))
+	assert.equal(
+		exports.getChartSeriesSummaries(exports.getMetricCharts(points, 4)[0])[0]
+			.value,
+		'No sample',
+	)
+})
+
+test('rate averages do not treat missing data as zero', () => {
+	for (const points of [
+		[],
+		[
+			point({
+				received_bytes_per_second: null,
+				sent_bytes_per_second: null,
+				disk_read_bytes_per_second: null,
+				disk_write_bytes_per_second: null,
+			}),
+		],
+	]) {
+		for (const chart of exports.getMetricCharts(points, 4).slice(2)) {
+			for (const summary of exports.getChartSeriesSummaries(chart)) {
+				assert.equal(summary.value, 'No sample')
+				assert.equal(summary.hasSamples, false)
+			}
+		}
+	}
 })
