@@ -531,3 +531,35 @@ test('changed observations also block an open Apply confirmation', async ({
 	).toBeVisible()
 	expect(writes).toEqual([])
 })
+
+test('plan labels show custom sizes and retain named plans and prices', async ({
+	page,
+}) => {
+	await openControls(page)
+	const labels = await page.evaluate(async () => {
+		const modulePath = '/src/lib/planLabel.ts'
+		const { formatPlanLabel } = await import(modulePath)
+		return [
+			formatPlanLabel({
+				vcpus: 2,
+				memoryMegabytes: 4096,
+				rate: 950,
+				currency: 'INR',
+			}),
+			formatPlanLabel({ vcpus: 0.5, memoryMegabytes: 512 }),
+			formatPlanLabel({
+				title: 'Starter · 2 vCPU',
+				rate: 120,
+				currency: 'USD',
+				billingCycle: 'Annual',
+			}),
+			formatPlanLabel({}),
+		]
+	})
+	expect(labels).toEqual([
+		'2 vCPU × 4 GB RAM · ₹950/mo',
+		'0.5 vCPU × 512 MB RAM',
+		'Starter · $120/yr',
+		'Custom configuration',
+	])
+})

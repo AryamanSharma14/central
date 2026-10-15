@@ -92,6 +92,8 @@ const facts = computed(() => {
 				details &&
 				formatPlanLabel({
 					title: details.plan_title,
+					vcpus: details.vcpus,
+					memoryMegabytes: details.memory_megabytes,
 					rate: details.plan_rate,
 					currency: details.plan_currency,
 					billingCycle: details.plan_billing_cycle,
