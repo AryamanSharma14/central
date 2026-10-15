@@ -3,7 +3,6 @@
 
 import frappe
 from frappe import _
-from frappe.utils.password import set_encrypted_password
 
 from central.errors import CargoConnectionError
 from central.iam import user_has_operator_bypass
@@ -57,8 +56,10 @@ class CargoConnectionMixin:
 		secret = frappe.generate_hash(length=32)
 		client.configure_webhooks(secret)
 
-		set_encrypted_password("Region", self.name, secret, "cargo_webhook_secret")
-		self.db_set({"cargo_status": "Registered", "cargo_registered_at": frappe.utils.now_datetime()})
+		self.cargo_webhook_secret = secret
+		self.cargo_status = "Registered"
+		self.cargo_registered_at = frappe.utils.now_datetime()
+		self.save()
 
 		return True
 
