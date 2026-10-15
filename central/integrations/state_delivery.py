@@ -76,12 +76,13 @@ def accept_cargo_report(raw_body: bytes, region: str | None, signature: str | No
 
 	detail = ServiceDetail.record_report(cargo, service, status, report.get("service_endpoint"))
 
-	# Cargo reports telemetry Available again whenever Datum refuses its token.
+	# Cargo reports telemetry Available again when its Datum token nears expiry.
 	if service == "telemetry" and status == "Available":
-		frappe.enqueue(
-			"central.infrastructure.doctype.region.cargo_connection.push_datum_token",
+		frappe.enqueue_doc(
+			"Region",
+			cargo,
+			"issue_cargo_datum_token",
 			queue="short",
-			region=cargo,
 			job_id=f"cargo-datum-token:{cargo}",
 			deduplicate=True,
 			enqueue_after_commit=True,

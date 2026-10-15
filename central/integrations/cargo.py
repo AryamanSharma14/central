@@ -65,7 +65,7 @@ class CargoClient:
 				CargoConnectionError,
 			)
 
-	def send_datum_token(self, token: str) -> None:
+	def accept_datum_token(self, token: str) -> None:
 		"""Hand Cargo the token it ships its own telemetry to the region's Datum with."""
 		headers = {
 			TOKEN_HEADER: mint_cargo_token(self.instance.get_atlas_region_id()),

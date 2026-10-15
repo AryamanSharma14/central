@@ -62,23 +62,14 @@ class CargoConnectionMixin:
 
 		return True
 
-	def push_datum_token(self) -> None:
+	def issue_cargo_datum_token(self) -> None:
 		"""Mint this region's Cargo a Datum token and hand it over. Cargo has no pilot
-		credential to fetch one with, so it reports telemetry again on a 401 to get the next."""
+		credential to fetch one with, so it reports telemetry again when its token nears expiry."""
 		from central.integrations.cargo import CargoClient
 		from central.sso import mint_datum_token
 
 		token = mint_datum_token(self.get_atlas_region_id(), f"cargo:{self.name}")
-		CargoClient(self).send_datum_token(token)
-
-
-def push_datum_token(region: str) -> None:
-	"""Queued from a telemetry report. Cargo asks again on its next 401, so a failure is only logged."""
-	instance = frappe.get_doc("Region", region)
-	try:
-		instance.push_datum_token()
-	except frappe.ValidationError:
-		instance.log_error("Datum token delivery to Cargo failed")
+		CargoClient(self).accept_datum_token(token)
 
 
 def register_pending_cargo() -> None:

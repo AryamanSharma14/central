@@ -223,12 +223,12 @@ class TestCargoDatumToken(IntegrationTestCase):
 		return response
 
 	def test_the_token_names_cargo_as_its_resource(self):
-		self.instance.push_datum_token()
+		self.instance.issue_cargo_datum_token()
 
 		self.mint.assert_called_once_with(4807, f"cargo:{self.instance.name}")
 
 	def test_the_token_is_handed_to_cargo_with_central_credential(self):
-		self.instance.push_datum_token()
+		self.instance.issue_cargo_datum_token()
 
 		self.assertEqual(
 			self.post.call_args.args[0],
@@ -241,14 +241,4 @@ class TestCargoDatumToken(IntegrationTestCase):
 		self.post.return_value = self.response({}, 403)
 
 		with self.assertRaises(CargoConnectionError):
-			self.instance.push_datum_token()
-
-	def test_the_background_push_logs_a_failure_instead_of_raising(self):
-		from central.infrastructure.doctype.region.cargo_connection import push_datum_token
-
-		self.post.side_effect = requests.ConnectionError("refused")
-
-		with patch("central.infrastructure.doctype.region.region.Region.log_error") as log_error:
-			push_datum_token(self.instance.name)
-
-		log_error.assert_called_once()
+			self.instance.issue_cargo_datum_token()
