@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from 'frappe-ui'
+import { Button, Tooltip } from 'frappe-ui'
 import { AreaChart, ChartCard, useChartTokens } from 'frappe-ui/charts'
 import { computed, ref } from 'vue'
 import { getChartSeriesSummaries, type MetricChart } from '@/lib/serverMetrics'
@@ -7,9 +7,12 @@ import { getChartSeriesSummaries, type MetricChart } from '@/lib/serverMetrics'
 interface ServerMetricChartProps {
 	chart: MetricChart
 	timeGrain: 'minute' | 'hour' | 'day'
+	averageLabel?: string
 }
 
-const props = defineProps<ServerMetricChartProps>()
+const props = withDefaults(defineProps<ServerMetricChartProps>(), {
+	averageLabel: 'Average over the selected duration',
+})
 const hiddenSeries = ref<string[]>([])
 // Reads leave the disk; writes enter it.
 const seriesIcons: Record<string, string> = {
@@ -94,12 +97,18 @@ const grid = {
 						class="tabular-nums"
 						:class="chart.series.length > 1 ? 'contents' : 'flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1'"
 					>
-						<bdi
-							dir="ltr"
-							class="whitespace-nowrap text-base-medium text-ink-gray-8"
-							:class="chart.series.length > 1 ? 'justify-self-start' : 'justify-self-end'"
-							>{{ summary.current }}</bdi
+						<Tooltip
+							:text="averageLabel"
+							:disabled="chart.summaryMode !== 'average' || !summary.hasSamples"
 						>
+							<bdi
+								dir="ltr"
+								class="whitespace-nowrap rounded-2 text-base-medium text-ink-gray-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-outline-gray-4"
+								:class="chart.series.length > 1 ? 'justify-self-start' : 'justify-self-end'"
+								:tabindex="chart.summaryMode === 'average' && summary.hasSamples ? 0 : undefined"
+								>{{ summary.value }}</bdi
+							>
+						</Tooltip>
 						<span
 							v-if="summary.hasSamples"
 							class="whitespace-nowrap text-xs text-ink-gray-5"
