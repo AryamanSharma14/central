@@ -260,11 +260,8 @@ export function useResizeServer(
 	const downtimeNote = computed(() => {
 		if (server.value?.status === 'Stopped')
 			return 'The server will start after the resize.'
-		if (needsRestart.value)
-			return 'The server will restart. It may be unavailable for a few minutes.'
-		return diskChanged.value
-			? 'Storage increases while the server runs. No restart is needed.'
-			: 'No restart is needed.'
+		if (needsRestart.value) return 'Brief downtime during restart.'
+		return 'No restart needed.'
 	})
 
 	const totalShape = computed(() => {

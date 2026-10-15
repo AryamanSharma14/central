@@ -83,7 +83,7 @@ async function openControls(
 async function openResize(page: Page): Promise<void> {
 	await page.getByRole('button', { name: 'Resize server', exact: true }).click()
 	await expect(
-		page.getByRole('radio', { name: 'Keep my 25 GB disk' }),
+		page.getByRole('radio', { name: 'Keep 25 GB disk' }),
 	).toBeVisible()
 }
 
@@ -119,7 +119,7 @@ test('switching to plan storage clears an incompatible selection', async ({
 	await openControls(page)
 	await openResize(page)
 	await page.getByRole('button', { name: /0.125 vCPU/ }).click()
-	await page.getByRole('radio', { name: 'Increase storage too' }).click()
+	await page.getByRole('radio', { name: 'Increase storage' }).click()
 	const small = page.getByRole('button', { name: /0.125 vCPU/ })
 	await expect(small).toBeDisabled()
 	await expect(small).toHaveAttribute('aria-pressed', 'false')
@@ -135,9 +135,9 @@ test('custom disk cannot shrink and the designer submits the displayed disk', as
 	await openResize(page)
 	await page.getByRole('button', { name: /Custom/ }).click()
 	await expect(
-		page.getByText('No restart is needed.', { exact: false }),
+		page.getByText('No restart needed.', { exact: false }),
 	).toBeVisible()
-	await page.getByRole('radio', { name: 'Increase storage too' }).click()
+	await page.getByRole('radio', { name: 'Increase storage' }).click()
 	const storage = page.getByRole('button', { name: '25 GB', exact: true })
 	await storage.click()
 	await expect(
@@ -228,7 +228,7 @@ test('resize controls fit a narrow screen', async ({ page }, testInfo) => {
 	await openControls(page)
 	await openResize(page)
 	await expect(
-		page.getByRole('radio', { name: 'Keep my 25 GB disk' }),
+		page.getByRole('radio', { name: 'Keep 25 GB disk' }),
 	).toBeVisible()
 	await page.getByRole('button', { name: /0.125 vCPU/ }).click()
 	await page
@@ -530,4 +530,36 @@ test('changed observations also block an open Apply confirmation', async ({
 			.getByText(/The saved firewall rules changed while you were editing/),
 	).toBeVisible()
 	expect(writes).toEqual([])
+})
+
+test('plan labels show custom sizes and retain named plans and prices', async ({
+	page,
+}) => {
+	await openControls(page)
+	const labels = await page.evaluate(async () => {
+		const modulePath = '/src/lib/planLabel.ts'
+		const { formatPlanLabel } = await import(modulePath)
+		return [
+			formatPlanLabel({
+				vcpus: 2,
+				memoryMegabytes: 4096,
+				rate: 950,
+				currency: 'INR',
+			}),
+			formatPlanLabel({ vcpus: 0.5, memoryMegabytes: 512 }),
+			formatPlanLabel({
+				title: 'Starter · 2 vCPU',
+				rate: 120,
+				currency: 'USD',
+				billingCycle: 'Annual',
+			}),
+			formatPlanLabel({}),
+		]
+	})
+	expect(labels).toEqual([
+		'2 vCPU × 4 GB RAM · ₹950/mo',
+		'0.5 vCPU × 512 MB RAM',
+		'Starter · $120/yr',
+		'Custom configuration',
+	])
 })

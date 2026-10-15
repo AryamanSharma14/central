@@ -14,7 +14,6 @@ import PlanGroup from '@/components/servers/PlanGroup.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
 import { configSpecs } from '@/lib/composed'
-import { money } from '@/lib/format'
 import { formatGb } from '@/lib/units'
 
 interface Props {
@@ -85,8 +84,7 @@ const open = computed({
 				<LoadingIndicator class="h-6 w-6 text-ink-gray-5" />
 				<p class="text-p-base-medium text-ink-gray-8">Starting resize…</p>
 				<p class="max-w-xs text-p-sm text-ink-gray-5">
-					The reshape runs in the background. The server shows “Resizing” in the
-					list and comes back on its own when it’s done.
+					Follow progress in the server list.
 				</p>
 			</div>
 			<div
@@ -126,35 +124,21 @@ const open = computed({
 					v-if="losesLockedRate && lock"
 					theme="amber"
 					title="Resizing will change your rate"
-					:description="`You pay ${money(lock.locked_rate, lock.currency)}/mo for this size; it now lists at ${money(lock.list_rate, lock.currency)}/mo. Any resize is priced at today's rates, and the old rate doesn't come back, including if you resize to this size again later.`"
+					description="Resizing uses today’s rates. Your current rate cannot be restored."
 				/>
 
-				<div class="space-y-2 text-p-sm text-ink-gray-7">
-					<p>
-						You can change CPU and memory only, or grow the disk too. Choosing a
-						smaller CPU and memory size does not shrink your disk.
-					</p>
-					<p>
-						Changing CPU or memory restarts the server and may take a few
-						minutes. Increasing storage alone does not need a restart. Your
-						files are kept.
-					</p>
-				</div>
+				<p class="text-p-sm text-ink-gray-7">
+					Choose a new CPU and memory size. You can also increase storage, but
+					you cannot reduce it later.
+				</p>
 				<RadioGroup v-model="computeOnly" label="Storage" padded>
 					<Radio
 						:value="true"
-						:label="`Keep my ${formatGb(currentDisk)} GB disk`"
-						description="Change CPU and memory. You can choose a smaller compute size."
+						:label="`Keep ${formatGb(currentDisk)} GB disk`"
 					/>
-					<Radio
-						:value="false"
-						label="Increase storage too"
-						description="Use the selected plan's storage, or choose a custom size. Storage cannot shrink."
-					/>
+					<Radio :value="false" label="Increase storage" />
 				</RadioGroup>
-				<p class="text-p-sm text-ink-gray-6">
-					Prices include all storage you keep. Increasing storage is permanent.
-				</p>
+				<p class="text-p-sm text-ink-gray-6">Prices include storage.</p>
 
 				<Tabs v-if="hasTabs" v-model="activeTab" :tabs="classTabs">
 					<template #tab-panel="{ tab }">
