@@ -752,6 +752,7 @@ class TestSiteNaming(SiteOnAMachine):
 			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
 		probe.assert_called_once_with(f"https://{site.rename_target}")
 		self.assertEqual(login.call_args.args[2], site.rename_target)
+		self.assertEqual(self.site().primary_url, f"https://{site.rename_target}")
 
 	def test_pending_route_keeps_the_automatic_redirect(self):
 		site = self.site()
@@ -765,6 +766,8 @@ class TestSiteNaming(SiteOnAMachine):
 		):
 			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
 		self.assertEqual(login.call_args.args[2], "site.local")
+		self.assertIsNone(self.site().renamed_at)
+		self.assertEqual(self.site().primary_url, site.url)
 
 	def test_the_address_stays_ours_and_theirs_is_only_a_rename_target(self):
 		site = self.site()

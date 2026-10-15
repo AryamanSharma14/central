@@ -31,6 +31,7 @@ class Site(Document):
 		rename_error: DF.SmallText | None
 		rename_error_log: DF.Link | None
 		rename_task: DF.Data | None
+		renamed_at: DF.Datetime | None
 		server: DF.Link
 		site_name: DF.Data
 		subdomain: DF.Data | None
@@ -55,6 +56,18 @@ class Site(Document):
 	def url(self) -> str:
 		"""The automatic address used for readiness probes and the initial signup handoff."""
 		return f"https://{self.name}"
+
+	@property
+	def primary_url(self) -> str:
+		"""The address the console shows: the customer's subdomain once the rename has landed."""
+		return Site.get_primary_url(self.name, self.subdomain, self.renamed_at)
+
+	@staticmethod
+	def get_primary_url(name: str, subdomain: str | None, renamed_at: str | None) -> str:
+		if not subdomain or not renamed_at:
+			return f"https://{name}"
+		_, zone = name.split(".", 1)
+		return f"https://{subdomain}.{zone}"
 
 	@property
 	def status(self) -> str | None:
@@ -270,6 +283,8 @@ class Site(Document):
 		renamed_ready = (
 			self.subdomain and self.rename_task and is_site_reachable(f"https://{self.rename_target}")
 		)
+		if renamed_ready and not self.renamed_at:
+			self.db_set("renamed_at", frappe.utils.now_datetime())
 		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if renamed_ready else [IMAGE_SITE_NAME]
 		for pilot_name in pilot_names:
 			if minted := fetch_site_login_url(gateway, audience, pilot_name, login_user, full_name):
