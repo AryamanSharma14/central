@@ -113,7 +113,7 @@ const terminateActions = computed(() =>
 
 // A link from a server's own dashboard opens that server here.
 useServerLink(
-	{ activeTeam, servers, reload },
+	{ activeTeam, servers, loading, reload },
 	{
 		overview: showServer,
 		resize: (server) => {

@@ -13,6 +13,7 @@ type ServerLinkHandlers = Record<
 interface ServerLinkFleet {
 	activeTeam: Ref<string | null | undefined>
 	servers: Ref<VirtualMachineRow[]>
+	loading: Ref<boolean>
 	reload: () => Promise<unknown>
 }
 
@@ -37,6 +38,12 @@ export function useServerLink(
 		} catch {
 			return // The page already shows why the list did not load.
 		}
+		// On a fresh page the first team load can cancel this reload, which then resolves
+		// empty. Wait for the load that is still running.
+		if (fleet.loading.value)
+			await new Promise((resolve) =>
+				watch(fleet.loading, resolve, { once: true }),
+			)
 		const server = fleet.servers.value.find(
 			(row) => row.pilot_audience === audience,
 		)
