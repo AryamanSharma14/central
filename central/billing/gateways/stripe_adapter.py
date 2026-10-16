@@ -7,6 +7,7 @@ Intents, refunds, webhook signature verification) is ported from the working
 press implementation; the structure is the new adapter model.
 """
 
+from contextlib import contextmanager
 from typing import ClassVar
 
 import frappe
@@ -16,6 +17,7 @@ from central.billing.gateways import capabilities
 from central.billing.gateways.base import (
 	GatewayAdapter,
 	GatewayAuthError,
+	GatewayError,
 	GatewayTimeout,
 	NormalisedEvent,
 	PaymentResult,
@@ -171,7 +173,8 @@ class StripeAdapter(GatewayAdapter):
 			params["payment_method_options"] = {
 				"card": self._india_mandate_options(currency, setup_data.get("max_amount"))
 			}
-		intent = _to_dict(stripe.SetupIntent.create(**params))
+		with _stripe_errors():
+			intent = _to_dict(stripe.SetupIntent.create(**params))
 		return {"client_secret": intent.get("client_secret"), "setup_intent_id": intent.get("id")}
 
 	def _india_mandate_options(self, currency: str, max_amount) -> dict:
@@ -348,7 +351,8 @@ class StripeAdapter(GatewayAdapter):
 		shipping = _export_shipping((notes or {}).get("team"))
 		if shipping:
 			params["shipping"] = shipping
-		intent = _to_dict(stripe.PaymentIntent.create(**params))
+		with _stripe_errors():
+			intent = _to_dict(stripe.PaymentIntent.create(**params))
 		return {
 			"client_secret": intent.get("client_secret"),
 			"payment_intent_id": intent.get("id"),
@@ -458,14 +462,31 @@ class StripeAdapter(GatewayAdapter):
 	def create_customer(self, team) -> str:
 		self._configure()
 		# Team.owner_user is a Link to User, whose name IS the email address.
-		customer = _to_dict(
-			stripe.Customer.create(
-				name=getattr(team, "name", None),
-				email=team.get("owner_user") if hasattr(team, "get") else None,
+		with _stripe_errors():
+			customer = _to_dict(
+				stripe.Customer.create(
+					name=getattr(team, "name", None),
+					email=team.get("owner_user") if hasattr(team, "get") else None,
+				)
 			)
-		)
 		return customer.get("id")
 
 	def get_mandate_status(self, mandate_reference: str) -> str:
 		self._configure()
 		return _to_dict(stripe.Mandate.retrieve(mandate_reference)).get("status")
+
+
+@contextmanager
+def _stripe_errors():
+	"""Raise a Stripe failure as the gateway error core billing understands, so a bad key or an
+	outage never reaches the customer as a bare Stripe exception."""
+	try:
+		yield
+	except stripe.error.AuthenticationError as e:
+		raise GatewayAuthError(str(e)) from e
+	except (stripe.error.APIConnectionError, stripe.error.RateLimitError) as e:
+		raise GatewayTimeout(str(e)) from e
+	except stripe.error.CardError:
+		raise
+	except stripe.error.StripeError as e:
+		raise GatewayError(str(e)) from e

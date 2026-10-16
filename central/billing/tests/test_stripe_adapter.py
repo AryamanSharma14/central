@@ -171,6 +171,42 @@ class TestStripeAdapter(GatewayAdapterContract, IntegrationTestCase):
 		self.assertEqual(cid, "cus_new")
 		self.assertEqual(create.call_args.kwargs["email"], "a@b.com")
 
+	def test_a_rejected_key_raises_a_gateway_error_the_customer_never_sees(self):
+		"""A bad key reaches core billing as GatewayAuthError, and the customer reads a plain message."""
+		from central.billing.gateways.base import GatewayAuthError, customer_safe_gateway_errors
+
+		adapter = self.make_adapter()
+		err = stripe.error.AuthenticationError("Invalid API Key provided: sk_test_****123")
+		with patch.object(stripe.Customer, "create", side_effect=err), self.assertRaises(GatewayAuthError):
+			adapter.create_customer(frappe._dict(name="Team-1", owner_user="a@b.com"))
+
+		with (
+			patch.object(stripe.SetupIntent, "create", side_effect=err),
+			patch.object(frappe, "log_error") as log_error,
+			self.assertRaises(frappe.ValidationError) as raised,
+			customer_safe_gateway_errors(),
+		):
+			adapter.setup_payment_method(
+				frappe._dict(name="Team-1"), {"customer_id": "cus_1", "currency": "USD"}
+			)
+
+		self.assertNotIn("sk_test", str(raised.exception))
+		self.assertIn("payment provider", str(raised.exception))
+		log_error.assert_called_once()
+
+	def test_a_stripe_outage_asks_the_customer_to_try_again(self):
+		from central.billing.gateways.base import customer_safe_gateway_errors
+
+		adapter = self.make_adapter()
+		err = stripe.error.APIConnectionError("Network error")
+		with (
+			patch.object(stripe.PaymentIntent, "create", side_effect=err),
+			patch.object(frappe, "log_error"),
+			self.assertRaisesRegex(frappe.ValidationError, "Try again in a few minutes"),
+			customer_safe_gateway_errors(),
+		):
+			adapter.create_order(100, "USD", "topup-1")
+
 	def test_get_mandate_status(self):
 		adapter = self.make_adapter()
 		with patch.object(stripe.Mandate, "retrieve", return_value=frappe._dict(status="Active")):
