@@ -120,7 +120,7 @@
   "docstatus": 0,
   "doctype": "Notification Event Type",
   "event_type": "trial_expiring",
-  "in_app_body": "The free trial of {{ context.address }} ends on {{ context.ends_on }}. Add a payment method to keep it running{% if context.credit %} and get {{ context.credit }} credit{% endif %}. Until then, it sleeps after {{ context.sleeps_after_minutes }} minutes without visitors.",
+  "in_app_body": "The free trial of {{ context.address }} ends on {{ context.ends_on }}. Add a payment method to keep it running{% if context.credit %} and get {{ context.credit }} credit{% endif %}. Until you add a payment method, it sleeps after {{ context.sleeps_after_minutes }} minutes without visitors.",
   "in_app_title": "Your {{ context.product }} trial ends on {{ context.ends_on }}",
   "modified": "2026-10-16 00:00:00",
   "name": "trial_expiring",

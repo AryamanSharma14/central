@@ -75,7 +75,7 @@ export function useBillingSetup() {
 				trimTrailingZeros: true,
 			})
 			if (credit.ends_on)
-				return `${amount} credit if you add it by ${formatDate(credit.ends_on)}`
+				return `${amount} credit if you add one by ${formatDate(credit.ends_on)}`
 			return credit.validity_days
 				? `${amount} credit, valid for ${credit.validity_days} days`
 				: `${amount} credit`

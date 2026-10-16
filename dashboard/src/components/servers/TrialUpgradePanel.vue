@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Alert, Button } from 'frappe-ui'
+import { Alert } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import AddMethodDialog from '@/components/AddMethodDialog.vue'
 import EditBillingProfileDialog from '@/components/billing/EditBillingProfileDialog.vue'
@@ -40,9 +40,30 @@ const credit = computed(() => {
 		trimTrailingZeros: true,
 	})
 	return offer.ends_on
-		? `Add it by ${formatDate(offer.ends_on)} and get ${amount} credit.`
-		: `Get ${amount} credit when you add it.`
+		? `Add a payment method by ${formatDate(offer.ends_on)} and get ${amount} credit`
+		: `Get ${amount} credit when you add a payment method`
 })
+
+const facts = computed(() => [
+	{
+		icon: 'lucide-credit-card',
+		text: credit.value
+			? 'After the credit is used, we charge this card for your monthly bill.'
+			: 'We charge this card for your monthly bill.',
+	},
+	...(props.trial.state === 'Active' && props.trial.sleeps_after_minutes
+		? [
+				{
+					icon: 'lucide-moon',
+					text: `Until you add a payment method, your site sleeps after ${plural(props.trial.sleeps_after_minutes, 'minute')} without visitors. The next visit wakes it in a few seconds.`,
+				},
+			]
+		: []),
+	{
+		icon: 'lucide-shield-check',
+		text: 'Your site and its data stay as they are.',
+	},
+])
 
 function addMethod(): void {
 	if (requireSetup()) showAddMethod.value = true
@@ -52,6 +73,9 @@ function onMethodAdded(): void {
 	methodAdded.value = true
 	emit('check')
 }
+
+// The dialog's footer holds the button, so it reads these.
+defineExpose({ addMethod, methodAdded })
 </script>
 
 <template>
@@ -62,39 +86,35 @@ function onMethodAdded(): void {
 			:description="description"
 		/>
 
-		<ul class="space-y-1.5 text-p-sm text-ink-gray-7">
-			<li v-if="credit">{{ credit }}</li>
-			<li>
-				{{ credit ? 'After the credit is used, we' : 'We' }}
-				charge this card for your monthly bill.
+		<div
+			v-if="credit"
+			class="flex items-center gap-3 rounded-6 bg-surface-gray-2 px-4 py-3"
+		>
+			<span
+				class="lucide-gift size-4 shrink-0 text-ink-gray-8"
+				aria-hidden="true"
+			/>
+			<p class="text-p-sm-medium text-ink-gray-9">{{ credit }}</p>
+		</div>
+
+		<ul class="space-y-3">
+			<li
+				v-for="fact in facts"
+				:key="fact.icon"
+				class="flex items-start gap-3 text-p-sm text-ink-gray-7"
+			>
+				<span
+					:class="fact.icon"
+					class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+					aria-hidden="true"
+				/>
+				{{ fact.text }}
 			</li>
-			<li v-if="trial.state === 'Active' && trial.sleeps_after_minutes">
-				Until you add it, your site sleeps after
-				{{ plural(trial.sleeps_after_minutes, 'minute') }}
-				without visitors. The next visit wakes it in a few seconds.
-			</li>
-			<li>Your site and its data stay as they are.</li>
 		</ul>
 
 		<p v-if="methodAdded" class="text-p-sm text-ink-gray-6" aria-live="polite">
 			We are confirming your payment method. This can take a minute.
 		</p>
-
-		<div class="flex justify-end gap-2">
-			<Button
-				v-if="methodAdded"
-				label="Check again"
-				:loading="checking"
-				@click="emit('check')"
-			/>
-			<Button
-				v-else
-				variant="solid"
-				icon-left="lucide-credit-card"
-				label="Add payment method"
-				@click="addMethod"
-			/>
-		</div>
 
 		<AddMethodDialog v-model="showAddMethod" @done="onMethodAdded" />
 		<EditBillingProfileDialog v-model="setupDialogOpen" />

@@ -9,7 +9,7 @@ import {
 	Skeleton,
 	Tabs,
 } from 'frappe-ui'
-import { computed, toRef } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
 import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
@@ -67,6 +67,8 @@ const {
 	resized: () => emit('resized'),
 })
 
+const trialPanel = ref<InstanceType<typeof TrialUpgradePanel> | null>(null)
+
 const open = computed({
 	get: () => model.value,
 	set: (value: boolean) => {
@@ -76,7 +78,11 @@ const open = computed({
 </script>
 
 <template>
-	<Dialog v-model="open" title="Resize server" size="3xl">
+	<Dialog
+		v-model="open"
+		:title="trial ? 'Upgrade your site' : 'Resize server'"
+		size="3xl"
+	>
 		<template #default>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
@@ -116,6 +122,7 @@ const open = computed({
 			</div>
 			<TrialUpgradePanel
 				v-else-if="trial"
+				ref="trialPanel"
 				:trial="trial"
 				:checking="configCall.loading"
 				@check="configCall.reload()"
@@ -200,8 +207,23 @@ const open = computed({
 			</div>
 		</template>
 		<template #actions>
+			<div v-if="trial" class="flex justify-end">
+				<Button
+					v-if="trialPanel?.methodAdded"
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+				<Button
+					v-else
+					variant="solid"
+					icon-left="lucide-credit-card"
+					label="Add payment method"
+					@click="trialPanel?.addMethod()"
+				/>
+			</div>
 			<div
-				v-if="resizable && !resizeCall.loading"
+				v-else-if="resizable && !resizeCall.loading"
 				class="flex items-center justify-end gap-4"
 			>
 				<p v-if="totalPrice" class="text-p-sm text-ink-gray-6">
