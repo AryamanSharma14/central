@@ -117,7 +117,9 @@ class TestStateDelivery(IntegrationTestCase):
 
 	def test_repeated_refusals_from_one_caller_are_logged_once(self):
 		ip = f"test-{frappe.generate_hash(length=8)}"
-		before = frappe.db.count("Error Log", {"method": "Rejected regional state report"})
+		before = len(
+			frappe.get_all("Error Log", filters={"method": "Rejected regional state report"}, pluck="name")
+		)
 
 		with patch.object(frappe.local, "request_ip", ip, create=True):
 			for _ in range(3):
