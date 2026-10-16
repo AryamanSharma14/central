@@ -1,0 +1,122 @@
+<script setup lang="ts">
+import { Alert } from 'frappe-ui'
+import { computed, ref } from 'vue'
+import AddMethodDialog from '@/components/AddMethodDialog.vue'
+import EditBillingProfileDialog from '@/components/billing/EditBillingProfileDialog.vue'
+import { useBillingSetup } from '@/composables/useBillingSetup'
+import { formatDate, money, plural } from '@/lib/format'
+import type { ServerTrial } from '@/types/billing'
+
+interface Props {
+	trial: ServerTrial
+	checking: boolean
+}
+
+const props = defineProps<Props>()
+const emit = defineEmits<{ check: [] }>()
+
+const { requireSetup, setupDialogOpen } = useBillingSetup()
+const showAddMethod = ref(false)
+// A new card is confirmed by the gateway first, so the trial can stay open for a moment.
+const methodAdded = ref(false)
+
+const title = computed(() =>
+	props.trial.state === 'Ended'
+		? 'Your free trial has ended'
+		: `Your free trial ends in ${plural(props.trial.days_left, 'day')}`,
+)
+
+const description = computed(() =>
+	props.trial.state === 'Ended' && props.trial.deletes_on
+		? `This site is stopped. Add a payment method before ${formatDate(props.trial.deletes_on)} to keep it and choose a plan.`
+		: 'Add a payment method to keep this site and choose a bigger plan.',
+)
+
+// The card earns the credit only before the trial ends, so the line names that day.
+const credit = computed(() => {
+	const offer = props.trial.credit
+	if (!offer) return null
+	const amount = money(offer.amount, offer.currency, {
+		trimTrailingZeros: true,
+	})
+	return offer.ends_on
+		? `Add a payment method by ${formatDate(offer.ends_on)} and get ${amount} credit`
+		: `Get ${amount} credit when you add a payment method`
+})
+
+const facts = computed(() => [
+	{
+		icon: 'lucide-credit-card',
+		text: credit.value
+			? 'After the credit is used, we charge this card for your monthly bill.'
+			: 'We charge this card for your monthly bill.',
+	},
+	...(props.trial.state === 'Active' && props.trial.sleeps_after_minutes
+		? [
+				{
+					icon: 'lucide-moon',
+					text: `Until you add a payment method, your site sleeps after ${plural(props.trial.sleeps_after_minutes, 'minute')} without visitors. The next visit wakes it in a few seconds.`,
+				},
+			]
+		: []),
+	{
+		icon: 'lucide-shield-check',
+		text: 'Your site and its data stay as they are.',
+	},
+])
+
+function addMethod(): void {
+	if (requireSetup()) showAddMethod.value = true
+}
+
+function onMethodAdded(): void {
+	methodAdded.value = true
+	emit('check')
+}
+
+// The dialog's footer holds the button, so it reads these.
+defineExpose({ addMethod, methodAdded })
+</script>
+
+<template>
+	<div class="space-y-4">
+		<Alert
+			:theme="trial.state === 'Ended' ? 'red' : 'blue'"
+			:title="title"
+			:description="description"
+		/>
+
+		<div
+			v-if="credit"
+			class="flex items-center gap-3 rounded-6 bg-surface-gray-2 px-4 py-3"
+		>
+			<span
+				class="lucide-gift size-4 shrink-0 text-ink-gray-8"
+				aria-hidden="true"
+			/>
+			<p class="text-p-sm-medium text-ink-gray-9">{{ credit }}</p>
+		</div>
+
+		<ul class="space-y-3">
+			<li
+				v-for="fact in facts"
+				:key="fact.icon"
+				class="flex items-start gap-3 text-p-sm text-ink-gray-7"
+			>
+				<span
+					:class="fact.icon"
+					class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+					aria-hidden="true"
+				/>
+				{{ fact.text }}
+			</li>
+		</ul>
+
+		<p v-if="methodAdded" class="text-p-sm text-ink-gray-6" aria-live="polite">
+			We are confirming your payment method. This can take a minute.
+		</p>
+
+		<AddMethodDialog v-model="showAddMethod" @done="onMethodAdded" />
+		<EditBillingProfileDialog v-model="setupDialogOpen" />
+	</div>
+</template>

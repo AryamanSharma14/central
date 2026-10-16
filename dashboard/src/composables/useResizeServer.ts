@@ -1,5 +1,5 @@
 import { useCall } from 'frappe-ui'
-import { computed, type Ref, ref, watch } from 'vue'
+import { computed, onScopeDispose, type Ref, ref, watch } from 'vue'
 import { API, method } from '@/api/methods'
 import { usePlans } from '@/composables/usePlans'
 import type { VirtualMachineRow } from '@/composables/useServers'
@@ -13,6 +13,7 @@ import { getErrorMessage, isAbortError, successToast } from '@/lib/feedback'
 import { money } from '@/lib/format'
 import { planQuantity, presetPrice } from '@/lib/plans'
 import type { ComposedConfig, Plan, Profile } from '@/types/api'
+import type { ServerTrial } from '@/types/billing'
 
 interface ResizeCallbacks {
 	close: () => void
@@ -44,6 +45,10 @@ export function useResizeServer(
 		vcpus?: number
 		memory_gb?: number
 		disk_gb?: number
+		/** The open free trial that keeps this server from being resized. */
+		trial?: ServerTrial | null
+		/** A converted trial's server is starting and has no subscription yet. */
+		starting?: boolean
 		lock?: {
 			locked_rate: number
 			list_rate: number
@@ -97,6 +102,17 @@ export function useResizeServer(
 		(selectedPlan.value ?? '').startsWith('custom:'),
 	)
 	const resizable = computed(() => configCall.data?.resizable === true)
+	const trial = computed(() => configCall.data?.trial ?? null)
+	const starting = computed(() => configCall.data?.starting === true)
+
+	// The subscription arrives once the converted server runs, so check again until it does.
+	let startingTimer: number | undefined
+	watch([starting, isOpen], ([isStarting, open]) => {
+		window.clearInterval(startingTimer)
+		if (isStarting && open)
+			startingTimer = window.setInterval(() => configCall.reload(), 5000)
+	})
+	onScopeDispose(() => window.clearInterval(startingTimer))
 
 	const canDesign = computed(
 		() => rateCardComplete(rateCard.value) && profiles.value.length > 0,
@@ -260,7 +276,8 @@ export function useResizeServer(
 	const downtimeNote = computed(() => {
 		if (server.value?.status === 'Stopped')
 			return 'The server will start after the resize.'
-		if (needsRestart.value) return 'Brief downtime during restart.'
+		if (needsRestart.value)
+			return 'Your site goes offline for a few minutes while the server restarts.'
 		return 'No restart needed.'
 	})
 
@@ -430,6 +447,8 @@ export function useResizeServer(
 		resizeCall,
 		plansLoading,
 		resizable,
+		trial,
+		starting,
 		nothingToShow,
 		resizeError,
 		losesLockedRate,

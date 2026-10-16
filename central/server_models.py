@@ -109,6 +109,9 @@ class ResizeConfiguration(BaseModel):
 	override_rate: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 	preset_plan: str | None = None
 	shape: ServerShape
+	# The plan and size before the resize, so its progress page can show both after it lands.
+	from_plan: str | None = None
+	from_shape: ServerShape | None = None
 
 
 class FirewallRule(BaseModel):

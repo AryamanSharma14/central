@@ -261,6 +261,9 @@ class TestResizeComposed(IntegrationTestCase):
 	def test_begin_resize_creates_a_durable_action(self):
 		sub = self._provision()
 		server = self._ready(sub)
+		frappe.db.set_value(
+			"Virtual Machine", server, {"vcpus": 1, "memory_megabytes": 2048, "disk_gigabytes": 20}
+		)
 		with patch("frappe.enqueue") as enqueue:
 			result = subscriptions.begin_resize(sub, includes=BIG, sub_category="General")
 		self.assertTrue(result["queued"])
@@ -273,6 +276,13 @@ class TestResizeComposed(IntegrationTestCase):
 			("resize", server),
 		)
 		self.assertEqual(len(self._segments(sub)), 1)  # billing re-locks only in the job
+		# The size before the resize stays on the action for its progress page.
+		configuration = frappe.get_doc("Resource Action", result["action"]).get_resize_configuration()
+		self.assertEqual(configuration.from_plan, frappe.db.get_value("Virtual Machine", server, "plan"))
+		self.assertEqual(
+			configuration.from_shape.model_dump(),
+			{"vcpus": 1.0, "memory_megabytes": 2048, "disk_gigabytes": 20},
+		)
 
 	def test_begin_resize_job_reshapes_then_relocks(self):
 		sub = self._provision()

@@ -80,6 +80,19 @@ On a trial site, a member of the site's team signs in as their own user. Pilot c
 
 A Pilot 401 leaves the site unclaimed and tells the console to retry with bounded backoff for up to 120 seconds. Other login failures return no URL and use the manual sign-in fallback. Central waits up to 120 seconds for each login request.
 
+## Plan change page
+
+A site's users have no Central account. When a plan change from the site stops the server, Central shows them a public page that follows the change. The page lives on Central, so it stays up while the server restarts.
+
+1. `central.billing.api.billing_api.change_plan` queues the resize and returns `progress_url`. It returns a URL only when the server runs exactly one Site.
+2. The URL is `/upgrading?action=<Resource Action>&site=<Site>&_signature=<signature>`. Frappe's `get_signed_params` signs it with the site secret. The link does not expire.
+3. `central/www/upgrading.py` checks the signature and renders the page. A wrong signature, or an action that does not resize the Site's server, shows "This link is not valid".
+4. The page asks `central.api.sites.plan_change_progress` every 3 seconds. The endpoint allows guests, checks the same signature, and allows 60 requests a minute for each action.
+5. The step comes from the Resource Action status: `saving`, `moving`, `starting`, `ready` or `failed`. The step is `ready` only when `Site.primary_url` answers a ping.
+6. On `ready`, the page counts down 5 seconds and opens `Site.primary_url`. The user can stay on the page.
+
+`PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
+
 ## Operator actions
 
 A System Manager has two actions on the Site form in Desk:

@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils.translations import _lt
 
 from central.errors import handle_resource_operation
@@ -89,6 +90,18 @@ def claim_site(name: str) -> dict:
 		site.mark_claimed()
 
 	return state
+
+
+# nosemgrep: guest-whitelisted-method -- the signed link is checked in PlanChange.from_signed_link.
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+# Counted per link, not per address: one open page polls about 20 times a minute, and many
+# people behind one office address can each follow their own change.
+@rate_limit(key="action", limit=60, seconds=60, ip_based=False)
+def plan_change_progress(action: str, site: str, signature: str) -> dict:
+	"""Progress of a site's plan change, for the public waiting page."""
+	from central.infrastructure.doctype.site.plan_change import PlanChange
+
+	return PlanChange.from_signed_link(action, site, signature).get_progress()
 
 
 @frappe.whitelist(methods=["GET"])

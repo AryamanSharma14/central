@@ -21,15 +21,17 @@ A team without a payment method can only have free trial sites. To create any ot
 | Billing Settings | Validity (Days) | 60 |
 | Billing Settings | Provision Teams as Trial | Off. This is for staging only. |
 | Plan | Available on Trial | On for each active plan that signup may select. The cheapest eligible marked plan is selected. Its disk must fit the trial image. |
-| Central Settings | Trial Days | 14 |
-| Central Settings | Trial Deletion Days | 14 |
-| Central Settings | Trial Notice Days | 3 |
+| Central Settings | Trial Days | 7 |
+| Central Settings | Trial Deletion Days | 7 |
+| Central Settings | Trial Notice Days | 2 |
 | Central Settings | Trial Servers per Team | 3 |
 | Central Settings | Require Payment Method for Servers | On |
 | Central Settings | Trial Idle Shutdown (Minutes) | 10 |
 | Region | FrappeMail Service | Enabled. Keep enough free mailboxes, because an empty pool stops new trials. |
 
 A Product can have its own Trial Days and Trial Deletion Days. Leave them at 0 to use Central Settings.
+
+A trial team gets the welcome credit only when it adds a card while a trial is still Active. A card after the trial ends brings the site back, but with no credit. A team without a trial gets the credit with its first card.
 
 ## Common tasks
 
@@ -51,4 +53,5 @@ A Product can have its own Trial Days and Trial Deletion Days. Leave them at 0 t
 | New Server page, no payment method | A note at the top: add a payment method to create servers and get the welcome credit. Create is off. |
 | Onboarding, billing step | A line that says to add a payment method in Billing to get the welcome credit. |
 | Trial ending, ended, deletion soon, deleted | An email and a notice in the **Trial** category. Customers can turn these off in their notification settings. |
-| Site's in-app billing panel | The trial end date and the days left. |
+| Site's in-app billing panel | The days left, the last day to add a card and get the credit, and that the site sleeps after Trial Idle Shutdown minutes without visitors. |
+| Console resize dialog on a trial server | The same, with an **Add payment method** button. After the card, the plans. |

@@ -9,8 +9,9 @@ import {
 	Skeleton,
 	Tabs,
 } from 'frappe-ui'
-import { computed, toRef } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
+import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
 import { configSpecs } from '@/lib/composed'
@@ -29,6 +30,8 @@ const {
 	resizeCall,
 	plansLoading,
 	resizable,
+	trial,
+	starting,
 	nothingToShow,
 	resizeError,
 	losesLockedRate,
@@ -65,6 +68,8 @@ const {
 	resized: () => emit('resized'),
 })
 
+const trialPanel = ref<InstanceType<typeof TrialUpgradePanel> | null>(null)
+
 const open = computed({
 	get: () => model.value,
 	set: (value: boolean) => {
@@ -74,7 +79,11 @@ const open = computed({
 </script>
 
 <template>
-	<Dialog v-model="open" title="Resize server" size="3xl">
+	<Dialog
+		v-model="open"
+		:title="trial ? 'Upgrade your site' : 'Resize server'"
+		size="3xl"
+	>
 		<template #default>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
@@ -88,7 +97,7 @@ const open = computed({
 				</p>
 			</div>
 			<div
-				v-else-if="configCall.loading || plansLoading"
+				v-else-if="(configCall.loading && !trial && !starting) || plansLoading"
 				class="space-y-4"
 				aria-busy="true"
 				aria-label="Loading resize options"
@@ -112,6 +121,19 @@ const open = computed({
 				/>
 				<Button label="Retry" @click="reloadOptions" />
 			</div>
+			<TrialUpgradePanel
+				v-else-if="trial"
+				ref="trialPanel"
+				:trial="trial"
+				:checking="configCall.loading"
+				@check="configCall.reload()"
+			/>
+			<Alert
+				v-else-if="starting"
+				theme="blue"
+				title="Your payment method is confirmed"
+				description="We are starting your server on its paid plan. This takes about a minute, then the plans show here."
+			/>
 			<p
 				v-else-if="!resizable || nothingToShow"
 				class="text-p-sm text-ink-gray-5"
@@ -192,8 +214,30 @@ const open = computed({
 			</div>
 		</template>
 		<template #actions>
+			<div v-if="starting" class="flex justify-end">
+				<Button
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+			</div>
+			<div v-else-if="trial && trialPanel" class="flex justify-end">
+				<Button
+					v-if="trialPanel?.methodAdded"
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+				<Button
+					v-else
+					variant="solid"
+					icon-left="lucide-credit-card"
+					label="Add payment method"
+					@click="trialPanel?.addMethod()"
+				/>
+			</div>
 			<div
-				v-if="resizable && !resizeCall.loading"
+				v-else-if="resizable && !resizeCall.loading"
 				class="flex items-center justify-end gap-4"
 			>
 				<p v-if="totalPrice" class="text-p-sm text-ink-gray-6">
