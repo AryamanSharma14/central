@@ -142,16 +142,6 @@ class GitHubConnection(Document):
 				connection.save(ignore_permissions=True)
 
 	@staticmethod
-	def rename_repository(installation_id: str, repository_id: str, full_name: str) -> None:
-		for connection in GitHubConnection._lock_active(installation_id):
-			renamed = [row for row in connection.repositories if row.repository_id == repository_id]
-			for row in renamed:
-				row.full_name = full_name
-			if renamed:
-				# A GitHub webhook renames the repository; no Desk user owns the grant.
-				connection.save(ignore_permissions=True)
-
-	@staticmethod
 	def _lock_active(installation_id: str) -> list[GitHubConnection]:
 		names = frappe.get_all(
 			"GitHub Connection",

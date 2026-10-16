@@ -175,9 +175,6 @@ def webhook() -> None:
 	elif event == "installation_repositories" and payload.get("action") == "removed":
 		removed = {str(repository["id"]) for repository in payload.get("repositories_removed", [])}
 		GitHubConnection.remove_repositories(installation_id, removed)
-	elif event == "repository" and payload.get("action") == "renamed":
-		repository = payload["repository"]
-		GitHubConnection.rename_repository(installation_id, str(repository["id"]), repository["full_name"])
 
 
 @frappe.whitelist(methods=["POST"])
@@ -200,7 +197,6 @@ def create_app_manifest(app_name: str, organization: str | None = None) -> dict:
 		"request_oauth_on_install": True,
 		"public": True,
 		"default_permissions": {"contents": "read", "metadata": "read"},
-		"default_events": ["repository"],
 	}
 	owner = f"organizations/{urllib.parse.quote(organization)}/" if organization else ""
 	return {"action": f"{WEB_URL}/{owner}settings/apps/new?state={state}", "manifest": json.dumps(manifest)}

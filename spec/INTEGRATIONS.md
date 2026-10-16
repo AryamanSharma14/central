@@ -173,7 +173,7 @@ Pilot ── start_connection ──> Central ── authorize, install ──> 
 2. The first user who opens the link must hold `server:console` on the Pilot's server. The attempt binds to that user. The OAuth `state` and a PKCE verifier bind the GitHub callback to the attempt and the user's session.
 3. The user authorizes or installs the App, then selects repositories in one or more accounts. The user must be a GitHub admin of each one. `complete_connection` saves one `GitHub Connection` per Pilot credential and installation. An account sent with no repositories loses its grant.
 4. Pilot calls `status`, `repositories` and `repository_token(repository)` with its credential. Each grant change increases the connection `version`. Central refuses a token when the grant changed while GitHub minted it.
-5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, removes repositories the installation lost, and updates the name of a renamed repository. The App must subscribe to the `repository` event for renames. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
+5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, and removes repositories the installation lost. Central does not follow repository renames. After a rename, the user removes the repository and grants it again. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
 
 The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab.
 

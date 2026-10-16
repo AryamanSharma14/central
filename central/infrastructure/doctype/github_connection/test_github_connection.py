@@ -66,16 +66,6 @@ class IntegrationTestGitHubConnection(IntegrationTestCase):
 		_, repository_id = GitHubConnection.find_repository(self.credential, "OCTO/other-app")
 		self.assertEqual(repository_id, OTHER["repository_id"])
 
-	def test_a_repository_renamed_on_github_keeps_its_grant(self):
-		GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
-
-		GitHubConnection.rename_repository(
-			INSTALLATION["installation_id"], PRIVATE["repository_id"], "octo/renamed-app"
-		)
-
-		_, repository_id = GitHubConnection.find_repository(self.credential, "octo/renamed-app")
-		self.assertEqual(repository_id, PRIVATE["repository_id"])
-
 	def test_revoking_one_account_keeps_the_other_accounts(self):
 		organization = {"installation_id": "202", "account": "octo-org", "account_type": "Organization"}
 		GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
