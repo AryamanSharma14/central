@@ -148,10 +148,16 @@ function openLoadingTab(
 	return { tab: window.open(loadingUrl, target, features), loadingUrl }
 }
 
-async function openBench(server: VirtualMachineRow): Promise<void> {
+/** `inPlace` replaces this page, for a link that opens the bench without a click. */
+async function openBench(
+	server: VirtualMachineRow,
+	{ inPlace = false } = {},
+): Promise<void> {
 	if (opening.value) return
 	opening.value = server.resource_id
-	const { tab, loadingUrl } = openLoadingTab()
+	const { tab, loadingUrl } = inPlace
+		? { tab: null, loadingUrl: '' }
+		: openLoadingTab()
 	try {
 		await submitOrThrow(benchLinkCall, { server: server.resource_id })
 		openResolvedUrl(benchLinkCall.data?.url, tab, 'server')

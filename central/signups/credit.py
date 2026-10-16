@@ -14,8 +14,17 @@ def on_payment_method_update(doc, method: str | None = None) -> None:
 	if doc.status != "Active" or not before or before.status == "Active":
 		return
 
-	grant_welcome_credits(doc.team)
+	# Checked before the conversion, which closes the team's open trials.
+	if is_welcome_credit_due(doc.team):
+		grant_welcome_credits(doc.team)
 	convert_team(doc.team)
+
+
+def is_welcome_credit_due(team: str) -> bool:
+	"""A team without trials earns the welcome credit with its first payment method. A trial team
+	earns it only while one of its trials is still Active, which rewards converting early."""
+	states = frappe.get_all("Site", filters={"team": team, "trial_state": ["is", "set"]}, pluck="trial_state")
+	return not states or "Active" in states
 
 
 @frappe.whitelist(methods=["POST"])
@@ -49,14 +58,18 @@ def get_purchase_state(team: str) -> dict:
 
 
 def get_welcome_credit_offer(team: str) -> dict | None:
-	"""The welcome credit the team's first active payment method adds, or None."""
+	"""The welcome credit the team's first active payment method adds, or None. `ends_on` is the
+	last day a trial team can still earn it."""
 	currency = frappe.db.get_value("Billing Profile", team, "currency")
 	amount = settings.welcome_credit_amount(currency) if currency else 0
-	if not amount or has_owner_received_welcome_credits(team, lock=False):
+	if not amount or has_owner_received_welcome_credits(team, lock=False) or not is_welcome_credit_due(team):
 		return None
 
 	return {
 		"amount": amount,
 		"currency": currency,
 		"validity_days": settings.promotional_credit_validity_days(),
+		"ends_on": frappe.db.get_value(
+			"Site", {"team": team, "trial_state": "Active"}, "trial_ends_on", order_by="trial_ends_on asc"
+		),
 	}

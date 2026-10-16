@@ -11,6 +11,7 @@ type RateField =
 export interface MetricChart {
 	key: string
 	title: string
+	summaryMode: 'latest' | 'average'
 	series: string[]
 	colors: number[]
 	format: (value: number) => string
@@ -75,6 +76,7 @@ const getRateChart = (
 	return {
 		key,
 		title,
+		summaryMode: 'average',
 		series: Object.keys(series),
 		colors,
 		max: rate.max,
@@ -85,35 +87,27 @@ const getRateChart = (
 	}
 }
 
-// Return the latest sample and peak for each series without replacing missing samples.
+// Average available rate samples; keep the latest reading for CPU and memory.
 export const getChartSeriesSummaries = (chart: MetricChart) =>
 	chart.series.map((name) => {
 		const values = chart.rows
 			.map((row) => row[name])
 			.filter((value): value is number => typeof value === 'number')
-		const current = chart.rows[chart.rows.length - 1]?.[name]
+		let value = chart.rows[chart.rows.length - 1]?.[name]
+		if (chart.summaryMode === 'average') {
+			value = values.length
+				? values.reduce((total, sample) => total + sample, 0) / values.length
+				: null
+		}
 		const format = chart.formatValue ?? chart.format
 
 		return {
 			name,
 			hasSamples: values.length > 0,
-			current: typeof current === 'number' ? format(current) : 'No sample',
+			value: typeof value === 'number' ? format(value) : 'No sample',
 			peak: values.length ? format(Math.max(...values)) : 'No samples',
 		}
 	})
-
-// Summarize the first series for single-series charts such as CPU and memory.
-export const getChartSummary = (chart: MetricChart): string => {
-	const values = chart.rows
-		.map((row) => row[chart.series[0]])
-		.filter((value): value is number => typeof value === 'number')
-	if (!values.length) return ''
-
-	const now = chart.format(values[values.length - 1])
-	const peak = chart.format(Math.max(...values))
-
-	return `Now ${now} · Peak ${peak}`
-}
 
 export const formatSampleInterval = (seconds: number): string => {
 	if (seconds % 3600 === 0)
@@ -149,6 +143,7 @@ export const getMetricCharts = (
 	{
 		key: 'cpu',
 		title: 'CPU',
+		summaryMode: 'latest',
 		series: ['CPU'],
 		colors: [1],
 		format: (value) => `${Number(value.toFixed(1))}%`,
@@ -161,6 +156,7 @@ export const getMetricCharts = (
 	{
 		key: 'memory',
 		title: 'Memory',
+		summaryMode: 'latest',
 		series: ['Used'],
 		colors: [5],
 		format: (value) => `${Number(value.toFixed(2))} GB`,

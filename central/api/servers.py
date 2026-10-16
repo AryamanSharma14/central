@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from central.errors import handle_resource_operation
 from central.iam import can, get_server_capabilities
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import get_cached_metrics, reconcile
 from central.server_models import FirewallChange
@@ -79,7 +80,11 @@ def registry(team: str | None = None) -> dict:
 	creations = ResourceAction.open_creations(team)
 
 	rows = frappe.get_list(
-		"Site", filters={"team": team}, fields=["name", "server"], order_by="name asc", limit_page_length=0
+		"Site",
+		filters={"team": team},
+		fields=["name", "server", "subdomain", "renamed_at"],
+		order_by="name asc",
+		limit_page_length=0,
 	)
 
 	return {"team": team, "servers": servers, "sites": _sites(rows, servers, pending), "creations": creations}
@@ -103,9 +108,9 @@ def _sites(rows: list[dict], servers: list[dict], pending: dict[str, str]) -> li
 	return [
 		{
 			"name": row["name"],
-			"subdomain": row["name"].split(".")[0],
+			"subdomain": row["subdomain"] or row["name"].split(".")[0],
 			"server": row["server"],
-			"url": f"https://{row['name']}",
+			"url": Site.get_primary_url(row["name"], row["subdomain"], row["renamed_at"]),
 			"status": machine["status"],
 			"region": machine["region"],
 			# A site's actions run against its machine, so its in-flight label is the machine's.
@@ -649,6 +654,7 @@ def create_server(
 	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
+	user_data: str = "",
 	snapshot: str | None = None,
 ) -> dict:
 	"""Create a server from an image, or restore one from a `snapshot`."""
@@ -668,6 +674,7 @@ def create_server(
 		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
+		user_data=user_data,
 		snapshot=snapshot,
 	)
 
@@ -689,6 +696,7 @@ def create_composed_server(
 	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
+	user_data: str = "",
 	snapshot: str | None = None,
 ) -> dict:
 	"""Create a custom-sized server from an image, or restore one from a `snapshot`."""
@@ -709,6 +717,7 @@ def create_composed_server(
 		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
+		user_data=user_data,
 		snapshot=snapshot,
 	)
 

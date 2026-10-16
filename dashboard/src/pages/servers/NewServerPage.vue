@@ -47,6 +47,7 @@ const {
 	summary,
 	canSubmit,
 	submit,
+	nameError,
 	paymentMethodRequired,
 	welcomeCredit,
 	source,
@@ -154,6 +155,7 @@ watch(
 							v-model="name"
 							label="Name"
 							required
+							:error="nameError"
 							size="md"
 							placeholder="e.g. Acme Production"
 							:maxlength="60"

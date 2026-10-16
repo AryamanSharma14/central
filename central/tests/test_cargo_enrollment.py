@@ -51,6 +51,15 @@ class TestCargoEnrollment(IntegrationTestCase):
 		self.assertTrue(secret)
 		self.assertEqual(self.post.call_args.kwargs["json"]["webhook_secret"], secret)
 
+	def test_the_cargo_secret_survives_a_later_save(self):
+		"""Frappe deletes a Password whose column is empty when the document is saved."""
+		self.instance.enroll_cargo()
+		secret = self.instance.reload().get_password("cargo_webhook_secret")
+
+		self.instance.save()
+
+		self.assertEqual(self.instance.reload().get_password("cargo_webhook_secret"), secret)
+
 	def test_enroll_raises_when_cargo_has_not_answered_yet(self):
 		self.get.return_value = self.response({}, 503)
 
@@ -193,3 +202,52 @@ class TestCargoFollowsAtlas(IntegrationTestCase):
 			f"{self.cargo_url()}/api/method/ping", [call.args[0] for call in self.get.call_args_list]
 		)
 		self.assertEqual(self.instance.reload().cargo_status, "Disabled")
+
+
+class TestCargoDatumToken(IntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		frappe.set_user("Administrator")
+		self.addCleanup(frappe.db.rollback)
+		self.instance = frappe.get_doc(
+			{
+				"doctype": "Region",
+				"region": frappe.generate_hash(length=8),
+				"atlas_region_id": "4807",
+				"cargo_base_url": "http://cargo.example.test:8000",
+				"status": "Active",
+			}
+		).insert()
+		self.enterContext(
+			patch("central.integrations.cargo.mint_cargo_token", return_value="test-cargo-token")
+		)
+		self.mint = self.enterContext(patch("central.sso.mint_datum_token", return_value="test-datum-token"))
+		self.post = self.enterContext(patch("central.integrations.cargo.requests.post"))
+		self.post.return_value = self.response({"message": None})
+
+	def response(self, body, status=200):
+		response = requests.Response()
+		response.status_code = status
+		response._content = json.dumps(body).encode()
+		return response
+
+	def test_the_token_names_cargo_as_its_resource(self):
+		self.instance.issue_cargo_datum_token()
+
+		self.mint.assert_called_once_with(4807, f"cargo:{self.instance.name}")
+
+	def test_the_token_is_handed_to_cargo_with_central_credential(self):
+		self.instance.issue_cargo_datum_token()
+
+		self.assertEqual(
+			self.post.call_args.args[0],
+			"http://cargo.example.test:8000/api/method/cargo.telemetry.api.auth.accept_datum_token",
+		)
+		self.assertEqual(self.post.call_args.kwargs["headers"]["X-Cargo-Access-Token"], "test-cargo-token")
+		self.assertEqual(self.post.call_args.kwargs["json"], {"token": "test-datum-token"})
+
+	def test_a_rejected_token_raises(self):
+		self.post.return_value = self.response({}, 403)
+
+		with self.assertRaises(CargoConnectionError):
+			self.instance.issue_cargo_datum_token()

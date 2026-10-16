@@ -490,20 +490,39 @@ def change_plan(plan: str | None = None) -> dict:
 	"""Switch this bench's server onto a preset `plan`: validates + re-locks the rate at
 	the current rate card and queues the VM reshape (stop→resize→start). The server is
 	resolved from the credential — a pilot can only resize its own server, never another
-	server on the same team. Returns `{queued, resized}`."""
+	server on the same team. Returns `{queued, resized, progress_url}`; `progress_url` is the
+	public page that follows the change when the server runs one site."""
 	from central.billing.catalog.subscriptions import begin_resize
+	from central.signups.trial import get_status
 
 	server = _server()
 	if not plan:
 		frappe.throw(frappe._("A plan is required."), frappe.ValidationError)
 	subscription = frappe.db.get_value("Subscription", {"team": _team(), "server_id": server}, "name")
+	if not subscription and get_status(server):
+		frappe.throw(frappe._("Add a payment method to change this site's plan."), frappe.ValidationError)
 	if not subscription:
 		frappe.throw(
 			frappe._("No subscription for server {0} on this team.").format(server), frappe.ValidationError
 		)
 	# The subscription lookup above is scoped to the credential's own server.
 	with _as_operator():
-		return {"subscription": subscription, **begin_resize(subscription, plan=plan)}
+		result = begin_resize(subscription, plan=plan)
+
+	return {"subscription": subscription, **result, "progress_url": _plan_change_url(server, result)}
+
+
+def _plan_change_url(server: str, result: dict) -> str | None:
+	"""The waiting page for a queued resize of a server that runs exactly one site."""
+	from central.infrastructure.doctype.site.plan_change import PlanChange
+
+	# Two rows are enough to tell "exactly one site" from "several".
+	sites = frappe.get_all("Site", filters={"server": server}, pluck="name", limit=2)
+	if not result.get("queued") or len(sites) != 1:
+		return None
+
+	action = frappe.get_doc("Resource Action", result["action"])
+	return PlanChange(frappe.get_doc("Site", sites[0]), action).url
 
 
 # ── Metered services (team-level: AI tokens, email, PDF, …) ──────────────────

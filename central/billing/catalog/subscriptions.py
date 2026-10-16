@@ -411,7 +411,16 @@ def begin_resize(
 		frappe.db.get_value(
 			"Virtual Machine",
 			doc.server_id,
-			["region", "status", "atlas_vm_id", "title"],
+			[
+				"region",
+				"status",
+				"atlas_vm_id",
+				"title",
+				"plan",
+				"vcpus",
+				"memory_megabytes",
+				"disk_gigabytes",
+			],
 			as_dict=True,
 			for_update=True,
 		)
@@ -463,6 +472,14 @@ def begin_resize(
 			"override_rate": float(override_rate) if override_rate is not None else None,
 			"preset_plan": preset_plan,
 			"shape": shape,
+			"from_plan": server.plan,
+			"from_shape": {
+				"vcpus": float(server.vcpus),
+				"memory_megabytes": int(server.memory_megabytes),
+				"disk_gigabytes": int(server.disk_gigabytes),
+			}
+			if server.vcpus and server.memory_megabytes and server.disk_gigabytes
+			else None,
 		}
 	)
 	# Billing validated the target and the route already checked server:resize.

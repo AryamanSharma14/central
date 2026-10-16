@@ -3,7 +3,6 @@
 
 import frappe
 from frappe import _
-from frappe.utils.password import set_encrypted_password
 
 from central.errors import CargoConnectionError
 from central.iam import user_has_operator_bypass
@@ -57,10 +56,21 @@ class CargoConnectionMixin:
 		secret = frappe.generate_hash(length=32)
 		client.configure_webhooks(secret)
 
-		set_encrypted_password("Region", self.name, secret, "cargo_webhook_secret")
-		self.db_set({"cargo_status": "Registered", "cargo_registered_at": frappe.utils.now_datetime()})
+		self.cargo_webhook_secret = secret
+		self.cargo_status = "Registered"
+		self.cargo_registered_at = frappe.utils.now_datetime()
+		self.save()
 
 		return True
+
+	def issue_cargo_datum_token(self) -> None:
+		"""Mint this region's Cargo a Datum token and hand it over. Cargo has no pilot
+		credential to fetch one with, so it reports telemetry again when its token nears expiry."""
+		from central.integrations.cargo import CargoClient
+		from central.sso import mint_datum_token
+
+		token = mint_datum_token(self.get_atlas_region_id(), f"cargo:{self.name}")
+		CargoClient(self).accept_datum_token(token)
 
 
 def register_pending_cargo() -> None:

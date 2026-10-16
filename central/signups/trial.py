@@ -1,8 +1,18 @@
 import frappe
 from frappe import _
-from frappe.utils import add_days, date_diff, flt, formatdate, get_datetime, getdate, now_datetime, nowdate
+from frappe.utils import (
+	add_days,
+	date_diff,
+	flt,
+	fmt_money,
+	formatdate,
+	get_datetime,
+	getdate,
+	now_datetime,
+	nowdate,
+)
 
-from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
 from central.signups.funnel import capture_trial_event
@@ -56,8 +66,10 @@ def convert_site(site: Site) -> None:
 	)
 	send_notice(site, "trial_converted", "converted")
 
+	# A sleeping server is paid for like a running one. A stopped server gets its subscription
+	# when the conversion job starts it.
 	server = frappe.get_doc("Virtual Machine", site.server)
-	if server.status == "Running":
+	if server.status in ("Running", "Paused"):
 		server.ensure_subscription_enabled()
 
 	enqueue_conversion(site)
@@ -81,6 +93,16 @@ def finish_conversion(site: str) -> None:
 
 	document = frappe.get_doc("Site", site)
 	if document.trial_state != "Converted":
+		return
+
+	# A resize or a power action also changes the server's power; two jobs must not race on it.
+	# The daily job sends the conversion again once that action is done.
+	if frappe.db.exists(
+		"Resource Action", {"resource_id": document.server, "status": ["in", PENDING_STATES]}
+	):
+		record_trial_error(
+			site, _("Another action is running on this server. The conversion retries tomorrow.")
+		)
 		return
 
 	is_stopped = frappe.db.get_value("Virtual Machine", document.server, "status") == "Stopped"
@@ -121,9 +143,11 @@ def get_trial_days(product: str | None, fieldname: str) -> int:
 def get_status(server: str, site: str | None = None) -> dict | None:
 	"""The open trial of the site on `server`, for the in-app billing panel, or None.
 	A server with several sites must name one."""
+	from central.signups.credit import get_welcome_credit_offer
+
 	filters = {"server": server, "name": site} if site else {"server": server}
 	sites = frappe.get_all(
-		"Site", filters=filters, fields=["trial_state", "trial_ends_on", "trial_deletes_on"]
+		"Site", filters=filters, fields=["team", "trial_state", "trial_ends_on", "trial_deletes_on"]
 	)
 	if len(sites) > 1:
 		frappe.throw(_("This server has several sites. Name the site whose trial to show."))
@@ -136,7 +160,21 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 		"ends_on": trial.trial_ends_on,
 		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
 		"deletes_on": trial.trial_deletes_on,
+		"credit": get_welcome_credit_offer(trial.team),
+		"sleeps_after_minutes": get_sleep_minutes(),
 	}
+
+
+def is_conversion_starting(server: str) -> bool:
+	"""Whether the server's trial converted but its server has no subscription yet, because the
+	conversion job is still starting it."""
+	site = frappe.db.get_value("Site", {"server": server, "trial_state": "Converted"}, "team")
+	return bool(site) and not frappe.db.exists("Subscription", {"server_id": server, "team": site})
+
+
+def get_sleep_minutes() -> int:
+	"""Idle minutes before a trial server sleeps, so the customer is told the real number."""
+	return frappe.get_cached_value("Central Settings", "Central Settings", "trial_idle_shutdown_minutes")
 
 
 def run_trials() -> None:
@@ -308,13 +346,18 @@ def send_notice(site: Site, event_type: str, notice: str) -> None:
 
 
 def get_notice_context(site: Site) -> dict:
+	from central.signups.credit import get_welcome_credit_offer
+
 	product = frappe.db.get_value("Product", site.product, "title") if site.product else None
+	credit = get_welcome_credit_offer(site.team)
 	return {
 		"address": site.rename_target if site.subdomain else site.name,
 		"product": product or "Frappe Cloud",
 		"ends_on": formatdate(site.trial_ends_on),
 		"deletes_on": formatdate(site.trial_deletes_on) if site.trial_deletes_on else "",
 		"days_left": date_diff(site.trial_ends_on, nowdate()),
+		"credit": fmt_money(credit["amount"], currency=credit["currency"]) if credit else "",
+		"sleeps_after_minutes": get_sleep_minutes(),
 	}
 
 

@@ -20,10 +20,11 @@ Only what belongs to the site. Its address is its name and its state is the mach
 | `ready_at` | the first successful public readiness probe |
 | `claimed_at` | the first successful login handoff |
 | `rename_task` | the Pilot task that accepted the requested rename |
+| `renamed_at` | when a sign-in first found the requested hostname answering |
 | `rename_error` | a safe reason when Pilot did not accept the rename |
 | `rename_error_log` | the related operator Error Log |
 
-`Site.url` is `https://` and the name. `Site.status` reads the machine's status. Neither is a column.
+`Site.url` is `https://` and the name. `Site.primary_url` is the requested hostname after `renamed_at` is set, otherwise `Site.url`. `Site.status` reads the machine's status. None of these is a column.
 
 ## The address
 
@@ -73,11 +74,24 @@ Nothing is provisioned during signup, so readiness is not a build finishing. A s
 
 ## Sign-in
 
-Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
+Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The first sign-in on the customer hostname sets `renamed_at`. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
 
 On a trial site, a member of the site's team signs in as their own user. Pilot creates the user as a System Manager the first time they open the site, so they can finish the app's own setup. An operator outside the team, and every other site, signs in as Administrator.
 
 A Pilot 401 leaves the site unclaimed and tells the console to retry with bounded backoff for up to 120 seconds. Other login failures return no URL and use the manual sign-in fallback. Central waits up to 120 seconds for each login request.
+
+## Plan change page
+
+A site's users have no Central account. When a plan change from the site stops the server, Central shows them a public page that follows the change. The page lives on Central, so it stays up while the server restarts.
+
+1. `central.billing.api.billing_api.change_plan` queues the resize and returns `progress_url`. It returns a URL only when the server runs exactly one Site.
+2. The URL is `/upgrading?action=<Resource Action>&site=<Site>&_signature=<signature>`. Frappe's `get_signed_params` signs it with the site secret. The link does not expire.
+3. `central/www/upgrading.py` checks the signature and renders the page. A wrong signature, or an action that does not resize the Site's server, shows "This link is not valid".
+4. The page asks `central.api.sites.plan_change_progress` every 3 seconds. The endpoint allows guests, checks the same signature, and allows 60 requests a minute for each action.
+5. The step comes from the Resource Action status: `saving`, `moving`, `starting`, `ready` or `failed`. The step is `ready` only when `Site.primary_url` answers a ping.
+6. On `ready`, the page counts down 5 seconds and opens `Site.primary_url`. The user can stay on the page.
+
+`PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
 
 ## Operator actions
 

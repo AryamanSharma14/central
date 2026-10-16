@@ -117,6 +117,9 @@ def resize_server(server: VirtualMachine, shape: dict) -> None:
 
 	is_reshaping = (compute.get("cpu_millicores"), compute.get("memory_mib")) != (cpu_millicores, memory_mib)
 	if is_reshaping:
+		# Atlas refuses to stop a sleeping VM, so wake it first.
+		if remote.get("current_state") == "paused":
+			wait_for_power_state(client, server.atlas_vm_id, "start", "running")
 		wait_for_power_state(client, server.atlas_vm_id, "stop", "stopped")
 
 		try:
