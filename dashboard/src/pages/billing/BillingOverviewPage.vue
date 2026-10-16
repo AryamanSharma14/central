@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Alert, Button } from 'frappe-ui'
+import { Alert } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import BillingContactTaxCard from '@/components/billing/BillingContactTaxCard.vue'
 import CollectionActionBanner from '@/components/billing/CollectionActionBanner.vue'
@@ -26,11 +26,9 @@ import TopupDialog from '@/components/TopupDialog.vue'
 import { useBillingOverview } from '@/composables/useBillingOverview'
 import { useBillingReports } from '@/composables/useBillingReports'
 import { useBillingSetup } from '@/composables/useBillingSetup'
-import { useCapabilities } from '@/composables/useCapabilities'
 
 const { complete, setupDialogOpen, requireSetup } = useBillingSetup()
 const { currency, reloadMoney } = useBillingOverview()
-const { canManageBilling } = useCapabilities()
 const reports = useBillingReports()
 
 const outstanding = computed(() => {
@@ -78,15 +76,6 @@ const onAddCredits = () => {
 </script>
 
 <template>
-	<Teleport defer to="#header-actions">
-		<Button
-			v-if="canManageBilling"
-			icon-left="lucide-plus"
-			label="Add credits"
-			@click="onAddCredits"
-		/>
-	</Teleport>
-
 	<div class="relative flex h-full min-h-0">
 		<div
 			class="grid min-w-0 flex-1 auto-rows-max grid-cols-[min(64rem,100%)] content-start justify-center gap-4 overflow-y-auto px-3 pb-24 pt-3 [container-type:inline-size] md:gap-5 md:px-6 md:pt-7"
@@ -120,6 +109,7 @@ const onAddCredits = () => {
 					:wallet-active="showWalletHistory"
 					@open-schedule="showSchedule = true"
 					@open-wallet="showWalletHistory = true"
+					@add-credit="onAddCredits"
 				/>
 			</section>
 

@@ -16,7 +16,7 @@ interface Props {
 
 const props = defineProps<Props>()
 
-defineEmits<{ openSchedule: []; openWallet: [] }>()
+defineEmits<{ openSchedule: []; openWallet: []; addCredit: [] }>()
 
 const { nextPayment, credit, forecast, methods, currency, reloadMethods } =
 	useBillingOverview()
@@ -137,7 +137,16 @@ const onAddMethod = () => {
 						Wallet
 					</button>
 				</dt>
-				<dd>
+				<dd class="flex items-center gap-2">
+					<!-- Prepaid credit is the second way to pay; the card stays the main one. -->
+					<button
+						v-if="canManageBilling"
+						type="button"
+						class="text-p-sm text-ink-blue-link transition-opacity hover:opacity-80"
+						@click="$emit('addCredit')"
+					>
+						Add credit
+					</button>
 					<Tooltip :text="walletHint" :disabled="!walletHint">
 						<span class="text-base-medium tabular-nums text-ink-gray-9">
 							{{ money(balance, currency) }}
