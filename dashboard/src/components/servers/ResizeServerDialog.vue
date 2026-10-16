@@ -31,6 +31,7 @@ const {
 	plansLoading,
 	resizable,
 	trial,
+	starting,
 	nothingToShow,
 	resizeError,
 	losesLockedRate,
@@ -96,7 +97,7 @@ const open = computed({
 				</p>
 			</div>
 			<div
-				v-else-if="(configCall.loading && !trial) || plansLoading"
+				v-else-if="(configCall.loading && !trial && !starting) || plansLoading"
 				class="space-y-4"
 				aria-busy="true"
 				aria-label="Loading resize options"
@@ -126,6 +127,12 @@ const open = computed({
 				:trial="trial"
 				:checking="configCall.loading"
 				@check="configCall.reload()"
+			/>
+			<Alert
+				v-else-if="starting"
+				theme="blue"
+				title="Your payment method is confirmed"
+				description="We are starting your server on its paid plan. This takes about a minute, then the plans show here."
 			/>
 			<p
 				v-else-if="!resizable || nothingToShow"
@@ -207,7 +214,14 @@ const open = computed({
 			</div>
 		</template>
 		<template #actions>
-			<div v-if="trial" class="flex justify-end">
+			<div v-if="starting" class="flex justify-end">
+				<Button
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+			</div>
+			<div v-else-if="trial && trialPanel" class="flex justify-end">
 				<Button
 					v-if="trialPanel?.methodAdded"
 					label="Check again"

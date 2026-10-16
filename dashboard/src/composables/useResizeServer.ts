@@ -1,5 +1,5 @@
 import { useCall } from 'frappe-ui'
-import { computed, type Ref, ref, watch } from 'vue'
+import { computed, onScopeDispose, type Ref, ref, watch } from 'vue'
 import { API, method } from '@/api/methods'
 import { usePlans } from '@/composables/usePlans'
 import type { VirtualMachineRow } from '@/composables/useServers'
@@ -47,6 +47,8 @@ export function useResizeServer(
 		disk_gb?: number
 		/** The open free trial that keeps this server from being resized. */
 		trial?: ServerTrial | null
+		/** A converted trial's server is starting and has no subscription yet. */
+		starting?: boolean
 		lock?: {
 			locked_rate: number
 			list_rate: number
@@ -101,6 +103,16 @@ export function useResizeServer(
 	)
 	const resizable = computed(() => configCall.data?.resizable === true)
 	const trial = computed(() => configCall.data?.trial ?? null)
+	const starting = computed(() => configCall.data?.starting === true)
+
+	// The subscription arrives once the converted server runs, so check again until it does.
+	let startingTimer: number | undefined
+	watch([starting, isOpen], ([isStarting, open]) => {
+		window.clearInterval(startingTimer)
+		if (isStarting && open)
+			startingTimer = window.setInterval(() => configCall.reload(), 5000)
+	})
+	onScopeDispose(() => window.clearInterval(startingTimer))
 
 	const canDesign = computed(
 		() => rateCardComplete(rateCard.value) && profiles.value.length > 0,
@@ -436,6 +448,7 @@ export function useResizeServer(
 		plansLoading,
 		resizable,
 		trial,
+		starting,
 		nothingToShow,
 		resizeError,
 		losesLockedRate,

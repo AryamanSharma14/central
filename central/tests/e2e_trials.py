@@ -12,14 +12,14 @@ from central.site_provisioning import get_cheapest_trial_plan, trial_regions
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def seed_server(team: str, trial_state: str = "Active", days_left: int = 5) -> dict:
+def seed_server(team: str, trial_state: str = "Active", days_left: int = 5, status: str = "Running") -> dict:
 	"""Test-only, gated on `allow_tests`: give `team` a running server with one site, the way a
 	signup trial leaves it. `trial_state` is Active, Ended, or empty for a server the team bought
 	directly in the console. Rows are written without hooks, so nothing reaches a region."""
 	_enter_test_mode()
 
 	region, plan = _trial_region_and_plan(team)
-	server = _insert_server(team, region, plan)
+	server = _insert_server(team, region, plan, status)
 	audience = f"pilot-e2e-{frappe.generate_hash(length=8)}"
 	frappe.get_doc(
 		{
@@ -132,7 +132,7 @@ def _trial_region_and_plan(team: str) -> tuple[str, str]:
 	frappe.throw("No region on this site offers a plan for this team.")
 
 
-def _insert_server(team: str, region: str, plan: str):
+def _insert_server(team: str, region: str, plan: str, status: str):
 	name = f"server-e2e-{frappe.generate_hash(length=8)}"
 	server = frappe.get_doc(
 		{
@@ -142,7 +142,7 @@ def _insert_server(team: str, region: str, plan: str):
 			"team": team,
 			"region": region,
 			"title": "e2e-trial",
-			"status": "Running",
+			"status": status,
 			"plan": plan,
 			"vcpus": 1,
 			"memory_megabytes": 2048,

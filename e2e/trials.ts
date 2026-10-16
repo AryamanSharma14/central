@@ -15,11 +15,11 @@ export const test = base.extend({
 			return (await res.json()).message
 		}
 
-		const start = async ({ trialState = 'Active', currency = 'INR' } = {}) => {
+		const start = async ({ trialState = 'Active', currency = 'INR', status = 'Running' } = {}) => {
 			const creds = await users.signIn({ scenario: 'ready', currency })
 			await teams.setTrustTier({ team: creds.team })
 			made.push(creds.team)
-			const server = await call('seed_server', { team: creds.team, trial_state: trialState, days_left: 5 })
+			const server = await call('seed_server', { team: creds.team, trial_state: trialState, days_left: 5, status })
 			return { team: creds.team, ...server }
 		}
 

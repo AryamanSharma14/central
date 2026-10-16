@@ -235,6 +235,24 @@ class TestTrialLifecycle(SiteOnAMachine):
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
 
+	def test_a_sleeping_server_is_subscribed_when_its_trial_converts(self):
+		self.server.db_set("status", "Paused")
+		VirtualMachine.ensure_subscription_enabled.reset_mock()
+
+		trial.convert_site(self.site())
+
+		VirtualMachine.ensure_subscription_enabled.assert_called_once()
+
+	def test_resize_options_say_a_converted_server_is_still_starting(self):
+		from central.billing.api.dashboard.catalog import get_composed_config
+
+		self.site().db_set("trial_state", "Converted")
+
+		config = get_composed_config(self.server.name, self.team.name)
+
+		self.assertTrue(config["starting"])
+		self.assertIsNone(config["trial"])
+
 	def assert_conversion_queued(self):
 		frappe.enqueue.assert_any_call(
 			trial.finish_conversion,

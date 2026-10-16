@@ -66,8 +66,10 @@ def convert_site(site: Site) -> None:
 	)
 	send_notice(site, "trial_converted", "converted")
 
+	# A sleeping server is paid for like a running one. A stopped server gets its subscription
+	# when the conversion job starts it.
 	server = frappe.get_doc("Virtual Machine", site.server)
-	if server.status == "Running":
+	if server.status in ("Running", "Paused"):
 		server.ensure_subscription_enabled()
 
 	enqueue_conversion(site)
@@ -161,6 +163,13 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 		"credit": get_welcome_credit_offer(trial.team),
 		"sleeps_after_minutes": get_sleep_minutes(),
 	}
+
+
+def is_conversion_starting(server: str) -> bool:
+	"""Whether the server's trial converted but its server has no subscription yet, because the
+	conversion job is still starting it."""
+	site = frappe.db.get_value("Site", {"server": server, "trial_state": "Converted"}, "team")
+	return bool(site) and not frappe.db.exists("Subscription", {"server_id": server, "team": site})
 
 
 def get_sleep_minutes() -> int:
