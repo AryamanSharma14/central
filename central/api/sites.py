@@ -94,7 +94,9 @@ def claim_site(name: str) -> dict:
 
 # nosemgrep: guest-whitelisted-method -- the signed link is checked in PlanChange.from_signed_link.
 @frappe.whitelist(allow_guest=True, methods=["GET"])
-@rate_limit(limit=120, seconds=60)
+# Counted per link, not per address: one open page polls about 20 times a minute, and many
+# people behind one office address can each follow their own change.
+@rate_limit(key="action", limit=60, seconds=60, ip_based=False)
 def plan_change_progress(action: str, site: str, signature: str) -> dict:
 	"""Progress of a site's plan change, for the public waiting page."""
 	from central.infrastructure.doctype.site.plan_change import PlanChange
