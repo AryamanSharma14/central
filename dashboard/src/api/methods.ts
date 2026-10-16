@@ -17,6 +17,12 @@ export function download(path: string, params: Record<string, string>): string {
 }
 
 export const API = {
+	getGitHubConnectionAttempt:
+		'central.api.integrations.github.get_connection_attempt',
+	getGitHubInstallationRepositories:
+		'central.api.integrations.github.get_installation_repositories',
+	completeGitHubConnection:
+		'central.api.integrations.github.complete_connection',
 	myTeams: 'central.api.identity.my_teams',
 	myCapabilities: 'central.api.identity.my_capabilities',
 	myInvitations: 'central.api.identity.my_invitations',
