@@ -70,6 +70,20 @@ class TestPlanChange(PlanChangeCase):
 		with self.assertRaises(frappe.PermissionError):
 			self.open_link(PlanChange(self.site(), action).url)
 
+	def test_a_reopened_link_keeps_the_size_before_the_resize(self):
+		"""The server reports its new size once the resize lands; the page still shows the old one."""
+		action = self.resize()
+		payload = frappe.parse_json(action.request_payload)
+		payload["from_shape"] = {"vcpus": 1.0, "memory_megabytes": 2048, "disk_gigabytes": 25}
+		action.db_set({"status": "Succeeded", "request_payload": frappe.as_json(payload)})
+		self.server.db_set({"vcpus": 2, "memory_megabytes": 4096, "disk_gigabytes": 40})
+
+		with patch("central.infrastructure.doctype.site.plan_change.is_site_reachable", return_value=False):
+			progress = PlanChange(self.site(), action).get_progress()
+
+		self.assertEqual(progress["current_shape"]["vcpus"], 1.0)
+		self.assertEqual(progress["shape"]["vcpus"], 2.0)
+
 	def test_the_site_is_ready_only_once_it_answers(self):
 		action = self.resize()
 		action.db_set("status", "Succeeded")

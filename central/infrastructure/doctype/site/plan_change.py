@@ -60,21 +60,15 @@ class PlanChange:
 			step = "ready"
 
 		configuration = self.action.get_resize_configuration()
-		# The server keeps its old plan and size until the resize lands, so the page can show both.
-		server = frappe.db.get_value(
-			"Virtual Machine",
-			self.site.server,
-			["plan", "vcpus", "memory_megabytes", "disk_gigabytes"],
-			as_dict=True,
-		)
+		plan, from_plan = configuration.plan, configuration.from_plan
 		return {
 			"step": step,
 			"site": urlsplit(self.site.primary_url).hostname,
 			"site_url": self.site.primary_url,
-			"plan": frappe.db.get_value("Plan", configuration.plan, "title") if configuration.plan else None,
-			"current_plan": frappe.db.get_value("Plan", server.plan, "title") if server.plan else None,
+			"plan": frappe.db.get_value("Plan", plan, "title") if plan else None,
+			"current_plan": frappe.db.get_value("Plan", from_plan, "title") if from_plan else None,
 			"shape": configuration.shape.model_dump(),
-			"current_shape": {key: server[key] for key in ("vcpus", "memory_megabytes", "disk_gigabytes")},
+			"current_shape": configuration.from_shape.model_dump() if configuration.from_shape else None,
 			"region": frappe.db.get_value(
 				"Region", self.action.region, ["display_name", "latitude", "longitude"], as_dict=True
 			),

@@ -89,6 +89,8 @@ def queue_plan_change(team: str, server: str, site: str, status: str = "In Progr
 					"subscription": "e2e-subscription",
 					"plan": None,
 					"shape": {"vcpus": 2.0, "memory_megabytes": 4096, "disk_gigabytes": 40},
+					"from_plan": frappe.db.get_value("Virtual Machine", server, "plan"),
+					"from_shape": {"vcpus": 1.0, "memory_megabytes": 2048, "disk_gigabytes": 25},
 				}
 			),
 		}
