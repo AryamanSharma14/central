@@ -45,7 +45,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
 		key: 'billing',
 		title: 'Add a payment method',
 		description:
-			'Add it now or later from Billing. We ask for your billing details first if they are missing.',
+			'Adding a payment method does not charge you. You can also add one later from Billing.',
 		component: BillingStep,
 		isRequired: false,
 	},
