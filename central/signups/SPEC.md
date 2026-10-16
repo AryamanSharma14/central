@@ -80,7 +80,7 @@ When a payment method of the Team becomes active, every Active or Ended trial si
 
 1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
 2. A running server gets its subscription now. A stopped server gets it when it starts.
-3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped.
+3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped. When a resize of the server is pending, the job writes a Trial Error and stops, because both jobs change the server's power. The daily job sends the conversion again.
 
 A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
 

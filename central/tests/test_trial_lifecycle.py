@@ -253,6 +253,17 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		convert_trial_server.assert_called_once_with(self.server.name, start=True)
 
+	def test_a_pending_resize_defers_the_conversion_to_the_daily_job(self):
+		self.site().db_set("trial_state", "Converted")
+		with (
+			patch.object(ResourceAction, "get_pending", return_value=Mock()),
+			patch("central.integrations.servers.convert_trial_server") as convert_trial_server,
+		):
+			trial.finish_conversion(self.site().name)
+
+		convert_trial_server.assert_not_called()
+		self.assertIn("plan change is running", self.site().trial_error)
+
 	def test_a_failed_conversion_leaves_the_reason_and_the_daily_job_retries_it(self):
 		self.site().db_set("trial_state", "Converted")
 		with (

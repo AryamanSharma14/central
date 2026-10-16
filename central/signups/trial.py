@@ -83,6 +83,14 @@ def finish_conversion(site: str) -> None:
 	if document.trial_state != "Converted":
 		return
 
+	# A resize also stops and starts the server; two jobs must not race on power. The daily
+	# job sends the conversion again once the resize is done.
+	if ResourceAction.get_pending(document.server, "resize"):
+		record_trial_error(
+			site, _("A plan change is running on this server. The conversion retries tomorrow.")
+		)
+		return
+
 	is_stopped = frappe.db.get_value("Virtual Machine", document.server, "status") == "Stopped"
 	try:
 		convert_trial_server(document.server, start=is_stopped)
