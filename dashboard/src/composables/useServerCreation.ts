@@ -68,6 +68,11 @@ export function useServerCreation() {
 	const { canCreateServer } = useCapabilities()
 
 	const name = ref('')
+	// Shown only after a submit, so an empty form does not open with an error.
+	const isNameChecked = ref(false)
+	const nameError = computed(() =>
+		isNameChecked.value && !name.value.trim() ? 'Enter a server name.' : '',
+	)
 	const selectedRegion = ref<string | null>(null)
 
 	const selectedRegionRow = computed(
@@ -362,8 +367,7 @@ export function useServerCreation() {
 			!!plansError.value ||
 			!!action.value ||
 			!openActionKnown.value ||
-			!selectedRegion.value ||
-			!name.value.trim()
+			!selectedRegion.value
 		)
 			return false
 		if (paymentMethodRequired.value) return false // the page asks for one instead
@@ -380,6 +384,8 @@ export function useServerCreation() {
 			!activeTeam.value
 		)
 			return
+		isNameChecked.value = true
+		if (nameError.value) return
 		const values = {
 			team: activeTeam.value,
 			region: selectedRegion.value,
@@ -470,6 +476,7 @@ export function useServerCreation() {
 		summary,
 		canSubmit,
 		submit,
+		nameError,
 		paymentMethodRequired,
 		welcomeCredit,
 		offering,

@@ -55,6 +55,7 @@ def dispatch(
 
 	server = server or get_reference_server(reference_doctype, reference_name)
 	ctx = _resolve_context(team, event_type, context, reference_name, reference_doctype)
+	ctx["server"] = server or ""
 	ctx["server_title"] = _get_server_title(server)
 	ctx["reference_title"] = _get_reference_title(team, reference_doctype, reference_name)
 	ctx["message"] = message or ""

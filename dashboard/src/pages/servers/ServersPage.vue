@@ -123,6 +123,11 @@ useServerLink(
 				infoToast("You can't resize this server.")
 			else openResize(server)
 		},
+		'open-bench': (server) => {
+			if (!getServerActions(server, teamActions.value).open)
+				infoToast("You can't open this server.")
+			else void openBench(server, { inPlace: true })
+		},
 	},
 )
 </script>
