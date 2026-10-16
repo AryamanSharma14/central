@@ -147,7 +147,9 @@ const products = computed(() => {
 		<template #action>
 			<div class="flex items-center gap-2">
 				<TabButtons v-model="months" :options="MONTH_OPTIONS" />
+				<!-- A period with no invoices exports an empty file. -->
 				<Button
+					v-if="(history?.invoice_count ?? 0) > 0"
 					icon="lucide-download"
 					label="Export CSV"
 					:href="reports.exportUrl('spend')"
