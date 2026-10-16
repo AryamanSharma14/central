@@ -84,12 +84,11 @@ export function useGitHubConnection(attempt: string) {
 
 	watch(installationId, async (value) => {
 		if (!value) return
-		try {
-			await repositoriesCall.submit({ attempt, installation_id: value })
-		} catch {
-			// The page shows the error. An account that did not load keeps its grant.
-			return
-		}
+		const loaded = await repositoriesCall
+			.submit({ attempt, installation_id: value })
+			.catch(() => null)
+		// The page shows a load error. An account that did not load keeps its grant.
+		if (!loaded || repositoriesCall.error) return
 		// A first visit starts from the current grant.
 		if (value !== installationId.value || selections.value[value]) return
 		const granted = new Set(connection.value?.granted_repository_ids ?? [])
@@ -118,18 +117,23 @@ export function useGitHubConnection(attempt: string) {
 	async function grant() {
 		busy.value = true
 		error.value = ''
-		try {
-			const result = await completeCall.submit({
+		const result = await completeCall
+			.submit({
 				attempt,
 				grants: Object.fromEntries(
 					Object.entries(selections.value).map(([id, ids]) => [id, [...ids]]),
 				),
 			})
-			if (result) window.location.assign(result.return_url)
-		} catch (submitError) {
-			error.value = getErrorMessage(submitError, "We couldn't connect GitHub.")
+			.catch(() => null)
+		if (!result || completeCall.error) {
+			error.value = getErrorMessage(
+				completeCall.error,
+				"We couldn't connect GitHub.",
+			)
 			busy.value = false
+			return
 		}
+		window.location.assign(result.return_url)
 	}
 
 	return {

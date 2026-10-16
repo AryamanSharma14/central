@@ -1,16 +1,21 @@
 # Copyright (c) 2026, frappe and Contributors
 # See license.txt
 
+import hashlib
+import hmac
+from unittest.mock import MagicMock, patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from central.api.integrations.github import get_connection_attempt, oauth_callback
+from central.api.integrations.github import get_connection_attempt, oauth_callback, repository_token
 from central.infrastructure.doctype.github_connection.github_connection import (
 	GitHubConnection,
 	GitHubConnectionAttempt,
 	GitHubRepositoryNotGranted,
 )
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
+from central.integrations.github import GitHubApp
 from central.tests.test_iam import ensure_user
 
 INSTALLATION = {"installation_id": "101", "account": "octo", "account_type": "User"}
@@ -110,3 +115,58 @@ class IntegrationTestGitHubConnection(IntegrationTestCase):
 			get_connection_attempt(attempt.attempt_id),
 			{"is_expired": True, "return_url": "https://bench.example.test/settings"},
 		)
+
+	def test_a_pilot_gets_a_token_only_for_a_granted_and_unchanged_repository(self):
+		GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
+		minted = {"token": "ghs_repository", "expires_at": "2099-01-01T00:00:00Z"}
+
+		with (
+			patch("frappe.get_request_header", return_value="pilot-token"),
+			patch("central.api.pilot.PilotCredential.verify", return_value=self.credential),
+			patch("central.api.integrations.github.GitHubApp") as app,
+		):
+			app.return_value.create_installation_token.return_value = minted
+			self.assertEqual(repository_token(PRIVATE["full_name"]), minted)
+			app.return_value.create_installation_token.assert_called_once_with(
+				"101", PRIVATE["repository_id"]
+			)
+
+			with self.assertRaises(GitHubRepositoryNotGranted):
+				repository_token(OTHER["full_name"])
+
+			def regrant_while_minting(*args):
+				GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
+				return minted
+
+			app.return_value.create_installation_token.side_effect = regrant_while_minting
+			with self.assertRaises(frappe.PermissionError):
+				repository_token(PRIVATE["full_name"])
+
+	def test_only_the_attempt_user_gets_the_github_user_token(self):
+		attempt = GitHubConnectionAttempt.start(self.credential, "https://bench.example.test/settings")
+		attempt.bind(self.owner)
+
+		with patch("central.api.integrations.github.GitHubApp") as app:
+			app.return_value.exchange_code.return_value = "ghu_user"
+			frappe.set_user(ensure_user("github.second@example.test"))
+			oauth_callback(state=attempt.state, code="code")
+			self.assertIsNone(GitHubConnectionAttempt.load(attempt.attempt_id).user_token)
+
+			frappe.set_user(self.owner)
+			oauth_callback(state=attempt.state, code="code")
+
+		self.assertEqual(GitHubConnectionAttempt.load(attempt.attempt_id).user_token, "ghu_user")
+		app.return_value.exchange_code.assert_called_once_with("code", attempt.code_verifier)
+		attempt.finish()
+
+	def test_a_webhook_needs_the_signature_of_the_webhook_secret(self):
+		settings = MagicMock(github_app_id="1", github_client_id="client", github_app_slug="app")
+		settings.get_password.return_value = "secret"
+		with patch("central.integrations.github.frappe.get_cached_doc", return_value=settings):
+			app = GitHubApp()
+
+		body = b'{"action": "deleted"}'
+		signature = "sha256=" + hmac.new(b"secret", body, hashlib.sha256).hexdigest()
+		self.assertTrue(app.is_valid_webhook_signature(body, signature))
+		self.assertFalse(app.is_valid_webhook_signature(body + b" ", signature))
+		self.assertFalse(app.is_valid_webhook_signature(body, None))

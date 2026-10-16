@@ -237,6 +237,7 @@ class GitHubConnectionAttempt:
 
 	@property
 	def user(self) -> str | None:
+		# nosemgrep: frappe-cache-breaks-multitenancy -- make_key adds the site prefix.
 		user = frappe.cache.get(frappe.cache.make_key(self._user_key(self.attempt_id)))
 		return user.decode() if user else None
 
@@ -259,6 +260,7 @@ class GitHubConnectionAttempt:
 			)
 
 		# SET NX lets only one user claim the attempt, even when two users open it at once.
+		# nosemgrep: frappe-cache-breaks-multitenancy -- make_key adds the site prefix.
 		frappe.cache.set(
 			frappe.cache.make_key(self._user_key(self.attempt_id)), user, nx=True, ex=LINK_TTL_SECONDS
 		)
