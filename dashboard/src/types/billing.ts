@@ -412,6 +412,8 @@ export interface WelcomeCredit {
 	amount: number
 	currency: Currency
 	validity_days: number
+	/** The last day a trial team can still earn it; null for a team without a trial. */
+	ends_on?: string | null
 }
 
 export type GstStatus =
