@@ -624,3 +624,11 @@ export interface MeteredServices {
 export type PayingForItem =
 	| { kind: 'server'; id: string; cost: number | null; sub: SubscriptionRow }
 	| { kind: 'service'; id: string; cost: number | null; service: ServiceRow }
+
+/** The open free trial of a server's site, from `signups.trial.get_status`. */
+export interface ServerTrial {
+	state: 'Active' | 'Ended'
+	ends_on: string
+	days_left: number
+	deletes_on: string | null
+}

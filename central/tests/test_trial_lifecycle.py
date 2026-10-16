@@ -253,6 +253,14 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		convert_trial_server.assert_called_once_with(self.server.name, start=True)
 
+	def test_resize_options_say_the_trial_blocks_a_resize(self):
+		from central.billing.api.dashboard.catalog import get_composed_config
+
+		config = get_composed_config(self.server.name, self.team.name)
+
+		self.assertFalse(config["resizable"])
+		self.assertEqual(config["trial"]["state"], "Active")
+
 	def test_a_pending_resize_defers_the_conversion_to_the_daily_job(self):
 		self.site().db_set("trial_state", "Converted")
 		with (

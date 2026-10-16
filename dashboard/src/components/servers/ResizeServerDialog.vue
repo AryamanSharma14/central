@@ -11,6 +11,7 @@ import {
 } from 'frappe-ui'
 import { computed, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
+import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
 import { configSpecs } from '@/lib/composed'
@@ -29,6 +30,7 @@ const {
 	resizeCall,
 	plansLoading,
 	resizable,
+	trial,
 	nothingToShow,
 	resizeError,
 	losesLockedRate,
@@ -88,7 +90,7 @@ const open = computed({
 				</p>
 			</div>
 			<div
-				v-else-if="configCall.loading || plansLoading"
+				v-else-if="(configCall.loading && !trial) || plansLoading"
 				class="space-y-4"
 				aria-busy="true"
 				aria-label="Loading resize options"
@@ -112,6 +114,12 @@ const open = computed({
 				/>
 				<Button label="Retry" @click="reloadOptions" />
 			</div>
+			<TrialUpgradePanel
+				v-else-if="trial"
+				:trial="trial"
+				:checking="configCall.loading"
+				@check="configCall.reload()"
+			/>
 			<p
 				v-else-if="!resizable || nothingToShow"
 				class="text-p-sm text-ink-gray-5"

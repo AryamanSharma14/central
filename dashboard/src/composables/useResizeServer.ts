@@ -13,6 +13,7 @@ import { getErrorMessage, isAbortError, successToast } from '@/lib/feedback'
 import { money } from '@/lib/format'
 import { planQuantity, presetPrice } from '@/lib/plans'
 import type { ComposedConfig, Plan, Profile } from '@/types/api'
+import type { ServerTrial } from '@/types/billing'
 
 interface ResizeCallbacks {
 	close: () => void
@@ -44,6 +45,8 @@ export function useResizeServer(
 		vcpus?: number
 		memory_gb?: number
 		disk_gb?: number
+		/** The open free trial that keeps this server from being resized. */
+		trial?: ServerTrial | null
 		lock?: {
 			locked_rate: number
 			list_rate: number
@@ -97,6 +100,7 @@ export function useResizeServer(
 		(selectedPlan.value ?? '').startsWith('custom:'),
 	)
 	const resizable = computed(() => configCall.data?.resizable === true)
+	const trial = computed(() => configCall.data?.trial ?? null)
 
 	const canDesign = computed(
 		() => rateCardComplete(rateCard.value) && profiles.value.length > 0,
@@ -260,7 +264,8 @@ export function useResizeServer(
 	const downtimeNote = computed(() => {
 		if (server.value?.status === 'Stopped')
 			return 'The server will start after the resize.'
-		if (needsRestart.value) return 'Brief downtime during restart.'
+		if (needsRestart.value)
+			return 'Your site goes offline for a few minutes while the server restarts.'
 		return 'No restart needed.'
 	})
 
@@ -430,6 +435,7 @@ export function useResizeServer(
 		resizeCall,
 		plansLoading,
 		resizable,
+		trial,
 		nothingToShow,
 		resizeError,
 		losesLockedRate,
