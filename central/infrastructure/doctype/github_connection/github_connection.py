@@ -15,6 +15,7 @@ from frappe.utils.password import decrypt, encrypt
 
 from central.iam import can
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
+from central.integrations.github import GitHubApp
 
 
 class GitHubRepositoryNotGranted(frappe.PermissionError):
@@ -77,6 +78,7 @@ class GitHubConnection(Document):
 				for repository in repositories
 			],
 		)
+		# Central saves the grant for a Pilot; no Desk user owns it.
 		connection.save(ignore_permissions=True)
 		return connection
 
@@ -121,6 +123,7 @@ class GitHubConnection(Document):
 	def disable(self) -> None:
 		self.status = "Disabled"
 		self.version += 1
+		# The Pilot or a GitHub webhook disables the grant; no Desk user owns it.
 		self.save(ignore_permissions=True)
 
 	@staticmethod
@@ -135,6 +138,17 @@ class GitHubConnection(Document):
 			if len(kept) < len(connection.repositories):
 				connection.set("repositories", kept)
 				connection.version += 1
+				# A GitHub webhook narrows the grant; no Desk user owns it.
+				connection.save(ignore_permissions=True)
+
+	@staticmethod
+	def rename_repository(installation_id: str, repository_id: str, full_name: str) -> None:
+		for connection in GitHubConnection._lock_active(installation_id):
+			renamed = [row for row in connection.repositories if row.repository_id == repository_id]
+			for row in renamed:
+				row.full_name = full_name
+			if renamed:
+				# A GitHub webhook renames the repository; no Desk user owns the grant.
 				connection.save(ignore_permissions=True)
 
 	@staticmethod
@@ -161,8 +175,18 @@ class GitHubConnectionAttempt:
 
 	@classmethod
 	def start(cls, credential: PilotCredential, return_url: str) -> GitHubConnectionAttempt:
-		attempt = cls(secrets.token_urlsafe(24), {"pilot_credential": credential.name})
+		attempt = cls(
+			secrets.token_urlsafe(24),
+			{
+				"pilot_credential": credential.name,
+				"state": secrets.token_urlsafe(24),
+				"code_verifier": secrets.token_urlsafe(48),
+			},
+		)
 		attempt.save()
+		frappe.cache.set_value(
+			cls._state_key(attempt.state), attempt.attempt_id, expires_in_sec=LINK_TTL_SECONDS
+		)
 		frappe.cache.set_value(
 			cls._return_key(attempt.attempt_id), return_url, expires_in_sec=LINK_TTL_SECONDS
 		)
@@ -212,8 +236,18 @@ class GitHubConnectionAttempt:
 		return self.data["code_verifier"]
 
 	@property
+	def user(self) -> str | None:
+		user = frappe.cache.get(frappe.cache.make_key(self._user_key(self.attempt_id)))
+		return user.decode() if user else None
+
+	@property
 	def user_token(self) -> str | None:
 		return decrypt(self.data["user_token"]) if self.data.get("user_token") else None
+
+	def require_user_token(self) -> str:
+		if not (user_token := self.user_token):
+			frappe.throw(_("Authorize with GitHub first."), frappe.PermissionError)
+		return user_token
 
 	def bind(self, user: str) -> PilotCredential:
 		"""Bind the attempt to the first user with console access to the server."""
@@ -224,28 +258,61 @@ class GitHubConnectionAttempt:
 				frappe.PermissionError,
 			)
 
-		if self.data.get("user") not in (None, user):
+		# SET NX lets only one user claim the attempt, even when two users open it at once.
+		frappe.cache.set(
+			frappe.cache.make_key(self._user_key(self.attempt_id)), user, nx=True, ex=LINK_TTL_SECONDS
+		)
+		if self.user != user:
 			frappe.throw(
 				_("Another user already opened this GitHub connection link."), frappe.PermissionError
 			)
 
-		if not self.data.get("user"):
-			self.data.update(
-				{"user": user, "state": secrets.token_urlsafe(24), "code_verifier": secrets.token_urlsafe(48)}
-			)
-			self.save()
-			frappe.cache.set_value(
-				self._state_key(self.state), self.attempt_id, expires_in_sec=LINK_TTL_SECONDS
-			)
-		else:
-			# Activity keeps the attempt alive during a long trip through GitHub.
-			frappe.cache.expire_key(self._key(self.attempt_id), ATTEMPT_TTL_SECONDS)
-
+		# Activity keeps the attempt alive during a long trip through GitHub.
+		frappe.cache.expire_key(self._key(self.attempt_id), ATTEMPT_TTL_SECONDS)
 		return credential
 
 	def set_user_token(self, token: str) -> None:
 		self.data["user_token"] = encrypt(token)
 		self.save()
+
+	def complete(self, grants: dict[str, list[str]]) -> None:
+		"""Grant the selected repositories of each installation. An installation sent empty loses its grant."""
+		credential = self.credential
+		app = GitHubApp()
+		user_token = self.require_user_token()
+		installations = {item["installation_id"]: item for item in app.get_user_installations(user_token)}
+		if not set(grants) <= set(installations):
+			frappe.throw(_("You can't access this GitHub installation."), frappe.PermissionError)
+
+		# Check with GitHub before saving, so no row lock is held during a GitHub call.
+		selections = {
+			installation_id: self._get_admin_repositories(app, user_token, installation_id, repository_ids)
+			for installation_id, repository_ids in grants.items()
+		}
+		for installation_id, repositories in selections.items():
+			if repositories:
+				GitHubConnection.grant(credential, installations[installation_id], repositories)
+			else:
+				GitHubConnection.revoke(credential, installation_id)
+
+		self.finish()
+
+	@staticmethod
+	def _get_admin_repositories(
+		app: GitHubApp, user_token: str, installation_id: str, repository_ids: list[str]
+	) -> list[dict]:
+		"""The selected repositories of one installation, each administered by the user."""
+		if not repository_ids:
+			return []
+
+		repositories = {
+			repository["repository_id"]: repository
+			for repository in app.get_user_repositories(user_token, installation_id)
+			if repository["is_admin"]
+		}
+		if any(repository_id not in repositories for repository_id in repository_ids):
+			frappe.throw(_("Select repositories where you are an administrator."), frappe.PermissionError)
+		return [repositories[repository_id] for repository_id in repository_ids]
 
 	def finish(self) -> None:
 		frappe.cache.delete_value(self._key(self.attempt_id))
@@ -266,6 +333,10 @@ class GitHubConnectionAttempt:
 	@staticmethod
 	def _return_key(attempt_id: str) -> str:
 		return f"github:connection-return:{attempt_id}"
+
+	@staticmethod
+	def _user_key(attempt_id: str) -> str:
+		return f"github:connection-user:{attempt_id}"
 
 
 def on_doctype_update() -> None:

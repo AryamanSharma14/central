@@ -125,7 +125,7 @@ def get_installation_repositories(attempt: str, installation_id: str) -> list[di
 	"""The repositories of one installation the user can see. Only an admin repository can be granted."""
 	connection_attempt = GitHubConnectionAttempt.load(attempt)
 	connection_attempt.bind(frappe.session.user)
-	return GitHubApp().get_user_repositories(_require_user_token(connection_attempt), installation_id)
+	return GitHubApp().get_user_repositories(connection_attempt.require_user_token(), installation_id)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -136,43 +136,9 @@ def complete_connection(attempt: str, grants: dict[str, list[str]] | str) -> dic
 		frappe.throw(_("Send the selected repositories of each GitHub account."))
 
 	connection_attempt = GitHubConnectionAttempt.load(attempt)
-	credential = connection_attempt.bind(frappe.session.user)
-	app = GitHubApp()
-	user_token = _require_user_token(connection_attempt)
-	installations = {item["installation_id"]: item for item in app.get_user_installations(user_token)}
-
-	# Check with GitHub before saving, so no row lock is held during a GitHub call.
-	selections = {
-		installation_id: _admin_repositories(app, user_token, installations, installation_id, repository_ids)
-		for installation_id, repository_ids in grants.items()
-	}
-	for installation_id, repositories in selections.items():
-		if repositories:
-			GitHubConnection.grant(credential, installations[installation_id], repositories)
-		else:
-			GitHubConnection.revoke(credential, installation_id)
-
-	connection_attempt.finish()
+	connection_attempt.bind(frappe.session.user)
+	connection_attempt.complete(grants)
 	return {"return_url": GitHubConnectionAttempt.find_return_url(attempt)}
-
-
-def _admin_repositories(
-	app: GitHubApp, user_token: str, installations: dict, installation_id: str, repository_ids: list[str]
-) -> list[dict]:
-	"""The selected repositories of one installation, each administered by the user."""
-	if installation_id not in installations:
-		frappe.throw(_("You can't access this GitHub installation."), frappe.PermissionError)
-	if not repository_ids:
-		return []
-
-	repositories = {
-		repository["repository_id"]: repository
-		for repository in app.get_user_repositories(user_token, installation_id)
-		if repository["is_admin"]
-	}
-	if any(repository_id not in repositories for repository_id in repository_ids):
-		frappe.throw(_("Select repositories where you are an administrator."), frappe.PermissionError)
-	return [repositories[repository_id] for repository_id in repository_ids]
 
 
 # nosemgrep: guest-whitelisted-method -- the OAuth state binds the callback to the attempt and its user.
@@ -184,7 +150,7 @@ def oauth_callback(state: str, code: str | None = None, **kwargs) -> None:
 		return _redirect("/dashboard/github/connect")
 
 	connection_attempt = GitHubConnectionAttempt.find(attempt_id)
-	if code and connection_attempt and frappe.session.user == connection_attempt.data.get("user"):
+	if code and connection_attempt and frappe.session.user == connection_attempt.user:
 		connection_attempt.set_user_token(GitHubApp().exchange_code(code, connection_attempt.code_verifier))
 
 	_redirect(f"/dashboard/github/connect/{attempt_id}")
@@ -209,6 +175,9 @@ def webhook() -> None:
 	elif event == "installation_repositories" and payload.get("action") == "removed":
 		removed = {str(repository["id"]) for repository in payload.get("repositories_removed", [])}
 		GitHubConnection.remove_repositories(installation_id, removed)
+	elif event == "repository" and payload.get("action") == "renamed":
+		repository = payload["repository"]
+		GitHubConnection.rename_repository(installation_id, str(repository["id"]), repository["full_name"])
 
 
 @frappe.whitelist(methods=["POST"])
@@ -231,6 +200,7 @@ def create_app_manifest(app_name: str, organization: str | None = None) -> dict:
 		"request_oauth_on_install": True,
 		"public": True,
 		"default_permissions": {"contents": "read", "metadata": "read"},
+		"default_events": ["repository"],
 	}
 	owner = f"organizations/{urllib.parse.quote(organization)}/" if organization else ""
 	return {"action": f"{WEB_URL}/{owner}settings/apps/new?state={state}", "manifest": json.dumps(manifest)}
@@ -261,12 +231,6 @@ def manifest_callback(code: str, state: str) -> None:
 	)
 	settings.save()
 	_redirect("/app/central-settings")
-
-
-def _require_user_token(connection_attempt: GitHubConnectionAttempt) -> str:
-	if not (user_token := connection_attempt.user_token):
-		frappe.throw(_("Authorize with GitHub first."), frappe.PermissionError)
-	return user_token
 
 
 def _redirect(location: str) -> None:

@@ -72,7 +72,6 @@ class GitHubApp:
 
 	def get_user_installations(self, user_token: str) -> list[dict]:
 		"""Installations of this App that the user can access."""
-		body = self._request("GET", f"{API_URL}/user/installations", token=user_token)
 		return [
 			{
 				"installation_id": str(installation["id"]),
@@ -80,19 +79,21 @@ class GitHubApp:
 				"account_type": installation["account"]["type"],
 				"avatar_url": installation["account"].get("avatar_url", ""),
 			}
-			for installation in body.get("installations", [])
+			for installation in self._paginate(f"{API_URL}/user/installations", user_token, "installations")
 			if installation.get("app_id") == int(self.app_id)
 		]
 
 	def get_user_repositories(self, user_token: str, installation_id: str) -> list[dict]:
 		"""Repositories of one installation that the user can access, with their admin right."""
 		url = f"{API_URL}/user/installations/{int(installation_id)}/repositories"
-		return [repository_summary(repository) for repository in self._paginate(url, user_token)]
+		return [
+			repository_summary(repository) for repository in self._paginate(url, user_token, "repositories")
+		]
 
 	def get_installation_repositories(self, installation_id: str) -> list[dict]:
 		token = self.create_installation_token(installation_id)["token"]
 		url = f"{API_URL}/installation/repositories"
-		return [repository_summary(repository) for repository in self._paginate(url, token)]
+		return [repository_summary(repository) for repository in self._paginate(url, token, "repositories")]
 
 	def create_installation_token(self, installation_id: str, repository_id: str | None = None) -> dict:
 		"""An installation token, limited to one repository and `contents: read` when one is given."""
@@ -132,15 +133,16 @@ class GitHubApp:
 			key = f"{header}KEY-----\n" + "\n".join(body.split()) + f"\n-----END{footer}"
 		return key
 
-	def _paginate(self, url: str, token: str) -> list[dict]:
-		repositories = []
+	def _paginate(self, url: str, token: str, key: str) -> list[dict]:
+		"""Every item of a paged GitHub list, read from `key` of each page."""
+		items = []
 		page = 1
 		while True:
 			body = self._request("GET", f"{url}?per_page={PAGE_SIZE}&page={page}", token=token)
-			batch = body.get("repositories", [])
-			repositories.extend(batch)
+			batch = body.get(key, [])
+			items.extend(batch)
 			if len(batch) < PAGE_SIZE:
-				return repositories
+				return items
 			page += 1
 
 	@staticmethod
@@ -152,7 +154,7 @@ class GitHubApp:
 		try:
 			response = requests.request(method, url, headers=headers, json=json, timeout=TIMEOUT)
 		except requests.RequestException as error:
-			frappe.throw(_("GitHub could not be reached: {0}").format(error), GitHubError)
+			frappe.throw(_("GitHub could not be reached: {0}").format(str(error)), GitHubError)
 
 		if not response.ok:
 			frappe.throw(
