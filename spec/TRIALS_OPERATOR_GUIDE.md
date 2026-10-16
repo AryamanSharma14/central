@@ -50,8 +50,8 @@ A trial team gets the welcome credit only when it adds a card while a trial is s
 
 | When | Customer sees |
 |---|---|
-| New Server page, no payment method | A note at the top: add a payment method to create servers and get the welcome credit. Create is off. |
-| Onboarding, billing step | A line that says to add a payment method in Billing to get the welcome credit. |
+| New Server page, no payment method | A note at the top: add a payment method to create servers and get the welcome credit. Create is off. **Add payment method** opens the payment dialog on the same page. |
+| Onboarding, payment step | The welcome credit offer, that adding a card does not charge it, and an **Add payment method** button. It asks for billing details first when they are missing. |
 | Trial ending, ended, deletion soon, deleted | An email and a notice in the **Trial** category. Customers can turn these off in their notification settings. |
 | Site's in-app billing panel | The days left, the last day to add a card and get the credit, and that the site sleeps after Trial Idle Shutdown minutes without visitors. |
 | Console resize dialog on a trial server | The same, with an **Add payment method** button. After the card, the plans. |
