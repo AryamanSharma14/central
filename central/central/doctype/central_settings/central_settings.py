@@ -32,6 +32,12 @@ class CentralSettings(Document):
 		enable_llm_service: DF.Check
 		enable_object_storage_service: DF.Check
 		enable_pdf_print_service: DF.Check
+		github_app_id: DF.Data | None
+		github_app_slug: DF.Data | None
+		github_client_id: DF.Data | None
+		github_client_secret: DF.Password | None
+		github_private_key: DF.Password | None
+		github_webhook_secret: DF.Password | None
 		invitation_expiry_days: DF.Int
 		invitation_resend_cooldown_minutes: DF.Int
 		invitations_per_hour: DF.Int
@@ -50,6 +56,12 @@ class CentralSettings(Document):
 		self.validate_limits()
 		self.validate_common_site_config()
 		self.validate_app_rollout()
+
+	def on_update(self) -> None:
+		from central.infrastructure.doctype.github_connection.github_connection import GitHubConnection
+
+		if self.has_value_changed("github_app_id"):
+			GitHubConnection.disable_all()
 
 	def validate_limits(self) -> None:
 		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""

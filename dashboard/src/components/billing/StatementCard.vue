@@ -45,7 +45,7 @@ const hidden = computed(() =>
 					:label="`View all ${statement.rows.length}`"
 					@click="$emit('open')"
 				/>
-				<Button icon="lucide-download" label="Export CSV" :link="exportUrl" />
+				<Button icon="lucide-download" label="Export CSV" :href="exportUrl" />
 			</div>
 		</header>
 

@@ -106,7 +106,7 @@ const toggleSection = (label: string) => {
 						<SidebarItem
 							v-else
 							:icon="item.icon"
-							:to="item.to"
+							:route="item.to"
 							:onclick="item.onClick"
 							class="mb-0.5"
 							:class="[item.class, isMobile ? '!h-10' : '']"

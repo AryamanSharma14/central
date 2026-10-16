@@ -121,8 +121,8 @@ const seriesConfig = computed(() => ({
 	limit: {
 		label: `Spend limit ${money(limit.value, currency.value, { trimTrailingZeros: true })}`,
 		type: 'line' as const,
-		lineType: 'dashed' as const,
-		lineWidth: 1,
+		dashed: true,
+		echartOptions: { lineStyle: { width: 1 } },
 		color: themeColor('ink-gray-5'),
 	},
 }))
@@ -150,7 +150,7 @@ const products = computed(() => {
 				<Button
 					icon="lucide-download"
 					label="Export CSV"
-					:link="reports.exportUrl('spend')"
+					:href="reports.exportUrl('spend')"
 				/>
 			</div>
 		</template>

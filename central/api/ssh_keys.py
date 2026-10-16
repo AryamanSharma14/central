@@ -10,7 +10,10 @@ def require_access(team: str, capability: str) -> None:
 	# The key library is team-wide, so viewing any server of the team reads it. Changing
 	# keys needs server:ssh-key, which a grant cannot scope, so it stays team-wide.
 	if not can_on_any_server(frappe.session.user, team, capability):
-		frappe.throw(_("You cannot manage SSH keys for this team."), frappe.PermissionError)
+		frappe.throw(
+			_("You cannot manage SSH keys for this team. Ask a team admin to review your access."),
+			frappe.PermissionError,
+		)
 
 
 @frappe.whitelist(methods=["GET"])

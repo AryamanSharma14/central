@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from central.errors import handle_resource_operation
 from central.iam import can, get_server_capabilities
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.servers import get_cached_metrics, reconcile
 from central.server_models import FirewallChange
@@ -32,7 +33,9 @@ REGION_LIST_FIELDS = (
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's servers."))
+@require_capability(
+	"server:view", _lt("You can't view this team's servers. Ask a team admin to review your access.")
+)
 def registry(team: str | None = None) -> dict:
 	"""A team's servers and self-serve sites in one read, for the console map and panel.
 	Gated on `server:view`. Terminated sites are left out."""
@@ -77,7 +80,11 @@ def registry(team: str | None = None) -> dict:
 	creations = ResourceAction.open_creations(team)
 
 	rows = frappe.get_list(
-		"Site", filters={"team": team}, fields=["name", "server"], order_by="name asc", limit_page_length=0
+		"Site",
+		filters={"team": team},
+		fields=["name", "server", "subdomain", "renamed_at"],
+		order_by="name asc",
+		limit_page_length=0,
 	)
 
 	return {"team": team, "servers": servers, "sites": _sites(rows, servers, pending), "creations": creations}
@@ -101,9 +108,9 @@ def _sites(rows: list[dict], servers: list[dict], pending: dict[str, str]) -> li
 	return [
 		{
 			"name": row["name"],
-			"subdomain": row["name"].split(".")[0],
+			"subdomain": row["subdomain"] or row["name"].split(".")[0],
 			"server": row["server"],
-			"url": f"https://{row['name']}",
+			"url": Site.get_primary_url(row["name"], row["subdomain"], row["renamed_at"]),
 			"status": machine["status"],
 			"region": machine["region"],
 			# A site's actions run against its machine, so its in-flight label is the machine's.
@@ -115,15 +122,24 @@ def _sites(rows: list[dict], servers: list[dict], pending: dict[str, str]) -> li
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's servers."), server="resource_id")
+@require_capability(
+	"server:view",
+	_lt("You can't view this team's servers. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def server_overview(team: str | None = None, resource_id: str | None = None) -> dict:
 	"""Return one server's Central mirror."""
 	if not resource_id:
-		frappe.throw(_("resource_id is required."), frappe.ValidationError)
+		frappe.throw(_("Select a server to continue."), frappe.ValidationError)
 
 	row = _overview_server_row(resource_id, team)
 	if not row:
-		frappe.throw(_("No server '{0}' for this team.").format(resource_id), frappe.DoesNotExistError)
+		frappe.throw(
+			_("Server '{0}' is not available on this team. Return to Servers and refresh the list.").format(
+				resource_id
+			),
+			frappe.DoesNotExistError,
+		)
 
 	server = frappe._dict(
 		{
@@ -168,7 +184,11 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's servers."), server="resource_id")
+@require_capability(
+	"server:view",
+	_lt("You can't view this team's servers. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def server_metrics(
 	team: str | None = None,
 	resource_id: str | None = None,
@@ -186,7 +206,12 @@ def server_metrics(
 		as_dict=True,
 	)
 	if not server:
-		frappe.throw(_("No server '{0}' for this team.").format(resource_id), frappe.DoesNotExistError)
+		frappe.throw(
+			_("Server '{0}' is not available on this team. Return to Servers and refresh the list.").format(
+				resource_id
+			),
+			frappe.DoesNotExistError,
+		)
 
 	if server.status != "Running" or not server.atlas_vm_id:
 		return {"available": False}
@@ -222,7 +247,11 @@ def _metrics_window(period: str, start: str | None, end: str | None) -> tuple[da
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's servers."), server="resource_id")
+@require_capability(
+	"server:view",
+	_lt("You can't view this team's servers. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def server_hostnames(team: str | None = None, resource_id: str | None = None) -> list[dict]:
 	"""The site and custom-domain hostnames a server answers. They stop working when the
 	server is terminated, so the console lists them before it asks. Gated on `server:view`."""
@@ -360,7 +389,9 @@ def _overview_plan(server: dict, team: str) -> dict:
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("cluster:view", _lt("You can't view clusters for this team."))
+@require_capability(
+	"cluster:view", _lt("You can't view clusters for this team. Ask a team admin to review your access.")
+)
 def list_instances(team: str | None = None) -> list[dict]:
 	"""List the regions a team can place servers in — every Active Region.
 	A pure read for the console's New Server region picker. Gated on `cluster:view`
@@ -379,7 +410,9 @@ def list_instances(team: str | None = None) -> list[dict]:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("server:view", _lt("You can't refresh this team's servers."))
+@require_capability(
+	"server:view", _lt("You can't refresh this team's servers. Ask a team admin to review your access.")
+)
 def refresh_servers(team: str | None = None) -> dict:
 	"""Manually reconcile this team's mirror from every Active Atlas — the on-demand
 	twin of the scheduled reconcile. Gated on `server:view`."""
@@ -388,7 +421,11 @@ def refresh_servers(team: str | None = None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
-@require_capability("server:console", _lt("You can't open this server's console."), server="resource_id")
+@require_capability(
+	"server:console",
+	_lt("You can't open this server's console. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def open_console(team: str | None = None, resource_id: str | None = None) -> dict:
 	"""Return a single-use web console URL for one server. Gated on `server:console`."""
 	from central.integrations.servers import get_console_url
@@ -421,7 +458,11 @@ def restart_server(team: str | None = None, resource_id: str | None = None) -> d
 
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
-@require_capability("server:resize", _lt("You can't resize this team's servers."), server="resource_id")
+@require_capability(
+	"server:resize",
+	_lt("You can't resize this team's servers. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def resize_server(
 	team: str | None = None,
 	resource_id: str | None = None,
@@ -438,7 +479,9 @@ def resize_server(
 	server = VirtualMachine.get_team_server_name(team, resource_id)
 	subscription = frappe.db.get_value("Subscription", {"team": team, "server_id": server}, "name")
 	if not subscription:
-		frappe.throw(_("This server has no subscription to resize."))
+		frappe.throw(
+			_("This server cannot be resized because its billing subscription is missing. Contact support.")
+		)
 
 	from central.billing.catalog.subscriptions import begin_resize
 
@@ -455,7 +498,11 @@ def resize_server(
 
 
 @frappe.whitelist(methods=["POST"])
-@require_capability("server:resize", _lt("You can't rename this server."), server="resource_id")
+@require_capability(
+	"server:resize",
+	_lt("You can't rename this server. Ask a team admin to review your access."),
+	server="resource_id",
+)
 def rename_server(team: str | None = None, resource_id: str | None = None, title: str = "") -> dict:
 	"""Rename one server. Gated on `server:resize`, the capability to change a server."""
 	server = frappe.get_doc("Virtual Machine", {"team": team, "resource_id": resource_id}, for_update=True)
@@ -469,7 +516,9 @@ def rename_server(team: str | None = None, resource_id: str | None = None, title
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
 @require_capability(
-	"server:terminate", _lt("You can't change termination protection on this server."), server="resource_id"
+	"server:terminate",
+	_lt("You can't change termination protection on this server. Ask a team admin to review your access."),
+	server="resource_id",
 )
 def set_termination_protection(
 	team: str | None = None, resource_id: str | None = None, enabled: bool | int | str = False
@@ -480,7 +529,9 @@ def set_termination_protection(
 
 
 @frappe.whitelist(methods=["GET"])
-@require_capability("server:view", _lt("You can't view this team's servers."))
+@require_capability(
+	"server:view", _lt("You can't view this team's servers. Ask a team admin to review your access.")
+)
 def public_ipv4_pricing(team: str | None = None, region: str | None = None) -> dict:
 	"""The monthly price of one public IPv4 in `region`, shown before the customer commits."""
 	from central.billing.catalog.public_ips import get_public_ipv4_rate
@@ -492,7 +543,9 @@ def public_ipv4_pricing(team: str | None = None, region: str | None = None) -> d
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
 @require_capability(
-	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+	"server:network",
+	_lt("You can't change the network of this server. Ask a team admin to review your access."),
+	server="resource_id",
 )
 def set_server_public_ip(
 	team: str | None = None,
@@ -514,7 +567,9 @@ def set_server_public_ip(
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
 @require_capability(
-	"server:network", _lt("You can't change the network of this server."), server="resource_id"
+	"server:network",
+	_lt("You can't change the network of this server. Ask a team admin to review your access."),
+	server="resource_id",
 )
 def set_server_ipv4_internet(
 	team: str | None = None, resource_id: str | None = None, enabled: bool | int | str = True
@@ -526,7 +581,10 @@ def set_server_ipv4_internet(
 
 @frappe.whitelist(methods=["POST"])
 @handle_resource_operation
-@require_capability("server:network", _lt("You can't change the network of this team's servers."))
+@require_capability(
+	"server:network",
+	_lt("You can't change the network of this team's servers. Ask a team admin to review your access."),
+)
 def update_server_firewall(
 	team: str | None = None,
 	resource_ids: list[str] | str | None = None,
@@ -551,7 +609,7 @@ def _validate_firewall_change(firewall: dict | str) -> FirewallChange:
 
 def _update_one_firewall(team: str, resource_id: str, change: FirewallChange) -> str | None:
 	if not can(frappe.session.user, team, "server:network", server=resource_id):
-		return _("You can't change the network of this server.")
+		return _("You can't change the network of this server. Ask a team admin to review your access.")
 
 	try:
 		server = frappe.get_doc("Virtual Machine", VirtualMachine.get_team_server_name(team, resource_id))
@@ -596,6 +654,7 @@ def create_server(
 	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
+	user_data: str = "",
 	snapshot: str | None = None,
 ) -> dict:
 	"""Create a server from an image, or restore one from a `snapshot`."""
@@ -615,6 +674,7 @@ def create_server(
 		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
+		user_data=user_data,
 		snapshot=snapshot,
 	)
 
@@ -636,6 +696,7 @@ def create_composed_server(
 	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
+	user_data: str = "",
 	snapshot: str | None = None,
 ) -> dict:
 	"""Create a custom-sized server from an image, or restore one from a `snapshot`."""
@@ -656,6 +717,7 @@ def create_composed_server(
 		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
+		user_data=user_data,
 		snapshot=snapshot,
 	)
 

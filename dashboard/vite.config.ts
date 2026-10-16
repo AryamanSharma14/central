@@ -29,6 +29,7 @@ export default defineConfig({
 	},
 	plugins: [
 		frappeui({
+			lucideIcons: true,
 			frontendRoute: '/dashboard',
 			frappeProxy: true,
 			jinjaBootData: true,
@@ -56,9 +57,7 @@ export default defineConfig({
 	optimizeDeps: {
 		exclude: ['frappe-ui'],
 		include: [
-			'feather-icons',
 			'tippy.js',
-			'showdown',
 			'engine.io-client',
 			'socket.io-client',
 			'debug',

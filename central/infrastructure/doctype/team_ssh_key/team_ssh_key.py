@@ -71,7 +71,11 @@ class TeamSSHKey(Document):
 		if any(_creation_holds_key(self.name, row) for row in requests if row.status in PENDING_STATES):
 			frappe.throw(_("Wait for pending server creation before deleting this key."))
 		if any(_creation_holds_key(self.name, row) for row in requests if _creation_can_be_retried(row)):
-			frappe.throw(_("A failed server creation can still be retried with this key."))
+			frappe.throw(
+				_(
+					"This key is saved in a failed server request that can still be retried. Contact support to release it before deleting the key."
+				)
+			)
 
 	@frappe.whitelist(methods=["POST"])
 	def retry_sync(self) -> None:

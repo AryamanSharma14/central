@@ -51,6 +51,7 @@ const {
 	hasMapViewChoice,
 	settledIds,
 	servers,
+	loaded,
 } = useServerFleet()
 
 const MAP_VIEW_OPTIONS = [
@@ -113,7 +114,7 @@ const terminateActions = computed(() =>
 
 // A link from a server's own dashboard opens that server here.
 useServerLink(
-	{ activeTeam, servers, reload },
+	{ activeTeam, servers, loading, loaded, reload },
 	{
 		overview: showServer,
 		resize: (server) => {
@@ -122,6 +123,11 @@ useServerLink(
 			else if (!getServerActions(server, teamActions.value).resize)
 				infoToast("You can't resize this server.")
 			else openResize(server)
+		},
+		'open-bench': (server) => {
+			if (!getServerActions(server, teamActions.value).open)
+				infoToast("You can't open this server.")
+			else void openBench(server, { inPlace: true })
 		},
 	},
 )

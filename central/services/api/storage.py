@@ -8,8 +8,8 @@ from central.services.doctype.team_service.team_service import STORAGE_SERVICE, 
 from central.utils.guards import require_capability
 
 BUCKET_FIELDS = ("name", "bucket_name", "region", "status", "endpoint_url", "access_key", "creation")
-VIEW_DENIED = _lt("You can't view this team's object storage.")
-MANAGE_DENIED = _lt("You can't manage this team's object storage.")
+VIEW_DENIED = _lt("You can't view this team's object storage. Ask a team admin to review your access.")
+MANAGE_DENIED = _lt("You can't manage this team's object storage. Ask a team admin to review your access.")
 
 
 @frappe.whitelist(methods=["GET"])
@@ -187,7 +187,12 @@ def _team_bucket(team: str, name: str | None, for_update: bool = False) -> TeamS
 	each save a key the other has already replaced."""
 	filters = {"name": name, "team": team, "add_on_service": STORAGE_SERVICE}
 	if not name or not frappe.db.exists("Team Service", filters):
-		frappe.throw(_("No bucket '{0}' for this team.").format(name), frappe.DoesNotExistError)
+		frappe.throw(
+			_(
+				"Bucket '{0}' is not available on this team. Return to Object Storage and refresh the bucket list."
+			).format(name),
+			frappe.DoesNotExistError,
+		)
 
 	return frappe.get_doc("Team Service", name, for_update=for_update)
 
@@ -198,7 +203,11 @@ def _validate_key(key: str | None) -> None:
 	if not key or not isinstance(key, str):
 		frappe.throw(_("Choose an object."))
 	if key.startswith("/") or ".." in key.split("/") or len(key.encode()) > 1024:
-		frappe.throw(_("'{0}' is not a valid object name.").format(key))
+		frappe.throw(
+			_(
+				"'{0}' is not a valid file or folder name. Use a name of at most 1024 bytes, without a leading slash or a '..' path segment."
+			).format(key)
+		)
 
 
 def _credentials(service: TeamService) -> dict:

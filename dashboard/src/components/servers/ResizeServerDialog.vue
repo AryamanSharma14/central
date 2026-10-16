@@ -9,12 +9,12 @@ import {
 	Skeleton,
 	Tabs,
 } from 'frappe-ui'
-import { computed, toRef } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
+import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
 import { configSpecs } from '@/lib/composed'
-import { money } from '@/lib/format'
 import { formatGb } from '@/lib/units'
 
 interface Props {
@@ -30,6 +30,8 @@ const {
 	resizeCall,
 	plansLoading,
 	resizable,
+	trial,
+	starting,
 	nothingToShow,
 	resizeError,
 	losesLockedRate,
@@ -66,6 +68,8 @@ const {
 	resized: () => emit('resized'),
 })
 
+const trialPanel = ref<InstanceType<typeof TrialUpgradePanel> | null>(null)
+
 const open = computed({
 	get: () => model.value,
 	set: (value: boolean) => {
@@ -75,7 +79,11 @@ const open = computed({
 </script>
 
 <template>
-	<Dialog v-model="open" title="Resize server" size="3xl">
+	<Dialog
+		v-model="open"
+		:title="trial ? 'Upgrade your site' : 'Resize server'"
+		size="3xl"
+	>
 		<template #default>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
@@ -85,12 +93,11 @@ const open = computed({
 				<LoadingIndicator class="h-6 w-6 text-ink-gray-5" />
 				<p class="text-p-base-medium text-ink-gray-8">Starting resize…</p>
 				<p class="max-w-xs text-p-sm text-ink-gray-5">
-					The reshape runs in the background. The server shows “Resizing” in the
-					list and comes back on its own when it’s done.
+					Follow progress in the server list.
 				</p>
 			</div>
 			<div
-				v-else-if="configCall.loading || plansLoading"
+				v-else-if="(configCall.loading && !trial && !starting) || plansLoading"
 				class="space-y-4"
 				aria-busy="true"
 				aria-label="Loading resize options"
@@ -114,6 +121,19 @@ const open = computed({
 				/>
 				<Button label="Retry" @click="reloadOptions" />
 			</div>
+			<TrialUpgradePanel
+				v-else-if="trial"
+				ref="trialPanel"
+				:trial="trial"
+				:checking="configCall.loading"
+				@check="configCall.reload()"
+			/>
+			<Alert
+				v-else-if="starting"
+				theme="blue"
+				title="Your payment method is confirmed"
+				description="We are starting your server on its paid plan. This takes about a minute, then the plans show here."
+			/>
 			<p
 				v-else-if="!resizable || nothingToShow"
 				class="text-p-sm text-ink-gray-5"
@@ -126,35 +146,21 @@ const open = computed({
 					v-if="losesLockedRate && lock"
 					theme="amber"
 					title="Resizing will change your rate"
-					:description="`You pay ${money(lock.locked_rate, lock.currency)}/mo for this size; it now lists at ${money(lock.list_rate, lock.currency)}/mo. Any resize is priced at today's rates, and the old rate doesn't come back, including if you resize to this size again later.`"
+					description="Resizing uses today’s rates. Your current rate cannot be restored."
 				/>
 
-				<div class="space-y-2 text-p-sm text-ink-gray-7">
-					<p>
-						You can change CPU and memory only, or grow the disk too. Choosing a
-						smaller CPU and memory size does not shrink your disk.
-					</p>
-					<p>
-						Changing CPU or memory restarts the server and may take a few
-						minutes. Increasing storage alone does not need a restart. Your
-						files are kept.
-					</p>
-				</div>
+				<p class="text-p-sm text-ink-gray-7">
+					Choose a new CPU and memory size. You can also increase storage, but
+					you cannot reduce it later.
+				</p>
 				<RadioGroup v-model="computeOnly" label="Storage" padded>
 					<Radio
 						:value="true"
-						:label="`Keep my ${formatGb(currentDisk)} GB disk`"
-						description="Change CPU and memory. You can choose a smaller compute size."
+						:label="`Keep ${formatGb(currentDisk)} GB disk`"
 					/>
-					<Radio
-						:value="false"
-						label="Increase storage too"
-						description="Use the selected plan's storage, or choose a custom size. Storage cannot shrink."
-					/>
+					<Radio :value="false" label="Increase storage" />
 				</RadioGroup>
-				<p class="text-p-sm text-ink-gray-6">
-					Prices include all storage you keep. Increasing storage is permanent.
-				</p>
+				<p class="text-p-sm text-ink-gray-6">Prices include storage.</p>
 
 				<Tabs v-if="hasTabs" v-model="activeTab" :tabs="classTabs">
 					<template #tab-panel="{ tab }">
@@ -208,8 +214,30 @@ const open = computed({
 			</div>
 		</template>
 		<template #actions>
+			<div v-if="starting" class="flex justify-end">
+				<Button
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+			</div>
+			<div v-else-if="trial && trialPanel" class="flex justify-end">
+				<Button
+					v-if="trialPanel?.methodAdded"
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+				<Button
+					v-else
+					variant="solid"
+					icon-left="lucide-credit-card"
+					label="Add payment method"
+					@click="trialPanel?.addMethod()"
+				/>
+			</div>
 			<div
-				v-if="resizable && !resizeCall.loading"
+				v-else-if="resizable && !resizeCall.loading"
 				class="flex items-center justify-end gap-4"
 			>
 				<p v-if="totalPrice" class="text-p-sm text-ink-gray-6">

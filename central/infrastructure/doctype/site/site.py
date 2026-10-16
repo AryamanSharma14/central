@@ -31,6 +31,7 @@ class Site(Document):
 		rename_error: DF.SmallText | None
 		rename_error_log: DF.Link | None
 		rename_task: DF.Data | None
+		renamed_at: DF.Datetime | None
 		server: DF.Link
 		site_name: DF.Data
 		subdomain: DF.Data | None
@@ -53,9 +54,20 @@ class Site(Document):
 
 	@property
 	def url(self) -> str:
-		"""The address the region derives from the machine. It answers before and after the rename,
-		so every probe and sign-in uses it."""
+		"""The automatic address used for readiness probes and the initial signup handoff."""
 		return f"https://{self.name}"
+
+	@property
+	def primary_url(self) -> str:
+		"""The address the console shows: the customer's subdomain once the rename has landed."""
+		return Site.get_primary_url(self.name, self.subdomain, self.renamed_at)
+
+	@staticmethod
+	def get_primary_url(name: str, subdomain: str | None, renamed_at: str | None) -> str:
+		if not subdomain or not renamed_at:
+			return f"https://{name}"
+		_, zone = name.split(".", 1)
+		return f"https://{subdomain}.{zone}"
 
 	@property
 	def status(self) -> str | None:
@@ -260,19 +272,24 @@ class Site(Document):
 
 	def get_login_url(self, user: str | None = None) -> str | None:
 		"""A one-click session for `user`, or for Administrator, on the site's public address.
-		Pilot accepts a token only for the site's name on the bench: the customer's name after the
-		rename, the image alias before it."""
-		from central.integrations.pilot import fetch_site_login_url
+		Use the customer hostname only after its route answers and Pilot accepts its site name."""
+		from central.integrations.pilot import fetch_site_login_url, is_site_reachable
 
 		gateway, audience = self.get_pilot_access()
 		if not gateway or not audience:
 			return None
 
 		login_user, full_name = self.get_login_user(user)
-		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if self.rename_task else [IMAGE_SITE_NAME]
+		renamed_ready = (
+			self.subdomain and self.rename_task and is_site_reachable(f"https://{self.rename_target}")
+		)
+		if renamed_ready and not self.renamed_at:
+			self.db_set("renamed_at", frappe.utils.now_datetime())
+		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if renamed_ready else [IMAGE_SITE_NAME]
 		for pilot_name in pilot_names:
 			if minted := fetch_site_login_url(gateway, audience, pilot_name, login_user, full_name):
-				return on_host(minted, self.name, self.get_landing_route())
+				host = self.name if pilot_name == IMAGE_SITE_NAME else self.rename_target
+				return on_host(minted, host, self.get_landing_route())
 
 		return None
 

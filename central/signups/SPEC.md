@@ -8,6 +8,8 @@ The Signups module holds what a new customer gets: the [Product](doctype/product
 
 A Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
 
+A Team with trial sites gets the credit only while one of its trials is Active. This rewards a card before the trial ends. A card after the trial ends still converts the site, but adds no credit. `get_welcome_credit_offer` returns `ends_on`, the earliest end date of the Team's Active trials, so the console and the site can name the last day.
+
 | Billing Settings field | Value on a new install |
 |---|---|
 | Grant Welcome Credits | On |
@@ -50,7 +52,7 @@ The daily job `central.signups.trial.run_trials` moves each site. It sends each 
 | Event | Sent |
 |---|---|
 | `trial_unopened` | Once, from the day after the site is ready, when nobody has opened it. Not sent when a warning is due. |
-| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day |
+| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. It names the welcome credit when the Team can still earn it, and says that the site sleeps when idle. |
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
 | `trial_deleted` | When the server is terminated |
@@ -67,6 +69,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 | A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned servers whose site Central has not recorded yet than Central Settings, Trial Servers per Team. No credit is needed. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
+| Resize a trial server | Refused, because a trial server has no subscription. The console resize dialog and the in-app plan list ask for a payment method first. `get_composed_config` returns `trial`, and `billing_api.change_plan` refuses with "Add a payment method to change this site's plan." |
 
 ### Console
 
@@ -79,14 +82,14 @@ A trial server has no subscription, so a trial creates no invoice. Before Centra
 When a payment method of the Team becomes active, every Active or Ended trial site of the Team becomes Converted:
 
 1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
-2. A running server gets its subscription now. A stopped server gets it when it starts.
-3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped.
+2. A running or sleeping server gets its subscription now. A stopped server gets it when it starts. Until then, `get_composed_config` returns `starting`, and the console resize dialog says the server is starting on its paid plan and checks again.
+3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped. When a resize of the server is pending, the job writes a Trial Error and stops, because both jobs change the server's power. The daily job sends the conversion again.
 
 A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 

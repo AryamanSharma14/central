@@ -82,7 +82,7 @@ def ensure_default_offerings() -> None:
 			"Ubuntu",
 			"Server",
 			"A plain Ubuntu server.",
-			{"purpose": "base", "os": "Ubuntu"},
+			{"purpose": "base", "os": "Ubuntu", "minimal": "false"},
 		),
 	):
 		if frappe.db.exists("Image Offering", key):

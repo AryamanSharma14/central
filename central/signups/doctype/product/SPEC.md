@@ -15,7 +15,7 @@ System Managers and Product Operators create and edit products in Desk. Only a S
 | Product Key | Lowercase letters, numbers and hyphens. It is the record name and cannot change after creation. |
 | Title | The product name. The signup pages use it as the logo's alternative text. |
 | Enabled | A disabled product refuses new signups. Its existing sites keep running. |
-| Logo | Shown next to the heading on the signup, login, verification, site name and setup pages. |
+| Logo | Shown with rounded corners next to the heading on the signup, login, verification, site name and setup pages. |
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
@@ -71,7 +71,15 @@ Central sends the signup code and the [trial lifecycle emails](../../SPEC.md#ope
 
 **Branding.** With **Use Product Branding in Emails** on, the email header shows the product's Logo and Title instead of Frappe Cloud's. The code email also names the product, such as "123456 is your Raven signup code". The lifecycle emails of the product's sites use the same header. The logo must be a public file, because an email client loads it without a session. The footer still says that the person is a member of a Frappe Cloud team.
 
-**Getting started.** With a **Getting Started URL**, the `site_ready` and `trial_unopened` emails show a **Get started** button to that page, above the button to Frappe Cloud. Use the product's own guide or docs page, so the product team can change it without a change in Central. The address must start with `https://`. The `site_ready` subject also names the product, such as "Your Raven site is ready".
+**Getting started.** With a **Getting Started URL**, the `site_ready` and `trial_unopened` emails show a **Get started** button to that page, above the **View site** button. Use the product's own guide or docs page, so the product team can change it without a change in Central. The address must start with `https://`. The `site_ready` subject also names the product, such as "Your Raven site is ready".
+
+**Action links.** Email actions use the destinations below. Email previews use a sample site URL. In-app actions use the console routes.
+
+| Email | Action destination |
+|---|---|
+| `site_ready`, `trial_unopened` | The created site's public URL and the product's Landing Route. A plain signup opens the site's root URL. |
+| `trial_expiring`, `trial_ended`, `trial_deletion_soon`, `trial_converted` | Frappe Cloud's billing page. |
+| `trial_deleted` | No action link. |
 
 **Email Notes.** Each row adds text under the standard text of one email, only for sites of this product. Separate paragraphs with a blank line. Use it for product advice, such as what to do first. Central keeps the standard text, the dates and the button, so a note cannot change the trial terms.
 

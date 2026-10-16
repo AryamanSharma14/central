@@ -45,6 +45,11 @@ const routes = [
 		name: 'OnboardingProvisioning',
 		component: () => import('@/pages/onboarding/SiteReadyPage.vue'),
 	},
+	{
+		path: '/github/connect/:attempt?',
+		name: 'ConnectGitHub',
+		component: () => import('@/pages/github/ConnectGitHubPage.vue'),
+	},
 	// authenticated routes -> AppShell
 	{
 		path: '/',

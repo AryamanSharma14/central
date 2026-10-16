@@ -70,24 +70,11 @@ const addresses = computed(() =>
 
 const query = createListViewQuery()
 const columns = computed<ListViewColumn<Address>[]>(() => [
-	{ accessorKey: 'label', header: 'Type', size: 120, enableSorting: false },
-	{ accessorKey: 'value', header: 'Address', size: 260, enableSorting: false },
-	{
-		accessorKey: 'reach',
-		header: 'Reachable by',
-		size: 220,
-		enableSorting: false,
-	},
+	{ key: 'label', label: 'Type', width: '9rem' },
+	{ key: 'value', label: 'Address' },
+	{ key: 'reach', label: 'Reachable by', width: '14rem' },
 	...(props.canEdit
-		? [
-				{
-					id: 'actions',
-					header: '',
-					size: 48,
-					enableSorting: false,
-					meta: { align: 'end' as const },
-				},
-			]
+		? [{ key: 'actions', label: '', width: '2.5rem', align: 'end' as const }]
 		: []),
 ])
 
@@ -200,7 +187,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 
 		<div
 			v-if="canEdit && (!server.public_ipv4 || !server.public_ipv6)"
-			class="flex flex-wrap gap-2"
+			class="flex flex-wrap gap-2 px-2"
 		>
 			<Button
 				v-if="!server.public_ipv4"
@@ -230,7 +217,7 @@ async function toggleIpv4Internet(enabled: boolean): Promise<void> {
 					? 'Stays on while the server has a public IPv4 address.'
 					: 'Lets the server reach sites that only have IPv4 addresses.'
 			"
-			class="rounded-6 px-4 py-3"
+			class="rounded-6 px-2 py-3"
 			@update:model-value="toggleIpv4Internet"
 		/>
 

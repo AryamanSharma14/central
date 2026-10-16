@@ -84,6 +84,8 @@ Server creation has three network options. Central sends an option to Atlas only
 
 Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
+A creation request can carry `user_data` of up to 16 KiB, which is also the Atlas limit. Central sends it to Atlas unchanged as `guest.user_data`, and cloud-init in the guest runs it on first boot. A caller uses it to set up a server without signing in after creation. Central saves it on the Resource Action with the other creation inputs, so it must not hold a long-lived secret.
+
 Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. See [Public addresses](#public-addresses) for changes after creation. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
 
 A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
@@ -159,6 +161,24 @@ An app on a site, such as Raven, asks Central for a token through Pilot's Centra
 
 The service gets Central's public keys from `central.api.jwks.get_jwks` and verifies the signature, `iss`, `aud`, `exp` and `scope`. Then the service decides what access the team gets, for example a team account and its API keys. The Pilot credential names the team and its server, so a site cannot get a token for another team or for a hostname that the team does not serve. A service uses `hosts` to accept a site's hostname as the team's. A Pilot refuses a `team-identity` token as a login token.
 
+## How does a Pilot read private GitHub repositories?
+
+Central owns the GitHub App, set on the GitHub tab of Central Settings. The App private key and secrets stay in Central. A Pilot gets only a token for one repository, with `contents: read`, that expires in about an hour.
+
+```text
+Pilot ── start_connection ──> Central ── authorize, install ──> GitHub
+  ^                             │ user with server:console picks repositories
+  └──── repository_token ───────┘ GitHub Connection (grant)
+```
+
+1. Pilot calls `central.api.integrations.github.start_connection(return_url)` with its credential and gets a link to `/dashboard/github/connect/<attempt>`. The attempt lives in Redis for 1 hour after the last activity. The `return_url` lives 24 hours, so an expired link still leads back to the server.
+2. The first user who opens the link must hold `server:console` on the Pilot's server. The attempt binds to that user. The OAuth `state` and a PKCE verifier bind the GitHub callback to the attempt and the user's session.
+3. The user authorizes or installs the App, then selects repositories in one or more accounts. The user must be a GitHub admin of each one. `complete_connection` saves one `GitHub Connection` per Pilot credential and installation. An account sent with no repositories loses its grant.
+4. Pilot calls `status`, `repositories` and `repository_token(repository)` with its credential. Each grant change increases the connection `version`. Central refuses a token when the grant changed while GitHub minted it.
+5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, removes repositories the installation lost, and updates the name of a renamed repository. The App must subscribe to the `repository` event for renames. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
+
+The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab. A new App ID disables every grant, so each Pilot must connect GitHub again.
+
 ## How does the trial flow work?
 
 1. Authenticate the customer and resolve the Team.
@@ -215,7 +235,7 @@ A System Manager has three more actions on the Virtual Machine form in Desk. Cen
 | **Revoke Pilot Access** | Revokes every Pilot Credential of the server, so its Pilot can no longer reach Central. |
 | **Retry Admin Domain** | Asks Pilot again for the admin hostname, when the server shows an admin domain error. |
 
-Pilot links back to its server in the console with `/dashboard/servers?pilot=<jwks_audience_id>&action=<action>`. The action is `overview` or `resize`; any other value opens the overview. A resize link opens the dialog only when the server can take a change and the user may resize it. The server list returns each server's active audience as `pilot_audience`, and the console matches the link against it. When the active Team does not hold that server, the console shows the server list and a message.
+Pilot links back to its server in the console with `/dashboard/servers?pilot=<jwks_audience_id>&action=<action>`. The action is `overview` or `resize`; any other value opens the overview. A resize link opens the dialog only when the server can take a change and the user may resize it. The server list returns each server's active audience as `pilot_audience`, and the console matches the link against it. When the active Team does not hold that server, the console shows the server list and a message. On a fresh page, the link waits for the first server list load before it looks for the server.
 
 Display supported network and SSH information for a plain Ubuntu server. Do not imply that a private mesh address is publicly reachable.
 
@@ -225,7 +245,7 @@ Delete only after the customer confirms the action. Confirm remote absence, revo
 
 The current creation flow requires the Atlas VM API and automatic management hostname. Staging also needs current schema, key trust, a healthy host, available images, and wildcard DNS.
 
-Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size. When no host in the region can fit the new size, Atlas keeps the old size. Central then starts the server again if it was running, and fails the resize with `REGION_AT_CAPACITY`.
+Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size. When no host in the region can fit the new size, Atlas keeps the old size. Central then starts the server again if it was running, and fails the resize with `REGION_AT_CAPACITY`. Atlas does not stop a sleeping VM, so a CPU or memory resize starts a sleeping server first.
 
 Central verifies domain ownership and owns the proxy route through [Site Domain](../central/infrastructure/doctype/site_domain/SPEC.md). The regional proxy terminates TLS for a regional name. For a custom domain, the proxy passes TLS to the VM, and Pilot holds the certificate. Central does not issue or store certificates.
 

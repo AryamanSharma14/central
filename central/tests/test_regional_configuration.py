@@ -218,6 +218,16 @@ class TestRegionalConfiguration(IntegrationTestCase):
 
 		self.assertEqual(self.request.call_args.kwargs["json"]["webhook_secret"], first_secret)
 
+	def test_the_atlas_secret_survives_a_later_save(self):
+		"""Frappe deletes a Password whose column is empty when the document is saved."""
+		self.request.return_value = self.response({})
+		self.instance.enroll_atlas()
+		secret = self.instance.reload().get_password("webhook_secret")
+
+		self.instance.save()
+
+		self.assertEqual(self.instance.reload().get_password("webhook_secret"), secret)
+
 	def test_enroll_atlas_raises_and_does_not_persist_a_rejected_secret(self):
 		self.request.return_value = self.response({}, 403)
 

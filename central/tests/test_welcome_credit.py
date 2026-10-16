@@ -1,5 +1,8 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import add_days, getdate, nowdate
 
 from central.billing.revenue import credits
 from central.billing.states import transition
@@ -20,7 +23,7 @@ class TestWelcomeCredit(IntegrationTestCase):
 			ensure_team(team, owner=owner)
 			complete_billing_profile(team, currency="USD")
 		self.gateway = make_stripe_gateway().name
-		for doctype in ("Credit Ledger Entry", "Credit Wallet", "Payment Method"):
+		for doctype in ("Credit Ledger Entry", "Credit Wallet", "Payment Method", "Site"):
 			frappe.db.delete(doctype, {"team": ["in", [TEAM, SECOND_TEAM]]})
 
 	def activate_payment_method(self, team: str):
@@ -36,6 +39,21 @@ class TestWelcomeCredit(IntegrationTestCase):
 		transition(method, "Active")
 		method.save(ignore_permissions=True)
 		return method
+
+	def add_trial(self, team: str, state: str):
+		"""A trial site record. Its conversion is not under test, so it is patched out."""
+		self.enterContext(patch("central.signups.credit.convert_team"))
+		frappe.get_doc(
+			{
+				"doctype": "Site",
+				"name": f"trial-{frappe.generate_hash(length=6)}.example.test",
+				"site_name": "trial.example.test",
+				"team": team,
+				"server": "server-trial",
+				"trial_state": state,
+				"trial_ends_on": add_days(nowdate(), 3),
+			}
+		).db_insert()
 
 	def promotion_count(self, team: str) -> int:
 		return frappe.db.count("Credit Ledger Entry", {"team": team, "reference_type": "Promotion"})
@@ -95,3 +113,20 @@ class TestWelcomeCredit(IntegrationTestCase):
 	@IntegrationTestCase.change_settings("Central Settings", require_payment_method=0)
 	def test_no_payment_method_is_asked_for_when_the_requirement_is_off(self):
 		self.assertFalse(get_purchase_state(TEAM)["payment_method_required"])
+
+	def test_a_trial_team_gets_the_credit_while_its_trial_is_active(self):
+		self.add_trial(TEAM, "Active")
+		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
+			offer = get_purchase_state(TEAM)["welcome_credit"]
+			self.activate_payment_method(TEAM)
+
+		self.assertEqual(getdate(offer["ends_on"]), getdate(add_days(nowdate(), 3)))
+		self.assertEqual(self.promotion_count(TEAM), 1)
+
+	def test_a_trial_team_whose_trial_ended_gets_no_credit(self):
+		self.add_trial(TEAM, "Ended")
+		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
+			self.assertIsNone(get_purchase_state(TEAM)["welcome_credit"])
+			self.activate_payment_method(TEAM)
+
+		self.assertEqual(self.promotion_count(TEAM), 0)

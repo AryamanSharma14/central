@@ -39,7 +39,13 @@ const usage = computed(() => ai.value?.usage ?? null)
 const balance = computed(() => ai.value?.balance ?? null)
 
 // A model call often costs a fraction of a cent, so small amounts keep 4 places.
-const usdPrecision = (value: number): number => (value > 0 && value < 1 ? 4 : 2)
+const usdAmount = (value: number): string => {
+	const digits = value > 0 && value < 1 ? 4 : 2
+	return value.toLocaleString(undefined, {
+		minimumFractionDigits: digits,
+		maximumFractionDigits: digits,
+	})
+}
 
 // The table starts short; the rest unfolds in place.
 const SHOWN = 6
@@ -69,18 +75,20 @@ const shownModels = computed(() =>
 						title="Balance"
 						:value="balance?.balance ?? null"
 						prefix="$"
-						:precision="usdPrecision(balance?.balance ?? 0)"
+						:format="usdAmount"
 					/>
 					<NumberCard
 						title="Spent"
 						:value="usage?.cost ?? null"
 						prefix="$"
-						:precision="usdPrecision(usage?.cost ?? 0)"
+						:format="usdAmount"
 					/>
 					<NumberCard title="Requests" :value="usage?.requests ?? null" />
 					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
 						<template #actions>
-							<Tooltip text="Total input and output tokens">
+							<Tooltip
+								text="Total tokens processed across the team's API keys, including input and output. Tokens measure model usage."
+							>
 								<lucide-circle-help
 									class="size-4 text-ink-gray-5"
 									aria-label="What counts as a token"
@@ -154,7 +162,8 @@ const shownModels = computed(() =>
 				</table>
 
 				<p v-else class="mt-3 text-p-sm text-ink-gray-5">
-					No models accessible yet.
+					No models are available to this team. Contact support to check model
+					access.
 				</p>
 
 				<Button

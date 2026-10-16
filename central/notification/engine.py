@@ -55,6 +55,7 @@ def dispatch(
 
 	server = server or get_reference_server(reference_doctype, reference_name)
 	ctx = _resolve_context(team, event_type, context, reference_name, reference_doctype)
+	ctx["server"] = server or ""
 	ctx["server_title"] = _get_server_title(server)
 	ctx["reference_title"] = _get_reference_title(team, reference_doctype, reference_name)
 	ctx["message"] = message or ""
@@ -335,11 +336,18 @@ def _email_enabled(user: str, team: str, category: str) -> bool:
 
 def _notification_email(event, ctx, message=None) -> tuple[str, str]:
 	"""Subject and HTML body, with the branding and notes of the Site's product."""
+	from central.signups.doctype.product.product import GETTING_STARTED_EMAILS, get_email_product
+
 	# The email uses the same sentence as the in-app notification.
 	ctx = {**ctx, "message": message or ctx.get("message") or ""}
-	product = _get_email_product(ctx["team"], ctx["reference_doctype"], ctx["reference_name"])
+	site = _get_email_site(ctx["team"], ctx["reference_doctype"], ctx["reference_name"])
+	product = get_email_product(site.product) if site else None
+	extras = product.get_email_extras(event.name) if product else {}
+	if site and event.name in GETTING_STARTED_EMAILS:
+		landing_route = product.landing_route if product else None
+		extras["site_url"] = site.url + (landing_route or "")
 
-	return render_notification_email(event, ctx, product.get_email_extras(event.name) if product else {})
+	return render_notification_email(event, ctx, extras)
 
 
 def render_notification_email(event, ctx: dict, extras: dict) -> tuple[str, str]:
@@ -348,6 +356,7 @@ def render_notification_email(event, ctx: dict, extras: dict) -> tuple[str, str]
 	subject = _render_template(event.in_app_title, ctx) or event.name
 	text = (_render_template(event.in_app_body, ctx) or "").strip()
 	route = _render_template(event.action_route, ctx) if event.action_route else None
+	action_url = extras.get("site_url") or (f"{central_url()}/dashboard{route}" if route else None)
 	# nosemgrep: frappe-ssti -- a fixed template that ships with the app, filled only with values.
 	body = frappe.render_template(
 		"templates/emails/notification.html",
@@ -357,7 +366,7 @@ def render_notification_email(event, ctx: dict, extras: dict) -> tuple[str, str]
 			"notes": extras.get("notes") or [],
 			"brand": extras.get("brand"),
 			"action_label": event.action_label,
-			"action_url": f"{central_url()}/dashboard{route}" if route else None,
+			"action_url": escape_html(action_url) if action_url else None,
 			"getting_started_url": extras.get("getting_started_url"),
 		},
 	)
@@ -365,19 +374,16 @@ def render_notification_email(event, ctx: dict, extras: dict) -> tuple[str, str]
 	return subject, body
 
 
-def _get_email_product(team: str, reference_doctype: str, reference_name: str):
-	"""The Product of the team's Site that the event is about. Its branding and notes go in
-	the email. A Pilot can name another team's Site, so the team must match."""
-	from central.signups.doctype.product.product import get_email_product
-
+def _get_email_site(team: str, reference_doctype: str, reference_name: str):
+	"""Resolve the event's Site only within its Team, because a Pilot can name another team's Site."""
 	if reference_doctype != "Site" or not reference_name:
 		return None
 
-	row = frappe.db.get_value("Site", reference_name, ["product", "team"], as_dict=True)
-	if not row or row.team != team:
+	name = frappe.db.exists("Site", {"name": reference_name, "team": team})
+	if not name:
 		return None
 
-	return get_email_product(row.product)
+	return frappe.get_doc("Site", name)
 
 
 def _send_member_email(

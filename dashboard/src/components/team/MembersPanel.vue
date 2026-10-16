@@ -131,32 +131,25 @@ function memberRank(row: RosterRow): number {
 
 const columns = computed<ListViewColumn<RosterRow>[]>(() => [
 	{
-		id: 'member',
-		header: 'Member',
-		accessorFn: (row) => `${row.name} ${row.member?.user ?? ''}`,
-		meta: { cellClass: 'truncate' },
+		key: 'member',
+		label: 'Member',
+		value: (row) => `${row.name} ${row.member?.user ?? ''}`,
+		sortable: true,
 	},
 	{
-		id: 'access',
-		header: 'Access',
-		accessorFn: (row) =>
+		key: 'access',
+		label: 'Access',
+		value: (row) =>
 			row.roles
 				.map((grant) =>
 					roleOnResourceLabel(roleLabel(grant.role), grant, registry.value),
 				)
 				.join(', '),
-		sortingFn: (a, b) =>
-			memberRank(a.original) - memberRank(b.original) ||
-			roleNames(a.original).localeCompare(roleNames(b.original)),
-		meta: { cellClass: 'truncate' },
+		sortable: true,
+		compare: (a, b) =>
+			memberRank(a) - memberRank(b) || roleNames(a).localeCompare(roleNames(b)),
 	},
-	{
-		id: 'actions',
-		header: '',
-		enableSorting: false,
-		size: 1,
-		meta: { align: 'end' },
-	},
+	{ key: 'actions', label: '', width: '2.5rem', align: 'end' },
 ])
 
 const roleFilters = computed<ListViewFilter[]>(() => [

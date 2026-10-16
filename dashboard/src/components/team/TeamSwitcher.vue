@@ -142,7 +142,10 @@ const { onKeydown } = useMenuKeyboardNavigation(() => {
 						:tooltip="team.identity"
 						:aria-pressed="team.name === activeTeam"
 						class="team-switcher-button w-full !justify-start !px-2 focus-visible:bg-surface-gray-3 focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-outline-gray-3"
-						:class="team.detail ? '!h-auto !py-1.5' : ''"
+						:class="{
+                            '!h-auto !py-1.5': team.detail,
+                            '!bg-surface-gray-3': team.name === activeTeam,
+                        }"
 						@click="switchTeam(team.name)"
 					>
 						<template #prefix>
@@ -174,7 +177,7 @@ const { onKeydown } = useMenuKeyboardNavigation(() => {
 						{{ query ? 'No matching teams.' : 'You do not belong to a team yet.' }}
 					</p>
 				</div>
-				<div class="mt-1 border-t border-outline-gray-1 pt-1">
+				<div class="mt-1 border-t border-outline-gray-2 pt-1">
 					<Button
 						variant="ghost"
 						icon-left="lucide-plus"

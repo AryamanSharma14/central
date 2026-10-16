@@ -21,20 +21,13 @@ function versionLabel(image: RegionalImage): string {
 		: `Version ${frappe.replace('version-', '')}`
 }
 
-// A region carries one build per release, so a version on its own names several of them.
-// The build time is what tells them apart and says which one is current.
 function buildLabel(image: RegionalImage, withArchitecture: boolean): string {
-	const parts = [
-		versionLabel(image),
-		hasSite(image) && 'With site',
-		formatUnixTime(image.created_at),
-	]
+	const parts = [versionLabel(image), formatUnixTime(image.created_at)]
 	if (withArchitecture) parts.push(image.architecture)
 	return parts.filter(Boolean).join(' · ')
 }
 
-// A plain OS image has no build history worth choosing from: the newest build of
-// each version and architecture is the one to run.
+// Offer the newest build of each version and architecture.
 function latestBuilds(images: RegionalImage[]): RegionalImage[] {
 	const latest = new Map<string, RegionalImage>()
 	for (const image of images) {
@@ -54,14 +47,8 @@ const newestRelease = (images: RegionalImage[]): RegionalImage | undefined =>
 		.filter((image) => image.tags.frappe_version?.startsWith('version-'))
 		.sort(
 			(a, b) =>
-				releaseNumber(b) - releaseNumber(a) ||
-				Number(hasSite(a)) - Number(hasSite(b)) ||
-				b.created_at - a.created_at,
+				releaseNumber(b) - releaseNumber(a) || b.created_at - a.created_at,
 		)[0]
-
-function hasSite(image: RegionalImage): boolean {
-	return image.tags.has_site === '1'
-}
 
 export type ImageSource = 'image' | 'snapshot'
 
@@ -226,7 +213,11 @@ export function useRegionalImages(
 	const buildChoices = computed(() =>
 		isPlainImage.value
 			? latestBuilds(images.value)
-			: images.value.filter((item) => !item.tags.app),
+			: latestBuilds(
+					images.value.filter(
+						(item) => item.tags.has_site === '0' && !item.tags.app,
+					),
+				),
 	)
 	const imageOptions = computed(() => {
 		// Architecture only earns its place when the region offers more than one.
@@ -237,7 +228,6 @@ export function useRegionalImages(
 		const builds = [...buildChoices.value].sort(
 			(a, b) =>
 				versionLabel(a).localeCompare(versionLabel(b)) ||
-				Number(hasSite(a)) - Number(hasSite(b)) ||
 				b.created_at - a.created_at,
 		)
 		return [

@@ -235,6 +235,24 @@ class TestTrialLifecycle(SiteOnAMachine):
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
 
+	def test_a_sleeping_server_is_subscribed_when_its_trial_converts(self):
+		self.server.db_set("status", "Paused")
+		VirtualMachine.ensure_subscription_enabled.reset_mock()
+
+		trial.convert_site(self.site())
+
+		VirtualMachine.ensure_subscription_enabled.assert_called_once()
+
+	def test_resize_options_say_a_converted_server_is_still_starting(self):
+		from central.billing.api.dashboard.catalog import get_composed_config
+
+		self.site().db_set("trial_state", "Converted")
+
+		config = get_composed_config(self.server.name, self.team.name)
+
+		self.assertTrue(config["starting"])
+		self.assertIsNone(config["trial"])
+
 	def assert_conversion_queued(self):
 		frappe.enqueue.assert_any_call(
 			trial.finish_conversion,
@@ -252,6 +270,37 @@ class TestTrialLifecycle(SiteOnAMachine):
 			trial.finish_conversion(self.site().name)
 
 		convert_trial_server.assert_called_once_with(self.server.name, start=True)
+
+	def test_the_in_app_trial_status_carries_the_credit_offer_and_the_idle_minutes(self):
+		"""The site's billing tab reads these fields; their names are the contract with Pilot."""
+		status = trial.get_status(self.server.name)
+
+		self.assertEqual(
+			set(status), {"state", "ends_on", "days_left", "deletes_on", "credit", "sleeps_after_minutes"}
+		)
+		self.assertEqual(status["sleeps_after_minutes"], trial.get_sleep_minutes())
+
+	def test_resize_options_say_the_trial_blocks_a_resize(self):
+		from central.billing.api.dashboard.catalog import get_composed_config
+
+		config = get_composed_config(self.server.name, self.team.name)
+
+		self.assertFalse(config["resizable"])
+		self.assertEqual(config["trial"]["state"], "Active")
+
+	def test_a_pending_action_defers_the_conversion_to_the_daily_job(self):
+		"""Any pending action on the server, not only a resize, defers it with a reason to retry."""
+		self.site().db_set("trial_state", "Converted")
+		for action in ("resize", "restart"):
+			pending = ResourceAction.queue(
+				action, self.team.name, self.region.name, "pending", server=self.server.name
+			)
+			with patch("central.integrations.servers.convert_trial_server") as convert_trial_server:
+				trial.finish_conversion(self.site().name)
+
+			convert_trial_server.assert_not_called()
+			self.assertIn("Another action is running", self.site().trial_error)
+			pending.db_set("status", "Succeeded")
 
 	def test_a_failed_conversion_leaves_the_reason_and_the_daily_job_retries_it(self):
 		self.site().db_set("trial_state", "Converted")

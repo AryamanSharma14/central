@@ -36,7 +36,14 @@ from central.infrastructure.doctype.resource_action.resource_action import (
 	ResourceAction,
 )
 from central.integrations.images import selected_image, snapshot_image, snapshot_source
-from central.server_models import DNS_LABEL, ActionStatus, CreateServerInput, ServerCreation, SiteCreation
+from central.server_models import (
+	DNS_LABEL,
+	MAXIMUM_USER_DATA_BYTES,
+	ActionStatus,
+	CreateServerInput,
+	ServerCreation,
+	SiteCreation,
+)
 from central.signups.trial import has_active_payment_method
 from central.utils.units import MIB_PER_GIB, MILLICORES_PER_VCPU
 
@@ -58,6 +65,7 @@ def submit_request(
 	has_public_ipv4: bool = False,
 	has_public_ipv6: bool = False,
 	is_firewall_enabled: bool = False,
+	user_data: str = "",
 	resource_type: str = "Server",
 	subdomain: str | None = None,
 	snapshot: str | None = None,
@@ -86,9 +94,13 @@ def submit_request(
 		has_public_ipv4=has_public_ipv4,
 		has_public_ipv6=has_public_ipv6,
 		is_firewall_enabled=is_firewall_enabled,
+		user_data=user_data,
 	)
 	if not can(frappe.session.user, server_input.team, "server:create"):
-		frappe.throw(_("You cannot create servers for this Team."), frappe.PermissionError)
+		frappe.throw(
+			_("You cannot create servers for this Team. Ask a team admin to review your access."),
+			frappe.PermissionError,
+		)
 	if server_input.has_public_ipv4:
 		from central.billing.catalog.public_ips import require_public_ipv4_rate
 
@@ -127,11 +139,17 @@ def submit_command(
 	if action not in COMMAND_ACTIONS or not can(
 		frappe.session.user, team, ACTION_CAPABILITIES[action], server=resource_id
 	):
-		frappe.throw(_("You cannot perform this server action."), frappe.PermissionError)
+		frappe.throw(
+			_("You cannot perform this server action. Ask a team admin to review your access."),
+			frappe.PermissionError,
+		)
 	if take_snapshot and (
 		action != "terminate" or not can(frappe.session.user, team, "server:snapshot", server=resource_id)
 	):
-		frappe.throw(_("You cannot take a snapshot of this server."), frappe.PermissionError)
+		frappe.throw(
+			_("You cannot take a snapshot of this server. Ask a team admin to review your access."),
+			frappe.PermissionError,
+		)
 	if not isinstance(resource_id, str) or not resource_id:
 		frappe.throw(_("Select a server."))
 
@@ -139,7 +157,11 @@ def submit_command(
 	if server.team != team:
 		frappe.throw(_("This server belongs to another Team."), frappe.PermissionError)
 	if not server.atlas_vm_id:
-		frappe.throw(_("This server has no verified regional identity."))
+		frappe.throw(
+			_(
+				"This server has no verified regional identity. Refresh its status before trying again. Contact support if the server remains unavailable."
+			)
+		)
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
 	if action == "start" and frappe.db.exists("Site", {"server": server.name, "trial_state": "Ended"}):
@@ -265,6 +287,7 @@ def _build_server_configuration(
 		has_public_ipv4=server_input.has_public_ipv4,
 		has_public_ipv6=server_input.has_public_ipv6,
 		is_firewall_enabled=server_input.is_firewall_enabled,
+		user_data=server_input.user_data,
 		image_tags=image["tags"],
 		**image_shape(composition, image),
 	)
@@ -310,7 +333,11 @@ def validate_purchase(
 		choices = [row for rows in catalog["plans"].values() for row in rows]
 		selected = next((row for row in choices if row["plan"] == plan), None)
 		if not selected:
-			frappe.throw(_("This plan is not available for the selected Team and region."))
+			frappe.throw(
+				_(
+					"This plan is not available for this team in the selected region. Choose another plan or region."
+				)
+			)
 		composition, rate = selected["includes"], selected["rate"]
 	else:
 		if (
@@ -318,7 +345,11 @@ def validate_purchase(
 			or not catalog["rate_card"]
 			or not any(p["sub_category"] == sub_category for p in catalog["profiles"])
 		):
-			frappe.throw(_("A custom configuration is not available for this Team and region."))
+			frappe.throw(
+				_(
+					"Custom server sizes are not available for this team in the selected region. Choose a listed plan or another region."
+				)
+			)
 		validate_composition(sub_category, includes)
 		composition = includes
 		rate = float(resolve_config_rate(includes, catalog["currency"], region))
@@ -327,7 +358,11 @@ def validate_purchase(
 		committed_rate = rate + reserved_rate(team)
 		require_payment_method_or_credit(team, committed_rate)
 		if committed_rate > catalog["available"]:
-			frappe.throw(_("Pending server requests and this plan exceed your spending limit."))
+			frappe.throw(
+				_(
+					"This plan and your pending server requests exceed your spending limit. Choose a smaller plan, or contact support to review your limit."
+				)
+			)
 
 	return composition, float(rate)
 
@@ -483,7 +518,11 @@ def image_shape(includes: list[dict], image: dict) -> dict[str, int]:
 		frappe.throw(_("Choose between 0.1 and 32 virtual CPUs."))
 
 	if shape["disk_mib"] < image["rootfs_size_mib"]:
-		frappe.throw(_("This plan's disk is smaller than the selected image."))
+		frappe.throw(
+			_(
+				"The selected image needs more disk space than this plan provides. Choose a plan with more storage."
+			)
+		)
 
 	return shape
 
@@ -493,6 +532,8 @@ def validate_guest_input(server_input: CreateServerInput) -> None:
 		frappe.throw(_("Choose saved SSH Keys or enter public keys, not both."))
 	if server_input.hostname and not DNS_LABEL.fullmatch(server_input.hostname):
 		frappe.throw(_("Use a valid lowercase guest hostname."))
+	if len(server_input.user_data.encode()) > MAXIMUM_USER_DATA_BYTES:
+		frappe.throw(_("Keep the user data under 16 KiB."))
 
 	for key in server_input.ssh_keys:
 		try:
