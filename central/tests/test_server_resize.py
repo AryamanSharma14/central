@@ -56,6 +56,25 @@ class TestServerResize(UnitTestCase):
 		self.client.update_disk.assert_not_called()
 		self.observe.assert_called_once_with(self.server)
 
+	def test_a_sleeping_server_wakes_before_it_stops_for_a_resize(self):
+		"""Atlas refuses to stop a sleeping VM, so a compute change starts it first."""
+		self.client.get_vm.side_effect = [
+			self.remote("paused"),
+			self.remote("paused"),
+			self.remote("running"),
+			self.remote("running"),
+			self.remote("stopped"),
+			self.remote("stopped"),
+			self.remote("running"),
+		]
+
+		resize_server(self.server, SHAPE)
+
+		self.assertEqual(
+			self.client.vm_action.call_args_list,
+			[call("vm-00001", "start"), call("vm-00001", "stop"), call("vm-00001", "start")],
+		)
+
 	def test_disk_only_grow_is_online_and_keeps_the_server_up(self):
 		"""Disk grows through the online disk API, so the server is neither stopped nor resized."""
 		self.client.get_vm.return_value = self.remote("running", 2000, 4096)
