@@ -394,7 +394,8 @@ class TestFanOutRun(IntegrationTestCase):
 		from central.billing.tests.utils import purge_teams
 
 		purge_teams(self.TEAMS)
-		frappe.db.delete("Error Log", {"method": run.BILLING_RUN_FAILURE})
+		for name in frappe.get_all("Error Log", filters={"method": run.BILLING_RUN_FAILURE}, pluck="name"):
+			frappe.delete_doc("Error Log", name, ignore_permissions=True)
 		frappe.db.commit()
 
 	def test_one_failing_team_does_not_take_the_run_down(self):
@@ -417,8 +418,10 @@ class TestFanOutRun(IntegrationTestCase):
 
 		# The casualty is logged under the one title an operator can count.
 		self.assertTrue(
-			frappe.db.exists(
-				"Error Log", {"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-b"}
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-b"},
 			)
 		)
 
@@ -629,8 +632,10 @@ class TestFanOutRun(IntegrationTestCase):
 		for team in self.TEAMS:
 			self.assertEqual(frappe.db.count("Invoice", {"team": team}), 1)
 		self.assertFalse(
-			frappe.db.exists(
-				"Error Log", {"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-b"}
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-b"},
 			)
 		)
 
@@ -649,8 +654,10 @@ class TestFanOutRun(IntegrationTestCase):
 
 		self.assertEqual(blocked.call_count, run.CONTENTION_RETRIES)
 		self.assertTrue(
-			frappe.db.exists(
-				"Error Log", {"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-a"}
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"method": run.BILLING_RUN_FAILURE, "reference_name": "team-fanout-a"},
 			)
 		)
 

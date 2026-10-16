@@ -172,8 +172,10 @@ class TestCargoFollowsAtlas(IntegrationTestCase):
 		self.assertTrue(self.instance.get_password("webhook_secret"))
 		self.assertEqual(self.instance.cargo_status, "Draft")
 		self.assertTrue(
-			frappe.db.exists(
-				"Error Log", {"reference_doctype": "Region", "reference_name": self.instance.name}
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"reference_doctype": "Region", "reference_name": self.instance.name},
 			)
 		)
 

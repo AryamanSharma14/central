@@ -351,8 +351,10 @@ class TestEmailFanout(EngineTestBase):
 		dispatch(TEAM, "logged_event", message="hello")
 
 		self.assertTrue(
-			frappe.db.exists(
-				"Error Log", {"method": ("like", "Notification email send failed: logged_event -> %")}
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"method": ("like", "Notification email send failed: logged_event -> %")},
 			)
 		)
 
@@ -716,7 +718,7 @@ class TestReportPilotEvent(EngineTestBase):
 		)[0]
 		self.assertEqual(row.title, "Resource limit breached: my-bench")
 		self.assertEqual(row.message, "my-bench: cpu_usage_limit at 95.0%")
-		self.assertEqual((row.action_label, row.action_route), ("View server", "/servers"))
+		self.assertEqual((row.action_label, row.action_route), ("View server", "/servers/"))
 
 
 class TestTemplateContext(EngineTestBase):
