@@ -2,6 +2,9 @@
 import { Alert, Button, Dialog, TextInput, useCall } from 'frappe-ui'
 import { computed, nextTick, type Ref, ref, watch } from 'vue'
 import { API, method } from '@/api/methods'
+import PaymentNetworkMark, {
+	type PaymentNetwork,
+} from '@/components/PaymentNetworkMark.vue'
 import { useSession } from '@/composables/useSession'
 import { useTopup } from '@/composables/useTopup'
 import { getErrorMessage } from '@/lib/feedback'
@@ -62,6 +65,11 @@ const icons: Record<string, string> = {
 	'RuPay Card': 'lucide-credit-card',
 	UPI: 'lucide-smartphone',
 	Netbanking: 'lucide-landmark',
+}
+const marks: Record<string, PaymentNetwork[]> = {
+	Card: ['visa', 'mastercard'],
+	'RuPay Card': ['rupay'],
+	UPI: ['upi'],
 }
 
 // Payment rail. INR always uses the Razorpay sheet; international currencies use a
@@ -272,10 +280,12 @@ watch(open, (isOpen) => {
 						<button
 							v-for="tile in instruments"
 							:key="tile.instrument"
+							type="button"
+							:aria-pressed="instrument === tile.instrument"
 							class="flex items-center gap-2 rounded-6 border p-3 text-left transition-colors"
 							:class="
 								instrument === tile.instrument
-									? 'border-outline-gray-4 bg-surface-gray-1'
+									? 'border-outline-gray-6 bg-surface-gray-2'
 									: 'border-outline-gray-2 hover:border-outline-gray-3'
 							"
 							@click="instrument = tile.instrument"
@@ -286,6 +296,18 @@ watch(open, (isOpen) => {
 								aria-hidden="true"
 							/>
 							<span class="text-sm text-ink-gray-9">{{ tile.label }}</span>
+							<span class="ml-auto flex shrink-0 items-center gap-1">
+								<span
+									v-if="instrument === tile.instrument"
+									class="lucide-circle-check mr-1 size-4 text-ink-gray-9"
+									aria-hidden="true"
+								/>
+								<PaymentNetworkMark
+									v-for="mark in marks[tile.instrument] ?? []"
+									:key="mark"
+									:network="mark"
+								/>
+							</span>
 						</button>
 					</div>
 				</div>
@@ -305,16 +327,6 @@ watch(open, (isOpen) => {
 					</div>
 				</div>
 				<div>
-					<p class="mb-1.5 text-p-sm text-ink-gray-5">Amount</p>
-					<div class="mb-2 flex flex-wrap gap-2">
-						<Button
-							v-for="p in presets"
-							:key="p"
-							:label="`${currencySymbol(currency)}${p.toLocaleString()}`"
-							:variant="Number(amount) === p ? 'solid' : 'subtle'"
-							@click="amount = p"
-						/>
-					</div>
 					<TextInput
 						v-model="amount"
 						autofocus
@@ -323,6 +335,19 @@ watch(open, (isOpen) => {
 						:placeholder="`Enter amount in ${currency}`"
 						min="1"
 					/>
+					<div
+						class="mt-2 flex flex-wrap gap-2"
+						role="group"
+						aria-label="Quick amounts"
+					>
+						<Button
+							v-for="p in presets"
+							:key="p"
+							:label="`${currencySymbol(currency)}${p.toLocaleString()}`"
+							:variant="Number(amount) === p ? 'solid' : 'subtle'"
+							@click="amount = p"
+						/>
+					</div>
 					<dl
 						v-if="gstRate && Number(amount) > 0"
 						class="mt-3 space-y-1 text-p-sm"
