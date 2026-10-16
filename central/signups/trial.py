@@ -12,7 +12,7 @@ from frappe.utils import (
 	nowdate,
 )
 
-from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
 from central.signups.funnel import capture_trial_event
@@ -93,11 +93,13 @@ def finish_conversion(site: str) -> None:
 	if document.trial_state != "Converted":
 		return
 
-	# A resize also stops and starts the server; two jobs must not race on power. The daily
-	# job sends the conversion again once the resize is done.
-	if ResourceAction.get_pending(document.server, "resize"):
+	# A resize or a power action also changes the server's power; two jobs must not race on it.
+	# The daily job sends the conversion again once that action is done.
+	if frappe.db.exists(
+		"Resource Action", {"resource_id": document.server, "status": ["in", PENDING_STATES]}
+	):
 		record_trial_error(
-			site, _("A plan change is running on this server. The conversion retries tomorrow.")
+			site, _("Another action is running on this server. The conversion retries tomorrow.")
 		)
 		return
 
