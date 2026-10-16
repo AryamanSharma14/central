@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Alert, Button, Select, TabButtons, Tabs, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
+import PaymentMethodFlow from '@/components/billing/PaymentMethodFlow.vue'
 import ChoiceCards from '@/components/common/ChoiceCards.vue'
 import CreateServerButton from '@/components/servers/CreateServerButton.vue'
 import CreationStatusPanel from '@/components/servers/CreationStatusPanel.vue'
@@ -79,6 +80,7 @@ const {
 	submitting,
 	submitError,
 } = useServerCreation()
+const paymentFlow = ref<InstanceType<typeof PaymentMethodFlow> | null>(null)
 
 const { setBreadcrumbs } = useBreadcrumbs()
 setBreadcrumbs([
@@ -145,7 +147,7 @@ watch(
 						"
 						:primary-action="{
 							label: 'Add payment method',
-							onClick: () => router.push('/billing'),
+							onClick: () => paymentFlow?.start(),
 						}"
 					/>
 
@@ -411,5 +413,6 @@ watch(
 				</ServerSummary>
 			</div>
 		</div>
+		<PaymentMethodFlow ref="paymentFlow" />
 	</div>
 </template>
