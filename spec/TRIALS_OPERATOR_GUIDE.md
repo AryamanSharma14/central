@@ -53,4 +53,5 @@ A trial team gets the welcome credit only when it adds a card while a trial is s
 | New Server page, no payment method | A note at the top: add a payment method to create servers and get the welcome credit. Create is off. |
 | Onboarding, billing step | A line that says to add a payment method in Billing to get the welcome credit. |
 | Trial ending, ended, deletion soon, deleted | An email and a notice in the **Trial** category. Customers can turn these off in their notification settings. |
-| Site's in-app billing panel | The trial end date and the days left. |
+| Site's in-app billing panel | The days left, the last day to add a card and get the credit, and that the site sleeps after Trial Idle Shutdown minutes without visitors. |
+| Console resize dialog on a trial server | The same, with an **Add payment method** button. After the card, the plans. |

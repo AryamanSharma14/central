@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import AddMethodDialog from '@/components/AddMethodDialog.vue'
 import EditBillingProfileDialog from '@/components/billing/EditBillingProfileDialog.vue'
 import { useBillingSetup } from '@/composables/useBillingSetup'
-import { formatDate, plural } from '@/lib/format'
+import { formatDate, money, plural } from '@/lib/format'
 import type { ServerTrial } from '@/types/billing'
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{ check: [] }>()
 
-const { requireSetup, setupDialogOpen, welcomeCredit } = useBillingSetup()
+const { requireSetup, setupDialogOpen } = useBillingSetup()
 const showAddMethod = ref(false)
 // A new card is confirmed by the gateway first, so the trial can stay open for a moment.
 const methodAdded = ref(false)
@@ -31,6 +31,18 @@ const description = computed(() =>
 		? `This site is stopped. Add a payment method before ${formatDate(props.trial.deletes_on)} to keep it and choose a plan.`
 		: 'Add a payment method to keep this site and choose a bigger plan.',
 )
+
+// The card earns the credit only before the trial ends, so the line names that day.
+const credit = computed(() => {
+	const offer = props.trial.credit
+	if (!offer) return null
+	const amount = money(offer.amount, offer.currency, {
+		trimTrailingZeros: true,
+	})
+	return offer.ends_on
+		? `Add it by ${formatDate(offer.ends_on)} and get ${amount} credit.`
+		: `Get ${amount} credit when you add it.`
+})
 
 function addMethod(): void {
 	if (requireSetup()) showAddMethod.value = true
@@ -51,9 +63,15 @@ function onMethodAdded(): void {
 		/>
 
 		<ul class="space-y-1.5 text-p-sm text-ink-gray-7">
-			<li v-if="welcomeCredit">You get {{ welcomeCredit }} when you add it.</li>
+			<li v-if="credit">{{ credit }}</li>
 			<li>
-				After the credit is used, we charge this card for your monthly bill.
+				{{ credit ? 'After the credit is used, we' : 'We' }}
+				charge this card for your monthly bill.
+			</li>
+			<li v-if="trial.state === 'Active' && trial.sleeps_after_minutes">
+				Until you add it, your site sleeps after
+				{{ plural(trial.sleeps_after_minutes, 'minute') }}
+				without visitors. The next visit wakes it in a few seconds.
 			</li>
 			<li>Your site and its data stay as they are.</li>
 		</ul>

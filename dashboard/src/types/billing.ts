@@ -633,4 +633,8 @@ export interface ServerTrial {
 	ends_on: string
 	days_left: number
 	deletes_on: string | null
+	/** The welcome credit a card adds before the trial ends, or null. */
+	credit?: WelcomeCredit | null
+	/** Idle minutes before the trial server sleeps. */
+	sleeps_after_minutes?: number
 }
