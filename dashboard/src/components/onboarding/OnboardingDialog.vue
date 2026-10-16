@@ -109,9 +109,9 @@ async function skipOnboarding(): Promise<void> {
 		>
 			<div v-if="current" :key="current.key">
 				<p class="text-p-base text-ink-gray-6">{{ current.description }}</p>
-				<!-- Every step gets the same height, so the dialog never resizes between
-             steps or while a step loads. A longer step scrolls inside it. -->
-				<div class="-mx-1 mt-4 h-96 overflow-y-auto px-1">
+				<!-- On a wider screen every step gets the same height, so the dialog never
+             resizes between steps. A phone lets the step grow, so nothing is cut off. -->
+				<div class="-mx-1 mt-4 px-1 sm:h-96 sm:overflow-y-auto">
 					<component
 						:is="current.component"
 						ref="stepHandle"
@@ -122,7 +122,10 @@ async function skipOnboarding(): Promise<void> {
 		</Transition>
 
 		<template #actions>
-			<div class="flex w-full items-center justify-between gap-2">
+			<!-- Stacked on a phone, so the primary action never runs off the edge. -->
+			<div
+				class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between"
+			>
 				<Button
 					v-if="canSkip"
 					variant="ghost"
@@ -130,9 +133,9 @@ async function skipOnboarding(): Promise<void> {
 					:disabled="busy"
 					@click="skipOnboarding"
 				/>
-				<span v-else />
+				<span v-else class="hidden sm:block" />
 
-				<div class="flex gap-2">
+				<div class="flex flex-col-reverse gap-2 sm:flex-row">
 					<Button
 						v-if="canSkip"
 						label="Skip for now"

@@ -779,9 +779,11 @@ def create_topup_order(
 	# top-up attaches to the one customer every later charge reuses (the card #05 and
 	# mandate #08 paths share this same Gateway Customer row). ensure_gateway_customer
 	# commits the row the instant it mints, so a failed order can't orphan it.
+	from central.billing.gateways.base import customer_safe_gateway_errors
 	from central.billing.payments.payments import ensure_gateway_customer
 
-	customer_id = ensure_gateway_customer(team, gw, adapter)
+	with customer_safe_gateway_errors():
+		customer_id = ensure_gateway_customer(team, gw, adapter)
 	receipt = f"topup-{team}-{frappe.generate_hash(length=8)}"
 	notes = {"team": team, "purpose": "wallet_topup"}
 	# Both rails collect the card in-app: Razorpay in its hosted sheet over the
@@ -795,7 +797,8 @@ def create_topup_order(
 	# The split rides with the order, so the wallet gets what was ordered even if the
 	# tax rate changes before the payment is captured.
 	notes["credit"] = str(amount)
-	handles = adapter.create_order(total, currency, receipt, notes=notes, customer=customer_id)
+	with customer_safe_gateway_errors():
+		handles = adapter.create_order(total, currency, receipt, notes=notes, customer=customer_id)
 	# The SPA branches on adapter_key: Stripe → PaymentIntent Element, Razorpay → hosted
 	# sheet, Paypal → PayPal Buttons against the returned order_id (ADR 0007). For a
 	# Via-Razorpay PayPal top-up the adapter_key is Razorpay (settlement runs there) and

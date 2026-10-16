@@ -102,8 +102,12 @@ export function useAddStripeCard({
 		error.value = ''
 		try {
 			const order = await orderPromise // usually already resolved by now
+			// The setup call's own message says why it failed, such as the provider being down.
 			if (!order?.client_secret)
-				throw new Error('Could not start card setup. Please try again.')
+				throw (
+					initiate.error ??
+					new Error('Could not start card setup. Please try again.')
+				)
 
 			const { paymentMethod, error: pmError } =
 				await stripe.createPaymentMethod({
