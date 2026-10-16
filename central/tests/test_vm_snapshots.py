@@ -281,11 +281,7 @@ class TestSnapshotSchedules(SnapshotTestCase):
 		)
 		self.assertIn(
 			"image in use",
-			frappe.db.get_value(
-				"Error Log",
-				frappe.db.get_value("VM Snapshot", expired.name, "error_log"),
-				"error",
-			),
+			frappe.get_doc("Error Log", frappe.db.get_value("VM Snapshot", expired.name, "error_log")).error,
 		)
 
 
