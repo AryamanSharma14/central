@@ -67,6 +67,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 | A trial site from the signup flow, Team without a payment method | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned servers whose site Central has not recorded yet than Central Settings, Trial Servers per Team. No credit is needed. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
+| Resize a trial server | Refused, because a trial server has no subscription. The console resize dialog and the in-app plan list ask for a payment method first. `get_composed_config` returns `trial`, and `billing_api.change_plan` refuses with "Add a payment method to change this site's plan." |
 
 ### Console
 

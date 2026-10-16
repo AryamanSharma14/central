@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils.translations import _lt
 
 from central.errors import handle_resource_operation
@@ -89,6 +90,16 @@ def claim_site(name: str) -> dict:
 		site.mark_claimed()
 
 	return state
+
+
+# nosemgrep: guest-whitelisted-method -- the signed link is checked in PlanChange.from_signed_link.
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def plan_change_progress(action: str, site: str, signature: str) -> dict:
+	"""Progress of a site's plan change, for the public waiting page."""
+	from central.infrastructure.doctype.site.plan_change import PlanChange
+
+	return PlanChange.from_signed_link(action, site, signature).get_progress()
 
 
 @frappe.whitelist(methods=["GET"])
