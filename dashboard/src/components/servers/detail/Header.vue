@@ -133,7 +133,7 @@ const menu = computed(() =>
 
 <template>
 	<header
-		class="flex flex-col gap-4 rounded-6 p-4 md:flex-row md:items-center md:justify-between"
+		class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
 	>
 		<div class="flex min-w-0 items-center gap-3">
 			<ProviderAvatar

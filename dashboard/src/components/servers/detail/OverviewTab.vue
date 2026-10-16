@@ -266,7 +266,7 @@ const usage = computed(() => {
 
 		<div
 			v-if="charts.length"
-			class="grid gap-3 md:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid-rows-2"
+			class="grid gap-3 md:grid-cols-2 lg:max-h-128 lg:min-h-0 lg:flex-1 lg:grid-rows-2"
 		>
 			<ServerMetricChart
 				v-for="chart in charts"
