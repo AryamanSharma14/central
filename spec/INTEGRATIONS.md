@@ -159,6 +159,24 @@ An app on a site, such as Raven, asks Central for a token through Pilot's Centra
 
 The service gets Central's public keys from `central.api.jwks.get_jwks` and verifies the signature, `iss`, `aud`, `exp` and `scope`. Then the service decides what access the team gets, for example a team account and its API keys. The Pilot credential names the team and its server, so a site cannot get a token for another team or for a hostname that the team does not serve. A service uses `hosts` to accept a site's hostname as the team's. A Pilot refuses a `team-identity` token as a login token.
 
+## How does a Pilot read private GitHub repositories?
+
+Central owns the GitHub App, set on the GitHub tab of Central Settings. The App private key and secrets stay in Central. A Pilot gets only a token for one repository, with `contents: read`, that expires in about an hour.
+
+```text
+Pilot ── start_connection ──> Central ── authorize, install ──> GitHub
+  ^                             │ user with server:console picks repositories
+  └──── repository_token ───────┘ GitHub Connection (grant)
+```
+
+1. Pilot calls `central.api.integrations.github.start_connection(return_url)` with its credential and gets a link to `/dashboard/github/connect/<attempt>`. The attempt lives in Redis for 1 hour after the last activity. The `return_url` lives 24 hours, so an expired link still leads back to the server.
+2. The first user who opens the link must hold `server:console` on the Pilot's server. The attempt binds to that user. The OAuth `state` and a PKCE verifier bind the GitHub callback to the attempt and the user's session.
+3. The user authorizes or installs the App, then selects repositories in one or more accounts. The user must be a GitHub admin of each one. `complete_connection` saves one `GitHub Connection` per Pilot credential and installation. An account sent with no repositories loses its grant.
+4. Pilot calls `status`, `repositories` and `repository_token(repository)` with its credential. Each grant change increases the connection `version`. Central refuses a token when the grant changed while GitHub minted it.
+5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, and removes repositories the installation lost. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
+
+The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab.
+
 ## How does the trial flow work?
 
 1. Authenticate the customer and resolve the Team.
