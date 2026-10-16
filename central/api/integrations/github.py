@@ -153,7 +153,8 @@ def oauth_callback(state: str, code: str | None = None, **kwargs) -> None:
 	if code and connection_attempt and frappe.session.user == connection_attempt.user:
 		connection_attempt.set_user_token(GitHubApp().exchange_code(code, connection_attempt.code_verifier))
 
-	_redirect(f"/dashboard/github/connect/{attempt_id}")
+	# The connect page sends the user straight to GitHub unless GitHub came back without a code.
+	_redirect(f"/dashboard/github/connect/{attempt_id}{'' if code else '?cancelled=1'}")
 
 
 # nosemgrep: guest-whitelisted-method -- the HMAC signature authenticates GitHub.

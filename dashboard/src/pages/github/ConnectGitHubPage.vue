@@ -9,7 +9,7 @@ import {
 	ScrollArea,
 	TextInput,
 } from 'frappe-ui'
-import { computed, ref } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import frappeCloudLogo from '@/assets/fc-logo.svg'
 import { useGitHubConnection } from '@/composables/useGitHubConnection'
@@ -63,6 +63,21 @@ function goTo(url: string) {
 	window.location.assign(url)
 }
 
+const authorizeRedirectUrl = computed(() => {
+	const attempt = connection.value
+	return attempt &&
+		!attempt.is_authorized &&
+		!attempt.is_expired &&
+		!route.query.cancelled
+		? attempt.authorize_url
+		: ''
+})
+
+watchEffect(() => {
+	if (authorizeRedirectUrl.value)
+		window.location.replace(authorizeRedirectUrl.value)
+})
+
 const grantLabel = computed(() => {
 	const count = selectedCount.value
 	if (!count) return 'Save changes'
@@ -97,7 +112,10 @@ const grantLabel = computed(() => {
 				</span>
 			</div>
 
-			<LoadingText v-if="loading" text="Loading" />
+			<LoadingText
+				v-if="loading || authorizeRedirectUrl"
+				:text="authorizeRedirectUrl ? 'Redirecting to GitHub' : 'Loading'"
+			/>
 
 			<template v-else-if="loadError || connection?.is_expired">
 				<h1 class="text-2xl font-semibold text-ink-gray-9">

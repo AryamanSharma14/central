@@ -159,6 +159,17 @@ class IntegrationTestGitHubConnection(IntegrationTestCase):
 		app.return_value.exchange_code.assert_called_once_with("code", attempt.code_verifier)
 		attempt.finish()
 
+	def test_a_cancelled_authorization_does_not_send_the_user_back_to_github(self):
+		attempt = GitHubConnectionAttempt.start(self.credential, "https://bench.example.test/settings")
+		attempt.bind(self.owner)
+		frappe.set_user(self.owner)
+
+		oauth_callback(state=attempt.state, error="access_denied")
+		self.assertEqual(
+			frappe.local.response["location"], f"/dashboard/github/connect/{attempt.attempt_id}?cancelled=1"
+		)
+		attempt.finish()
+
 	def test_a_webhook_needs_the_signature_of_the_webhook_secret(self):
 		settings = MagicMock(github_app_id="1", github_client_id="client", github_app_slug="app")
 		settings.get_password.return_value = "secret"
