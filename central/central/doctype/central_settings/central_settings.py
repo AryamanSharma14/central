@@ -52,6 +52,12 @@ class CentralSettings(Document):
 		self.validate_limits()
 		self.validate_common_site_config()
 
+	def on_update(self) -> None:
+		from central.infrastructure.doctype.github_connection.github_connection import GitHubConnection
+
+		if self.has_value_changed("github_app_id"):
+			GitHubConnection.disable_all()
+
 	def validate_limits(self) -> None:
 		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""
 		for fieldname in ("invitations_per_hour", "sign_in_code_attempts", "sign_in_codes_per_email"):

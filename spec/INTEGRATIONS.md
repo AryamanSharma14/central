@@ -177,7 +177,7 @@ Pilot ── start_connection ──> Central ── authorize, install ──> 
 4. Pilot calls `status`, `repositories` and `repository_token(repository)` with its credential. Each grant change increases the connection `version`. Central refuses a token when the grant changed while GitHub minted it.
 5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, removes repositories the installation lost, and updates the name of a renamed repository. The App must subscribe to the `repository` event for renames. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
 
-The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab.
+The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab. A new App ID disables every grant, so each Pilot must connect GitHub again.
 
 ## How does the trial flow work?
 

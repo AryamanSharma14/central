@@ -127,6 +127,12 @@ class GitHubConnection(Document):
 		self.save(ignore_permissions=True)
 
 	@staticmethod
+	def disable_all() -> None:
+		"""Disable every grant. Installations of a replaced GitHub App do not work with the new App."""
+		for name in frappe.get_all("GitHub Connection", filters={"status": "Active"}, pluck="name"):
+			frappe.get_doc("GitHub Connection", name, for_update=True).disable()
+
+	@staticmethod
 	def disable_installation(installation_id: str) -> None:
 		for connection in GitHubConnection._lock_active(installation_id):
 			connection.disable()

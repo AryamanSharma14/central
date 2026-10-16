@@ -231,6 +231,8 @@ def manifest_callback(code: str, state: str) -> None:
 		}
 	)
 	settings.save()
+	# Frappe rolls back a GET request, and GitHub's code works only once.
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep the App credentials of a GET request
 	_redirect("/app/central-settings")
 
 

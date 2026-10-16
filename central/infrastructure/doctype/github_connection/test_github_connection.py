@@ -45,6 +45,7 @@ class IntegrationTestGitHubConnection(IntegrationTestCase):
 		self.team = make_team("GitHub Team", self.owner)
 		PilotCredential.mint(team=self.team, pilot_credential_id="pilot-github")
 		self.credential = frappe.get_doc("Pilot Credential", "pilot-github")
+		frappe.db.delete("GitHub Connection")
 
 	def test_a_new_grant_replaces_the_old_one_and_bumps_the_version(self):
 		first = GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
@@ -55,6 +56,18 @@ class IntegrationTestGitHubConnection(IntegrationTestCase):
 		self.assertFalse(first.is_current(1))
 		with self.assertRaises(GitHubRepositoryNotGranted):
 			GitHubConnection.find_repository(self.credential, PRIVATE["full_name"])
+
+	def test_a_new_github_app_disables_the_old_grants(self):
+		connection = GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE])
+		settings = frappe.get_doc("Central Settings")
+		self.addCleanup(
+			frappe.db.set_single_value, "Central Settings", "github_app_id", settings.github_app_id
+		)
+		settings.github_app_id = f"{settings.github_app_id or ''}-replaced"
+		settings.save()
+
+		connection.reload()
+		self.assertEqual(connection.status, "Disabled")
 
 	def test_a_repository_removed_on_github_is_no_longer_granted(self):
 		GitHubConnection.grant(self.credential, INSTALLATION, [PRIVATE, OTHER])
