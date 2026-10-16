@@ -1,10 +1,8 @@
 import { expect, test } from '../trials'
 
-// The progress page is public, so these tests open it without signing in to the page itself.
-// The site's address never answers in a test, so the live page stops at Landing. The preview
-// covers Ready.
-
 test('The progress page follows the resize to the last step', async ({ browser, trials }) => {
+	// The page is public, so it opens in a context with no session. A seeded site never
+	// answers, so the live page stops at Landing; the preview test covers Ready.
 	const trial = await trials.start({ trialState: '' })
 	const change = await trials.queuePlanChange(trial)
 	const page = await (await browser.newContext()).newPage()
@@ -57,7 +55,7 @@ test('The preview lands the plane and lets the user stay on the page', async ({ 
 	await expect(page.getByText('You can open your site when you are ready.')).toBeVisible()
 })
 
-// Central serves the page itself; the console may run on a dev server in front of it.
+// Central serves the page; the console under test may run on a dev server in front of it.
 function progressOrigin() {
 	return process.env.E2E_SITE_URL || 'http://central.localhost:8001'
 }
