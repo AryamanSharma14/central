@@ -8,6 +8,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import set_request
 
 from central.api.pilot import config, enroll
+from central.central.doctype.app_rollout_hold.app_rollout_hold import AppRolloutHold
 from central.central.doctype.central_sso_settings.central_sso_settings import CentralSSOSettings
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.sso import jwks_url, mint_bootstrap_token
@@ -101,5 +102,11 @@ class TestEnrollment(IntegrationTestCase):
 		)
 		self.assertEqual(
 			config()["app_rollout"],
-			{"start_percent": 10, "step_percent": 20, "interval_hours": 4, "max_percent": 50},
+			{
+				"start_percent": 10,
+				"step_percent": 20,
+				"interval_hours": 4,
+				"max_percent": 50,
+				"held_commits": AppRolloutHold.get_held_commits(),
+			},
 		)

@@ -101,13 +101,17 @@ class CentralSettings(Document):
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
 
-	def app_rollout(self) -> dict[str, int]:
-		"""The steps Pilot uses to offer a new app update to more servers over time."""
+	def app_rollout(self) -> dict[str, int | list[str]]:
+		"""The steps Pilot uses to offer a new app update to more servers over time, and the
+		releases it must not offer."""
+		from central.central.doctype.app_rollout_hold.app_rollout_hold import AppRolloutHold
+
 		return {
 			"start_percent": self.app_rollout_start_percent,
 			"step_percent": self.app_rollout_step_percent,
 			"interval_hours": self.app_rollout_interval_hours,
 			"max_percent": self.app_rollout_max_percent,
+			"held_commits": AppRolloutHold.get_held_commits(),
 		}
 
 	def feature_flags(self) -> dict[str, bool]:
