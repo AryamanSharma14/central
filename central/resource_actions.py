@@ -44,7 +44,7 @@ from central.server_models import (
 	ServerCreation,
 	SiteCreation,
 )
-from central.signups.trial import has_active_payment_method
+from central.signups.trial import has_active_payment_method, is_free_trial_creation
 from central.utils.units import MIB_PER_GIB, MILLICORES_PER_VCPU
 
 
@@ -112,7 +112,8 @@ def submit_request(
 	if existing := _repeated_request(server_input, digest):
 		return existing.customer_status()
 
-	configuration, rate = _build_server_configuration(server_input, snapshot, is_trial_site=bool(site))
+	is_free_trial = bool(site) and is_free_trial_creation(server_input.team, resource_type)
+	configuration, rate = _build_server_configuration(server_input, snapshot, is_free_trial)
 	configuration.site = site
 
 	return ResourceAction.queue(
@@ -123,6 +124,7 @@ def submit_request(
 		resource_type=resource_type,
 		subdomain=subdomain,
 		product=site.product if site else None,
+		is_free_trial=int(is_free_trial),
 		request_payload=configuration.model_dump(),
 		request_key=server_input.request_key,
 		request_digest=digest,
@@ -243,7 +245,7 @@ def _repeated_request(server_input: CreateServerInput, digest: str):
 
 
 def _build_server_configuration(
-	server_input: CreateServerInput, snapshot: str | None, is_trial_site: bool
+	server_input: CreateServerInput, snapshot: str | None, is_free_trial: bool
 ) -> tuple[ServerCreation, float]:
 	"""Resolve the authorized image, purchasable composition, and saved configuration."""
 	image = (
@@ -264,7 +266,7 @@ def _build_server_configuration(
 		server_input.plan,
 		includes,
 		server_input.sub_category,
-		is_trial_site,
+		is_free_trial,
 	)
 	validate_guest_input(server_input)
 	# Check the saved keys now so the form shows the error. Dispatch reads their text, which a
@@ -317,11 +319,10 @@ def validate_purchase(
 	plan: str | None,
 	includes: list[dict] | None,
 	sub_category: str | None,
-	is_trial_site: bool = False,
+	is_free_trial: bool = False,
 ) -> tuple[list[dict], float]:
 	"""The composition and monthly rate of a server the team may buy. A free trial site is not
 	bought, so only the trial limit applies to it."""
-	is_free_trial = is_trial_site and not has_active_payment_method(team)
 	trial = is_free_trial or bool(frappe.db.get_value("Team", team, "is_staging_trial"))
 	if is_free_trial:
 		validate_trial_site(team)
@@ -443,7 +444,7 @@ def trial_site_count(team: str) -> int:
 		.select(Count("*"))
 		.where(
 			(request.team == team)
-			& (request.resource_type == "Site")
+			& (request.is_free_trial == 1)
 			& request.status.isin(PENDING_STATES)
 			& (request.server.isnull() | (request.server == ""))
 		)
@@ -462,7 +463,7 @@ def trial_site_count(team: str) -> int:
 		.select(Count("*"))
 		.where(
 			(request.team == team)
-			& (request.resource_type == "Site")
+			& (request.is_free_trial == 1)
 			& (request.action == "create")
 			& (machine.status != "Terminated")
 			& ~request.server.isin(started)

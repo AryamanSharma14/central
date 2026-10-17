@@ -24,7 +24,7 @@ def start_trial(site: Site) -> None:
 	if site.trial_state or not site.is_trial():
 		return
 
-	if has_active_payment_method(site.team):
+	if not site.get_creation_request().is_free_trial:
 		site.trial_state = "Converted"
 		return
 
@@ -32,17 +32,22 @@ def start_trial(site: Site) -> None:
 	site.trial_ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
 
 
+def convert_if_paid(site: Site) -> None:
+	"""Convert a new trial site whose team added a payment method before Central recorded it."""
+	if site.trial_state == "Active" and has_active_payment_method(site.team):
+		convert_site(site)
+
+
 def is_billing_deferred(server: str) -> bool:
 	"""Whether the server runs a free trial site, so it has no subscription yet. Before Central
-	records the site, a signup's server counts as a trial unless its team already pays."""
+	records the site, the creation request says whether it is a free trial."""
 	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
 	if state:
 		return state in ("Active", "Ended", "Deleted")
 
-	request = frappe.db.get_value(
-		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"], as_dict=True
+	return bool(
+		frappe.db.get_value("Resource Action", {"server": server, "action": "create"}, "is_free_trial")
 	)
-	return bool(request) and is_free_trial_creation(request.team, request.resource_type)
 
 
 def is_free_trial_creation(team: str, resource_type: str) -> bool:

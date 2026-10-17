@@ -42,8 +42,8 @@ Central records the site when the region first reports its machine with an addre
 
 | Trial State | When | What Central does |
 |---|---|---|
-| Active | Central records the site and its Team has no active payment method | Sets Trial Ends On. |
-| Converted | Central records the site and its Team already has an active payment method | Nothing. The site is not a trial. |
+| Active | Central records the site and its creation request is a free trial | Sets Trial Ends On. When the Team added a payment method before Central recorded the site, the site converts at once. |
+| Converted | Central records the site and its creation request is not a free trial | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
 | Deleted | Trial Deletes On is reached and the server is Terminated | Asks for a normal terminate action each day until the server is Terminated, then sets the state. |
 
@@ -77,7 +77,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 ### Billing and conversion
 
-A trial server has no subscription, so a trial creates no invoice. Before Central records the site, a server from the signup flow counts as a trial unless its Team already has an active payment method. The daily backfill of missing subscriptions skips these servers too.
+A trial server has no subscription, so a trial creates no invoice. Central decides once, when the signup sends its creation request, whether the site is a free trial. It stores the answer in Free Trial on the Resource Action. Every later step reads that value and does not check the payment method again, so a card added or removed during creation does not change it. The daily backfill of missing subscriptions skips these servers too.
 
 When a payment method of the Team becomes active, every Active or Ended trial site of the Team becomes Converted:
 

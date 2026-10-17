@@ -24,6 +24,7 @@ class TestTrialLifecycle(SiteOnAMachine):
 			self.server.name,
 			server=self.server.name,
 			resource_type="Site",
+			is_free_trial=1,
 			request_key="request-" + frappe.generate_hash(length=8),
 			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": None}},
 		)
@@ -96,11 +97,38 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertFalse(self.site().trial_state)
 
 	def test_a_team_that_pays_has_no_trial(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "is_free_trial", 0)
+		site = self.record_site_again()
+
+		self.assertEqual(site.trial_state, "Converted")
+		self.assertIsNone(site.trial_ends_on)
+
+	def test_a_card_cancelled_before_the_site_is_recorded_keeps_the_server_paid(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "is_free_trial", 0)
+		with patch("central.signups.trial.has_active_payment_method", return_value=False):
+			site = self.record_site_again()
+
+		self.assertEqual(site.trial_state, "Converted")
+		self.assertFalse(trial.is_billing_deferred(self.server.name))
+
+	def test_a_card_added_before_the_site_is_recorded_converts_it_on_record(self):
+		self.server.db_set("status", "Running")
 		with patch("central.signups.trial.has_active_payment_method", return_value=True):
 			site = self.record_site_again()
 
 		self.assertEqual(site.trial_state, "Converted")
-		self.assertIsNone(site.trial_ends_on)
+		self.assertEqual(self.sent_events(), ["trial_converted"])
+		self.assert_conversion_queued()
+
+	def test_the_patch_marks_creations_that_started_a_trial(self):
+		from central.patches.v0_0 import set_free_trial_on_creations
+
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "is_free_trial", 0)
+		set_free_trial_on_creations.execute()
+
+		self.assertEqual(
+			frappe.db.get_value("Resource Action", {"server": self.server.name}, "is_free_trial"), 1
+		)
 
 	def test_a_site_that_is_not_a_trial_has_no_trial_state(self):
 		frappe.db.delete("Resource Action", {"server": self.server.name})
@@ -208,7 +236,11 @@ class TestTrialLifecycle(SiteOnAMachine):
 		frappe.db.set_value(
 			"Resource Action",
 			{"server": self.server.name},
-			{"resource_type": "Server", "request_payload": '{"image_tags": {"purpose": "pilot"}}'},
+			{
+				"resource_type": "Server",
+				"is_free_trial": 0,
+				"request_payload": '{"image_tags": {"purpose": "pilot"}}',
+			},
 		)
 		self.record_site_again()
 

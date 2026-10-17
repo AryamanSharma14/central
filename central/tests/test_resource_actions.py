@@ -316,9 +316,12 @@ class TestResourceActions(IntegrationTestCase):
 		self.client.return_value.create_vm.side_effect = AtlasConnectionError("region refused")
 		_process_locked(name)
 
-		frappe.get_doc("Resource Action", name).retry()
+		self.assertTrue(frappe.db.get_value("Resource Action", name, "is_free_trial"))
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			frappe.get_doc("Resource Action", name).retry()
 
-		self.assertTrue(self.purchase.call_args.kwargs["is_trial_site"])
+		# A card added after the request does not change what the request was.
+		self.assertTrue(self.purchase.call_args.kwargs["is_free_trial"])
 
 	def test_a_free_trial_site_gets_no_subscription_but_a_paid_server_does(self):
 		_process_locked(self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"])

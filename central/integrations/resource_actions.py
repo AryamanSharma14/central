@@ -245,10 +245,7 @@ def _create_payload(request) -> dict:
 def idle_shutdown_seconds(request) -> int:
 	"""How long a free trial or staging machine may sit idle before its region puts it to sleep.
 	A paid server, or one its owner resized, never sleeps."""
-	from central.signups.trial import is_free_trial_creation
-
-	is_trial = is_free_trial_creation(request.team, request.resource_type)
-	if not is_trial and not frappe.db.get_value("Team", request.team, "is_staging_trial"):
+	if not request.is_free_trial and not frappe.db.get_value("Team", request.team, "is_staging_trial"):
 		return 0
 
 	minutes = frappe.get_cached_value("Central Settings", "Central Settings", "trial_idle_shutdown_minutes")
@@ -262,11 +259,10 @@ def _finalize(request) -> None:
 		server_id = request.server_id
 		if not request.server:
 			from central.billing.catalog.subscriptions import create_server_subscription
-			from central.signups.trial import is_free_trial_creation
 
 			VirtualMachine.create_from_action(request, server_id)
 			# A free trial has no subscription. Converting the trial opens it.
-			if not is_free_trial_creation(request.team, request.resource_type):
+			if not request.is_free_trial:
 				create_server_subscription(request, server_id)
 			PilotCredential.link_server(request.credential, server_id)
 			UserMailAccount.link_server(request.name, server_id)
