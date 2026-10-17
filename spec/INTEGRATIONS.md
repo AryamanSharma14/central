@@ -179,6 +179,31 @@ Pilot ── start_connection ──> Central ── authorize, install ──> 
 
 The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab. A new App ID disables every grant, so each Pilot must connect GitHub again.
 
+## How does Central stop a bad app release?
+
+Pilot offers a new app release to a share of servers that grows over time. Pilot gets the steps from `central.api.pilot.config` as `app_rollout`: `start_percent`, `step_percent`, `interval_hours`, `max_percent` and `held_commits`. Pilot does not offer a commit in `held_commits`.
+
+```text
+Pilot ── update result ──> Datum ──> ClickHouse (one per region)
+                                          │ every 15 minutes
+                                 Insights alert ── POST rows ──> central.api.integrations.insights.hold_app_releases
+                                                                        │
+Pilot <── config: held_commits ─────────────────────────────── App Rollout Hold
+```
+
+1. After each app update, Pilot writes a `success` or `failed` line that Datum stores in `datum.logs` with `service = 'app_updates'`.
+2. An Insights alert for each region runs a query on that table. The query returns each release where at least 5 servers updated and more than 20% of them failed. It uses the last result of each server. The limits are in the query, so a change needs no release.
+3. The alert posts its rows to `hold_app_releases`. Each row has `app`, `to_commit`, `failed`, `total` and `error`. Central refuses the whole request when a row has a different shape, so a wrong alert setup fails in Insights and does not hold part of the batch.
+4. Central adds one **App Rollout Hold** for each new commit. The commit is the record name, so a later alert does not add a second hold.
+5. To offer the release again, an operator ticks **Released** on the hold. A later alert does not hold that commit again.
+
+Insights signs in with an OAuth bearer token. The token belongs to a user that has only the **App Rollout Alert** role, so the token can only hold releases. To set it up:
+
+1. Create the user and give it the App Rollout Alert role.
+2. Create an OAuth Client, and an OAuth Bearer Token for that client and user that expires in 1 year.
+3. In Insights, for each region's ClickHouse data source, save the query and add an alert with the channel Webhook, the URL `https://<central>/api/method/central.api.integrations.insights.hold_app_releases`, and the bearer token.
+4. Before the token expires, or when it may have leaked, create a new token, put it in each alert, and revoke the old token. A leaked token can hold releases, but it cannot release a hold or read data.
+
 ## How does the trial flow work?
 
 1. Authenticate the customer and resolve the Team.
