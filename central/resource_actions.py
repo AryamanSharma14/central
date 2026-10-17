@@ -430,9 +430,7 @@ def validate_trial_site(team: str) -> None:
 
 
 def trial_site_count(team: str) -> int:
-	"""Open trial sites, pending site creations, and provisioned servers whose site Central has
-	not recorded yet, across every team of the team's owner, so a new team gives no new trials.
-	Locking reads, for the same reason as reserved_rate."""
+	"""Open trial sites, pending site creations, and provisioned servers whose site Central has not recorded yet, across every team of the team's owner. Locking reads, for the same reason as reserved_rate."""
 	owner = frappe.db.get_value("Team", team, "owner_user")
 	teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name") if owner else [team]
 	site = frappe.qb.DocType("Site")

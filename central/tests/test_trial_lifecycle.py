@@ -146,6 +146,22 @@ class TestTrialLifecycle(SiteOnAMachine):
 			frappe.db.get_value("Resource Action", {"server": self.server.name}, "is_free_trial"), 1
 		)
 
+	def test_the_patch_marks_a_pending_creation_that_has_no_server_yet(self):
+		from central.patches.v0_0 import set_free_trial_on_creations
+
+		pending = ResourceAction.queue(
+			"create",
+			self.team.name,
+			self.region.name,
+			"pending-" + frappe.generate_hash(length=8),
+			resource_type="Site",
+			request_key="request-" + frappe.generate_hash(length=8),
+			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": None}},
+		)
+		set_free_trial_on_creations.execute()
+
+		self.assertEqual(frappe.db.get_value("Resource Action", pending.name, "is_free_trial"), 1)
+
 	def test_a_site_that_is_not_a_trial_has_no_trial_state(self):
 		frappe.db.delete("Resource Action", {"server": self.server.name})
 
@@ -299,6 +315,20 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(site.trial_state, "Converted")
 		self.assertFalse(site.trial_error)
 
+	def test_a_converted_server_that_is_still_starting_holds_its_rate(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.site().db_set("trial_state", "Converted")
+
+		self.assertEqual(trial.get_starting_rate(self.team.name), 30)
+
+	def test_a_trial_waits_while_another_conversion_uses_the_limit(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.headroom.return_value = 40
+		with patch("central.signups.trial.get_starting_rate", return_value=20):
+			self.assertFalse(trial.convert_within_limit(self.site()))
+
+		self.assertEqual(self.site().trial_state, "Active")
+
 	def test_an_ended_trial_above_the_spending_limit_cannot_be_kept(self):
 		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
 		self.headroom.return_value = 0
@@ -347,6 +377,14 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.site().db_set("trial_state", "Ended")
 		with self.set_user("Guest"), self.assertRaises(frappe.PermissionError):
 			keep_trial_site(self.team.name, self.server.resource_id)
+
+	def test_only_a_billing_manager_is_offered_to_keep_a_trial(self):
+		self.site().db_set("trial_state", "Ended")
+		with (
+			patch("central.signups.trial.has_active_payment_method", return_value=True),
+			self.set_user("Guest"),
+		):
+			self.assertFalse(trial.get_status(self.server.name)["can_keep"])
 
 	def test_a_sleeping_server_is_subscribed_when_its_trial_converts(self):
 		self.server.db_set("status", "Paused")
@@ -463,7 +501,6 @@ class TestTrialLifecycle(SiteOnAMachine):
 			submit_command("start", self.team.name, self.server.name)
 
 	def test_a_team_has_a_limited_number_of_free_trial_sites(self):
-
 		with self.change_settings("Central Settings", trial_servers_per_team=1):
 			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
 				validate_trial_site(self.team.name)
@@ -494,7 +531,6 @@ class TestTrialLifecycle(SiteOnAMachine):
 				validate_trial_site(self.team.name)
 
 	def test_the_billing_panel_reads_the_open_trial_of_the_server(self):
-
 		status = trial.get_status(self.server.name)
 		self.assertEqual(status["state"], "Active")
 		self.assertEqual(status["days_left"], 14)

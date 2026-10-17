@@ -12,6 +12,7 @@ from frappe.utils import (
 	nowdate,
 )
 
+from central.iam import can
 from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
@@ -56,8 +57,7 @@ def is_free_trial_creation(team: str, resource_type: str) -> bool:
 
 
 def has_paid_before(team: str) -> bool:
-	"""Whether the team ever had a subscription or a bill. Such a team buys its sites, even after
-	its payment method lapses."""
+	"""Whether the team ever had a subscription or a bill. Such a team buys its sites, even after its payment method lapses."""
 	return bool(
 		frappe.db.exists("Subscription", {"team": team})
 		or frappe.db.exists("Invoice", {"team": team, "status": ["not in", ("Draft", "Cancelled")]})
@@ -65,8 +65,7 @@ def has_paid_before(team: str) -> bool:
 
 
 def convert_team(team: str) -> None:
-	"""Turn the team's running trials into paid sites once it has an active payment method. An
-	ended trial stays stopped until the customer keeps it, so a card never revives a site they left."""
+	"""Turn the team's running trials into paid sites, oldest first. An ended trial stays stopped until the customer keeps it."""
 	for name in frappe.get_all(
 		"Site", filters={"team": team, "trial_state": "Active"}, pluck="name", order_by="creation asc"
 	):
@@ -74,16 +73,30 @@ def convert_team(team: str) -> None:
 
 
 def convert_within_limit(site: Site) -> bool:
-	"""Convert the trial when its plan fits the team's spending limit. Otherwise it stays a trial,
-	and the daily job tries again."""
+	"""Convert the trial when its plan fits the team's spending limit. Otherwise it stays a trial, and the daily job tries again."""
 	from central.billing.catalog.subscriptions import remaining_headroom
 
-	if get_trial_rate(site) > remaining_headroom(site.team):
+	# A converted server gets its subscription only when it starts, so its rate is held here.
+	frappe.db.get_value("Team", site.team, "name", for_update=True)
+	available = remaining_headroom(site.team, for_update=True) - get_starting_rate(site.team)
+	if get_trial_rate(site) > available:
 		site.db_set("trial_error", _("The site's plan is above the team's spending limit."))
 		return False
 
 	convert_site(site)
 	return True
+
+
+def get_starting_rate(team: str) -> float:
+	"""The monthly rate of the team's converted trials whose servers have no subscription yet."""
+	sites = frappe.get_all(
+		"Site", filters={"team": team, "trial_state": "Converted"}, fields=["name", "server"]
+	)
+	return sum(
+		get_trial_rate(frappe.get_doc("Site", site.name))
+		for site in sites
+		if is_conversion_starting(site.server)
+	)
 
 
 def get_trial_rate(site: Site) -> float:
@@ -201,7 +214,9 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 	has_payment_method = has_active_payment_method(trial.team)
 	return {
 		"state": trial.trial_state,
-		"can_keep": trial.trial_state == "Ended" and has_payment_method,
+		"can_keep": trial.trial_state == "Ended"
+		and has_payment_method
+		and can(frappe.session.user, trial.team, "billing:manage"),
 		"held": trial.trial_state == "Active" and has_payment_method,
 		"ends_on": trial.trial_ends_on,
 		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
@@ -227,7 +242,9 @@ def run_trials() -> None:
 	"""Daily job: warn before a trial ends, stop it on its end date, terminate it on its deletion
 	date, and finish a conversion that failed."""
 	today = getdate(nowdate())
-	open_trials = frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name")
+	open_trials = frappe.get_all(
+		"Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name", order_by="creation asc"
+	)
 	failed_conversions = frappe.get_all(
 		"Site", filters={"trial_state": "Converted", "trial_error": ["is", "set"]}, pluck="name"
 	)
@@ -252,7 +269,6 @@ def advance_trial(site: Site, today) -> None:
 
 
 def advance_active_trial(site: Site, today, notice_days: int) -> None:
-	# A trial held back by the spending limit converts once the limit is raised.
 	if has_active_payment_method(site.team) and convert_within_limit(site):
 		return
 

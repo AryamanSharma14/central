@@ -320,7 +320,6 @@ class TestResourceActions(IntegrationTestCase):
 		with patch("central.signups.trial.has_active_payment_method", return_value=True):
 			frappe.get_doc("Resource Action", name).retry()
 
-		# A card added after the request does not change what the request was.
 		self.assertTrue(self.purchase.call_args.kwargs["is_free_trial"])
 
 	def test_a_free_trial_site_gets_no_subscription_but_a_paid_server_does(self):
