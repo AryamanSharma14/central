@@ -21,8 +21,10 @@ class CentralSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		app_rollout_failure_percent: DF.Int
 		app_rollout_interval_hours: DF.Int
 		app_rollout_max_percent: DF.Int
+		app_rollout_minimum_servers: DF.Int
 		app_rollout_start_percent: DF.Int
 		app_rollout_step_percent: DF.Int
 		central_id: DF.Int
@@ -82,15 +84,21 @@ class CentralSettings(Document):
 			frappe.throw(_("Common Site Config must fit in {0} bytes.").format(MAXIMUM_METADATA_BYTES))
 
 	def validate_app_rollout(self) -> None:
-		for fieldname in ("app_rollout_start_percent", "app_rollout_step_percent"):
+		for fieldname in (
+			"app_rollout_start_percent",
+			"app_rollout_step_percent",
+			"app_rollout_failure_percent",
+		):
 			value = self.get(fieldname)
 			if not 1 <= value <= 100:
 				label = _(self.meta.get_label(fieldname))
 				frappe.throw(_("{0} must be between 1 and 100, not {1}.").format(label, value))
 
-		if self.app_rollout_interval_hours < 1:
-			label = _(self.meta.get_label("app_rollout_interval_hours"))
-			frappe.throw(_("{0} must be at least 1, not {1}.").format(label, self.app_rollout_interval_hours))
+		for fieldname in ("app_rollout_interval_hours", "app_rollout_minimum_servers"):
+			value = self.get(fieldname)
+			if value < 1:
+				label = _(self.meta.get_label(fieldname))
+				frappe.throw(_("{0} must be at least 1, not {1}.").format(label, value))
 
 		if not 0 <= self.app_rollout_max_percent <= 100:
 			label = _(self.meta.get_label("app_rollout_max_percent"))

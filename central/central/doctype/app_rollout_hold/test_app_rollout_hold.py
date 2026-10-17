@@ -17,8 +17,16 @@ def failing_row(commit: str, **changes) -> dict:
 
 class IntegrationTestAppRolloutHold(IntegrationTestCase):
 	def setUp(self):
+		self.addCleanup(frappe.clear_document_cache, "Central Settings", "Central Settings")
 		self.addCleanup(frappe.db.rollback)
 		frappe.db.delete("App Rollout Hold")
+		self.set_limits(failure_percent=20, minimum_servers=5)
+
+	def set_limits(self, failure_percent: int, minimum_servers: int):
+		frappe.db.set_single_value(
+			"Central Settings",
+			{"app_rollout_failure_percent": failure_percent, "app_rollout_minimum_servers": minimum_servers},
+		)
 
 	def test_a_failing_release_is_held_with_its_counts_and_error(self):
 		AppRolloutHold.hold_failing_releases([failing_row("abc")])
@@ -54,6 +62,7 @@ class IntegrationTestAppRolloutHold(IntegrationTestCase):
 			failing_row("abc", total=True),
 			failing_row("abc", failed=6),
 			failing_row("abc", failed=-1),
+			failing_row("abc", failed=0, total=0),
 			failing_row("abc", error=["Migration failed"]),
 			no_error,
 		)
@@ -67,3 +76,23 @@ class IntegrationTestAppRolloutHold(IntegrationTestCase):
 		AppRolloutHold.hold_failing_releases([failing_row("abc")])
 
 		self.assertEqual(frappe.get_doc("Central Settings").app_rollout()["held_commits"], ["abc"])
+
+	def test_a_release_is_held_only_above_both_limits(self):
+		AppRolloutHold.hold_failing_releases(
+			[
+				failing_row("too-few-servers", failed=4, total=4),
+				failing_row("at-the-limit", failed=1, total=5),
+				failing_row("above-the-limit", failed=2, total=5),
+			]
+		)
+
+		self.assertEqual(AppRolloutHold.get_held_commits(), ["above-the-limit"])
+
+	def test_the_limits_come_from_central_settings(self):
+		self.set_limits(failure_percent=50, minimum_servers=2)
+
+		AppRolloutHold.hold_failing_releases(
+			[failing_row("two-of-five", failed=2, total=5), failing_row("two-of-two", failed=2, total=2)]
+		)
+
+		self.assertEqual(AppRolloutHold.get_held_commits(), ["two-of-two"])

@@ -62,6 +62,9 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 			("app_rollout_interval_hours", 0),
 			("app_rollout_max_percent", -1),
 			("app_rollout_max_percent", 101),
+			("app_rollout_failure_percent", 0),
+			("app_rollout_failure_percent", 101),
+			("app_rollout_minimum_servers", 0),
 		):
 			settings = frappe.get_doc("Central Settings")
 			settings.set(fieldname, value)

@@ -37,13 +37,22 @@ class AppRolloutHold(Document):
 
 	@staticmethod
 	def hold_failing_releases(rows: object) -> None:
-		"""Hold each release an Insights alert found failing. Every row is checked before any
-		is held, so a wrong alert setup fails the whole run instead of holding half of it."""
+		"""Hold each release that crosses the failure limits in Central Settings. Every row is
+		checked before any is held, so a wrong alert setup fails the whole run instead of
+		holding half of it."""
 		if not isinstance(rows, list):
 			frappe.throw(_("An app rollout alert must send its rows as a list."))
 
 		holds = [AppRolloutHold._get_hold(row) for row in rows]
+		settings = frappe.get_cached_doc("Central Settings")
 		for hold in holds:
+			if hold["total"] < settings.app_rollout_minimum_servers:
+				continue
+
+			failure_percent = hold["failed"] * 100 / hold["total"]
+			if failure_percent <= settings.app_rollout_failure_percent:
+				continue
+
 			# The commit is the name, so a release already held, or released, keeps its row.
 			with savepoint(catch=frappe.DuplicateEntryError):
 				frappe.new_doc("App Rollout Hold").update(hold).insert()
@@ -64,8 +73,12 @@ class AppRolloutHold(Document):
 			if isinstance(value, bool) or not isinstance(value, int):
 				frappe.throw(_("An app rollout alert row needs failed and total as numbers: {0}").format(row))
 
-		if not 0 <= failed <= total:
-			frappe.throw(_("An app rollout alert row needs failed between 0 and total: {0}").format(row))
+		if total < 1 or not 0 <= failed <= total:
+			frappe.throw(
+				_(
+					"An app rollout alert row needs a total of at least 1, and failed between 0 and total: {0}"
+				).format(row)
+			)
 
 		if "error" not in row or not isinstance(row["error"], str | None):
 			frappe.throw(_("An app rollout alert row needs error as text: {0}").format(row))

@@ -5,6 +5,8 @@ DEFAULTS = {
 	"app_rollout_step_percent": 5,
 	"app_rollout_interval_hours": 8,
 	"app_rollout_max_percent": 100,
+	"app_rollout_failure_percent": 20,
+	"app_rollout_minimum_servers": 5,
 }
 
 
