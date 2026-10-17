@@ -232,7 +232,7 @@ const open = computed({
 					@click="trialPanel?.keep()"
 				/>
 				<Button
-					v-else-if="trialPanel?.methodAdded"
+					v-else-if="trial.held || trialPanel?.methodAdded"
 					label="Check again"
 					:loading="configCall.loading"
 					@click="configCall.reload()"

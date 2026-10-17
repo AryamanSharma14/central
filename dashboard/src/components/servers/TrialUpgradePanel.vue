@@ -113,6 +113,12 @@ defineExpose({ addMethod, methodAdded, keep, keeping })
 			:description="description"
 		/>
 		<Alert
+			v-if="trial.held"
+			theme="amber"
+			title="This site stays on its free trial"
+			description="Your payment method is added, but this site's plan is above your spending limit. Contact support to raise the limit."
+		/>
+		<Alert
 			v-if="keepError"
 			theme="red"
 			title="Couldn't keep this site"

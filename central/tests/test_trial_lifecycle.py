@@ -36,6 +36,9 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.notices = self.enterContext(patch("central.signups.trial.queue_event"))
 		self.funnel = self.enterContext(patch("central.signups.trial.capture_trial_event"))
 		self.enterContext(patch.object(frappe.db, "commit"))
+		self.headroom = self.enterContext(
+			patch("central.billing.catalog.subscriptions.remaining_headroom", return_value=1000)
+		)
 		self.enterContext(
 			self.change_settings(
 				"Central Settings", trial_days=14, trial_deletion_days=7, trial_notice_days=3
@@ -279,6 +282,33 @@ class TestTrialLifecycle(SiteOnAMachine):
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
 
+	def test_a_trial_above_the_spending_limit_stays_a_trial_until_the_limit_is_raised(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.headroom.return_value = 20
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			trial.convert_team(self.team.name)
+
+			site = self.site()
+			self.assertEqual(site.trial_state, "Active")
+			self.assertIn("spending limit", site.trial_error)
+			self.assertTrue(trial.get_status(self.server.name)["held"])
+
+			self.headroom.return_value = 30
+			site = self.run_on(1)
+
+		self.assertEqual(site.trial_state, "Converted")
+		self.assertFalse(site.trial_error)
+
+	def test_an_ended_trial_above_the_spending_limit_cannot_be_kept(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.headroom.return_value = 0
+		self.site().db_set("trial_state", "Ended")
+		with (
+			patch("central.signups.trial.has_active_payment_method", return_value=True),
+			self.assertRaisesRegex(frappe.ValidationError, "spending limit"),
+		):
+			trial.keep_site(self.site())
+
 	def test_a_payment_method_leaves_an_ended_trial_stopped(self):
 		self.site().db_set("trial_state", "Ended")
 		method = Mock(team=self.team.name, status="Active")
@@ -360,7 +390,16 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		self.assertEqual(
 			set(status),
-			{"state", "can_keep", "ends_on", "days_left", "deletes_on", "credit", "sleeps_after_minutes"},
+			{
+				"state",
+				"can_keep",
+				"held",
+				"ends_on",
+				"days_left",
+				"deletes_on",
+				"credit",
+				"sleeps_after_minutes",
+			},
 		)
 		self.assertEqual(status["sleeps_after_minutes"], trial.get_sleep_minutes())
 

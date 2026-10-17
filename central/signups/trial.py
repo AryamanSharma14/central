@@ -35,7 +35,7 @@ def start_trial(site: Site) -> None:
 def convert_if_paid(site: Site) -> None:
 	"""Convert a new trial site whose team added a payment method before Central recorded it."""
 	if site.trial_state == "Active" and has_active_payment_method(site.team):
-		convert_site(site)
+		convert_within_limit(site)
 
 
 def is_billing_deferred(server: str) -> bool:
@@ -67,8 +67,28 @@ def has_paid_before(team: str) -> bool:
 def convert_team(team: str) -> None:
 	"""Turn the team's running trials into paid sites once it has an active payment method. An
 	ended trial stays stopped until the customer keeps it, so a card never revives a site they left."""
-	for name in frappe.get_all("Site", filters={"team": team, "trial_state": "Active"}, pluck="name"):
-		convert_site(frappe.get_doc("Site", name, for_update=True))
+	for name in frappe.get_all(
+		"Site", filters={"team": team, "trial_state": "Active"}, pluck="name", order_by="creation asc"
+	):
+		convert_within_limit(frappe.get_doc("Site", name, for_update=True))
+
+
+def convert_within_limit(site: Site) -> bool:
+	"""Convert the trial when its plan fits the team's spending limit. Otherwise it stays a trial,
+	and the daily job tries again."""
+	from central.billing.catalog.subscriptions import remaining_headroom
+
+	if get_trial_rate(site) > remaining_headroom(site.team):
+		site.db_set("trial_error", _("The site's plan is above the team's spending limit."))
+		return False
+
+	convert_site(site)
+	return True
+
+
+def get_trial_rate(site: Site) -> float:
+	request = site.get_creation_request()
+	return flt(request.reserved_monthly_rate) if request else 0.0
 
 
 def keep_site(site: Site) -> None:
@@ -77,8 +97,8 @@ def keep_site(site: Site) -> None:
 		frappe.throw(_("Only an ended trial can be kept."))
 	if not has_active_payment_method(site.team):
 		frappe.throw(_("Add a payment method to keep this site."))
-
-	convert_site(site)
+	if not convert_within_limit(site):
+		frappe.throw(_("This site's plan is above your spending limit. Contact support to raise the limit."))
 
 
 def convert_site(site: Site) -> None:
@@ -178,9 +198,11 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 		return None
 
 	trial = sites[0]
+	has_payment_method = has_active_payment_method(trial.team)
 	return {
 		"state": trial.trial_state,
-		"can_keep": trial.trial_state == "Ended" and has_active_payment_method(trial.team),
+		"can_keep": trial.trial_state == "Ended" and has_payment_method,
+		"held": trial.trial_state == "Active" and has_payment_method,
 		"ends_on": trial.trial_ends_on,
 		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
 		"deletes_on": trial.trial_deletes_on,
@@ -230,6 +252,10 @@ def advance_trial(site: Site, today) -> None:
 
 
 def advance_active_trial(site: Site, today, notice_days: int) -> None:
+	# A trial held back by the spending limit converts once the limit is raised.
+	if has_active_payment_method(site.team) and convert_within_limit(site):
+		return
+
 	days_left = date_diff(site.trial_ends_on, today)
 	if days_left <= 0:
 		end_trial(site, today)

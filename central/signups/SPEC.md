@@ -83,6 +83,8 @@ A trial server has no subscription, so a trial creates no invoice. Central decid
 
 When a payment method of the Team becomes active, every Active trial site of the Team becomes Converted. An Ended trial stays Ended and stopped, so a card added for one product does not start and bill a site the customer left. To keep an Ended trial, a member with `billing:manage` chooses **Keep this site** in the console resize dialog (`central.api.servers.keep_trial_site`). It converts that one site and starts its server. Its deletion date applies until then.
 
+Central converts the Active trials one at a time, oldest first. Each one must fit the Team's spending limit: the trust-tier cap minus the monthly rate of its running subscriptions. A trial whose plan does not fit stays Active, with the reason in Trial Error, and the console says that the plan is above the spending limit. The daily job converts it once the limit is raised. Keep this site applies the same check.
+
 A site becomes Converted in these steps:
 
 1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
@@ -93,7 +95,7 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, and the Team has an active payment method), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, and the Team has an active payment method), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 

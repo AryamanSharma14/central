@@ -946,19 +946,24 @@ def enforce_headroom(team: str, new_rate, exclude: str | None = None, for_update
 
 	`for_update` is for the caller that goes on to provision: it reads the run rate
 	under a lock so two creates cannot clear the same headroom."""
-	from central.billing.catalog.entitlements import get_team_caps
-
 	if new_rate is None:
 		frappe.throw(frappe._("This configuration cannot be priced in your currency."))
-	cap = frappe.utils.flt(get_team_caps(team).max_spend)
-	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
-	available = max(0.0, cap - running)
+	available = remaining_headroom(team, exclude, for_update)
 	if frappe.utils.flt(new_rate) > available:
 		frappe.throw(
 			frappe._("This configuration ({0}) exceeds your remaining headroom ({1}).").format(
 				frappe.utils.flt(new_rate), frappe.utils.flt(available)
 			)
 		)
+
+
+def remaining_headroom(team: str, exclude: str | None = None, for_update: bool = False) -> float:
+	"""The monthly spend the team can still add: its trust-tier cap minus its running run-rate."""
+	from central.billing.catalog.entitlements import get_team_caps
+
+	cap = frappe.utils.flt(get_team_caps(team).max_spend)
+	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
+	return max(0.0, cap - running)
 
 
 def project_run_rate(team: str, project: str, exclude: str | None = None) -> float:
