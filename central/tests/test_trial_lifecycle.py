@@ -321,6 +321,13 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 		self.assertEqual(trial.get_starting_rate(self.team.name), 30)
 
+	def test_a_terminated_server_from_a_failed_conversion_holds_no_rate(self):
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.site().db_set({"trial_state": "Converted", "trial_error": "Could not start"})
+		self.server.db_set("status", "Terminated")
+
+		self.assertEqual(trial.get_starting_rate(self.team.name), 0)
+
 	def test_a_trial_waits_while_another_conversion_uses_the_limit(self):
 		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
 		self.headroom.return_value = 40

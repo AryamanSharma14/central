@@ -88,15 +88,30 @@ def convert_within_limit(site: Site) -> bool:
 
 
 def get_starting_rate(team: str) -> float:
-	"""The monthly rate of the team's converted trials whose servers have no subscription yet."""
-	sites = frappe.get_all(
-		"Site", filters={"team": team, "trial_state": "Converted"}, fields=["name", "server"]
-	)
-	return sum(
-		get_trial_rate(frappe.get_doc("Site", site.name))
-		for site in sites
-		if is_conversion_starting(site.server)
-	)
+	"""The monthly rate of the team's converted trials whose live servers have no subscription yet."""
+	from frappe.query_builder.functions import Sum
+
+	site = frappe.qb.DocType("Site")
+	machine = frappe.qb.DocType("Virtual Machine")
+	request = frappe.qb.DocType("Resource Action")
+	subscription = frappe.qb.DocType("Subscription")
+	rate = (
+		frappe.qb.from_(site)
+		.join(machine)
+		.on(machine.name == site.server)
+		.join(request)
+		.on((request.server == site.server) & (request.action == "create"))
+		.left_join(subscription)
+		.on((subscription.server_id == site.server) & (subscription.team == site.team))
+		.select(Sum(request.reserved_monthly_rate))
+		.where(
+			(site.team == team)
+			& (site.trial_state == "Converted")
+			& (machine.status != "Terminated")
+			& subscription.name.isnull()
+		)
+	).run()
+	return flt(rate[0][0])
 
 
 def get_trial_rate(site: Site) -> float:
