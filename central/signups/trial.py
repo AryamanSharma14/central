@@ -51,8 +51,17 @@ def is_billing_deferred(server: str) -> bool:
 
 
 def is_free_trial_creation(team: str, resource_type: str) -> bool:
-	"""Whether a creation request opens a free trial: a site, for a team that does not pay yet."""
-	return resource_type == "Site" and not has_active_payment_method(team)
+	"""Whether a creation request opens a free trial: a site, for a team that has never paid."""
+	return resource_type == "Site" and not has_active_payment_method(team) and not has_paid_before(team)
+
+
+def has_paid_before(team: str) -> bool:
+	"""Whether the team ever had a subscription or a bill. Such a team buys its sites, even after
+	its payment method lapses."""
+	return bool(
+		frappe.db.exists("Subscription", {"team": team})
+		or frappe.db.exists("Invoice", {"team": team, "status": ["not in", ("Draft", "Cancelled")]})
+	)
 
 
 def convert_team(team: str) -> None:

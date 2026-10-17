@@ -103,6 +103,19 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(site.trial_state, "Converted")
 		self.assertIsNone(site.trial_ends_on)
 
+	def test_a_team_that_has_paid_before_gets_no_free_trial(self):
+		invoice = frappe.get_doc({"doctype": "Invoice", "team": self.team.name, "status": "Draft"})
+		invoice.db_insert()
+		self.assertTrue(trial.is_free_trial_creation(self.team.name, "Site"))
+
+		invoice.db_set("status", "Overdue")
+		self.assertFalse(trial.is_free_trial_creation(self.team.name, "Site"))
+
+	def test_a_team_with_a_subscription_gets_no_free_trial(self):
+		frappe.get_doc({"doctype": "Subscription", "team": self.team.name}).db_insert()
+
+		self.assertFalse(trial.is_free_trial_creation(self.team.name, "Site"))
+
 	def test_a_card_cancelled_before_the_site_is_recorded_keeps_the_server_paid(self):
 		frappe.db.set_value("Resource Action", {"server": self.server.name}, "is_free_trial", 0)
 		with patch("central.signups.trial.has_active_payment_method", return_value=False):
