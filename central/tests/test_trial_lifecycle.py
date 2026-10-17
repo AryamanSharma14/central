@@ -468,6 +468,24 @@ class TestTrialLifecycle(SiteOnAMachine):
 			with self.assertRaisesRegex(frappe.ValidationError, "at most 1 free trial"):
 				validate_trial_site(self.team.name)
 
+	def test_an_owner_gets_no_new_trials_by_making_another_team(self):
+		owner = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": f"owner-{frappe.generate_hash(length=8)}@example.test",
+				"first_name": "Owner",
+			}
+		).insert()
+		self.team.db_set("owner_user", owner.name)
+		other = frappe.get_doc({"doctype": "Team", "team_name": "Second", "owner_user": owner.name}).insert()
+
+		with self.change_settings("Central Settings", trial_servers_per_team=1):
+			with self.assertRaisesRegex(frappe.ValidationError, "across your teams"):
+				validate_trial_site(other.name)
+
+			self.site().db_set("trial_state", "Deleted")
+			validate_trial_site(other.name)
+
 	def test_a_server_whose_site_is_not_recorded_yet_still_counts_toward_the_limit(self):
 		frappe.db.delete("Site", {"server": self.server.name})
 

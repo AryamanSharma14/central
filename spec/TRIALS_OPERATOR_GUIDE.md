@@ -24,7 +24,7 @@ A team without a payment method can only have free trial sites. To create any ot
 | Central Settings | Trial Days | 7 |
 | Central Settings | Trial Deletion Days | 7 |
 | Central Settings | Trial Notice Days | 2 |
-| Central Settings | Trial Servers per Team | 3 |
+| Central Settings | Trial Servers Limit | 3, counted across all teams of one owner |
 | Central Settings | Require Payment Method for Servers | On |
 | Central Settings | Trial Idle Shutdown (Minutes) | 10 |
 | Region | FrappeMail Service | Enabled. Keep enough free mailboxes, because an empty pool stops new trials. |

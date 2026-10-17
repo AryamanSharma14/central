@@ -423,13 +423,18 @@ def validate_trial_site(team: str) -> None:
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
 	if trial_site_count(team) >= limit:
 		frappe.throw(
-			_("A team can have at most {0} free trial sites. Add a payment method for more.").format(limit)
+			_(
+				"You can have at most {0} free trial sites across your teams. Add a payment method for more."
+			).format(limit)
 		)
 
 
 def trial_site_count(team: str) -> int:
 	"""Open trial sites, pending site creations, and provisioned servers whose site Central has
-	not recorded yet. Locking reads, for the same reason as reserved_rate."""
+	not recorded yet, across every team of the team's owner, so a new team gives no new trials.
+	Locking reads, for the same reason as reserved_rate."""
+	owner = frappe.db.get_value("Team", team, "owner_user")
+	teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name") if owner else [team]
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")
@@ -437,7 +442,7 @@ def trial_site_count(team: str) -> int:
 	sites = (
 		frappe.qb.from_(site)
 		.select(Count("*"))
-		.where((site.team == team) & site.trial_state.isin(("Active", "Ended")))
+		.where(site.team.isin(teams) & site.trial_state.isin(("Active", "Ended")))
 		.for_update()
 	).run()
 
@@ -445,7 +450,7 @@ def trial_site_count(team: str) -> int:
 		frappe.qb.from_(request)
 		.select(Count("*"))
 		.where(
-			(request.team == team)
+			request.team.isin(teams)
 			& (request.is_free_trial == 1)
 			& request.status.isin(PENDING_STATES)
 			& (request.server.isnull() | (request.server == ""))
@@ -464,7 +469,7 @@ def trial_site_count(team: str) -> int:
 		.on(machine.name == request.server)
 		.select(Count("*"))
 		.where(
-			(request.team == team)
+			request.team.isin(teams)
 			& (request.is_free_trial == 1)
 			& (request.action == "create")
 			& (machine.status != "Terminated")
