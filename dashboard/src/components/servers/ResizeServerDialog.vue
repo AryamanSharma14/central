@@ -126,6 +126,7 @@ const open = computed({
 				ref="trialPanel"
 				:trial="trial"
 				:checking="configCall.loading"
+				:server-id="server?.resource_id ?? ''"
 				@check="configCall.reload()"
 			/>
 			<Alert
@@ -223,7 +224,15 @@ const open = computed({
 			</div>
 			<div v-else-if="trial && trialPanel" class="flex justify-end">
 				<Button
-					v-if="trialPanel?.methodAdded"
+					v-if="trial.can_keep"
+					variant="solid"
+					icon-left="lucide-play"
+					label="Keep this site"
+					:loading="trialPanel?.keeping"
+					@click="trialPanel?.keep()"
+				/>
+				<Button
+					v-else-if="trial.held || trialPanel?.methodAdded"
 					label="Check again"
 					:loading="configCall.loading"
 					@click="configCall.reload()"

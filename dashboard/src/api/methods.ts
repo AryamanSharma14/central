@@ -72,6 +72,7 @@ export const API = {
 	setServerIpv4Internet: 'central.api.servers.set_server_ipv4_internet',
 	publicIpv4Pricing: 'central.api.servers.public_ipv4_pricing',
 	terminateServer: 'central.api.servers.terminate_server',
+	keepTrialSite: 'central.api.servers.keep_trial_site',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',
 	serverHostnames: 'central.api.servers.server_hostnames',

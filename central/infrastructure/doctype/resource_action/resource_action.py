@@ -92,6 +92,7 @@ class ResourceAction(Document):
 		error_log: DF.Link | None
 		error_message: DF.SmallText | None
 		last_checked_at: DF.Datetime | None
+		is_free_trial: DF.Check
 		product: DF.Link | None
 		region: DF.Link | None
 		remediation: DF.SmallText | None
@@ -395,7 +396,7 @@ class ResourceAction(Document):
 			configuration.plan,
 			[row.model_dump() for row in configuration.includes],
 			configuration.sub_category,
-			is_trial_site=self.resource_type == "Site",
+			is_free_trial=bool(self.is_free_trial),
 		)
 
 	@classmethod

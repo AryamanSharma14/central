@@ -199,10 +199,10 @@
   },
   {
    "default": "3",
-   "description": "Active and pending servers a trial team may hold.",
+   "description": "Free trial sites one owner may hold across all their teams. For a staging trial team, the servers that team may hold.",
    "fieldname": "trial_servers_per_team",
    "fieldtype": "Int",
-   "label": "Trial Servers per Team",
+   "label": "Trial Servers Limit",
    "non_negative": 1
   },
   {
