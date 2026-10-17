@@ -164,8 +164,9 @@ class TestServerConsole(IntegrationTestCase):
 	def test_refused_tty_reports_the_atlas_rejection(self):
 		self.get_console_url.side_effect = AtlasRejected("The console is unavailable.")
 
-		with self.assertRaises(AtlasRejected):
+		with self.assertRaises(frappe.ValidationError) as raised:
 			self.open_as(self.owner, mode="tty")
+		self.assertEqual(raised.exception.envelope["code"], "ATLAS_REJECTED")
 
 	def test_console_rejects_an_unknown_mode(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -173,16 +174,17 @@ class TestServerConsole(IntegrationTestCase):
 		self.get_console_url.assert_not_called()
 
 	def test_console_reports_atlas_failures_as_they_are(self):
-		for error in (
-			AtlasResourceGone("The server does not exist."),
-			AtlasConnectionError("Atlas rejected Central authentication."),
+		for error, code in (
+			(AtlasResourceGone("The server does not exist."), "RESOURCE_GONE"),
+			(AtlasConnectionError("Atlas rejected Central authentication."), "REGION_UNAVAILABLE"),
 		):
 			with self.subTest(error=type(error).__name__):
 				self.get_console_url.reset_mock()
 				self.get_console_url.side_effect = error
 
-				with self.assertRaises(type(error)):
+				with self.assertRaises(frappe.ValidationError) as raised:
 					self.open_as(self.owner)
+				self.assertEqual(raised.exception.envelope["code"], code)
 				self.get_console_url.assert_called_once_with("vm-00001", mode="ssh")
 
 	def test_viewer_cannot_open_the_console(self):
