@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -139,10 +139,10 @@ class TestServerConsole(IntegrationTestCase):
 		self.addCleanup(team.delete, ignore_permissions=True, force=True)
 		return team
 
-	def open_as(self, user: str, team: str | None = None) -> dict:
+	def open_as(self, user: str, team: str | None = None, mode: str = "ssh") -> dict:
 		frappe.set_user(user)
 		try:
-			return open_console(team=team or self.team.name, resource_id=self.server.name)
+			return open_console(team=team or self.team.name, resource_id=self.server.name, mode=mode)
 		finally:
 			frappe.set_user("Administrator")
 
@@ -150,26 +150,41 @@ class TestServerConsole(IntegrationTestCase):
 		self.assertEqual(self.open_as(self.owner), {"url": CONSOLE_URL})
 		self.get_console_url.assert_called_once_with("vm-00001", mode="ssh")
 
-	def test_console_falls_back_to_tty_when_atlas_refuses_ssh(self):
-		self.get_console_url.side_effect = [AtlasRejected("SSH is unavailable."), CONSOLE_URL]
+	def test_owner_gets_a_single_use_tty_console_url(self):
+		self.assertEqual(self.open_as(self.owner, mode="tty"), {"url": CONSOLE_URL})
+		self.get_console_url.assert_called_once_with("vm-00001", mode="tty")
 
-		self.assertEqual(self.open_as(self.owner), {"url": CONSOLE_URL})
-		self.assertEqual(
-			self.get_console_url.call_args_list,
-			[call("vm-00001", mode="ssh"), call("vm-00001", mode="tty")],
-		)
+	def test_refused_ssh_points_to_tty_without_switching_mode(self):
+		self.get_console_url.side_effect = AtlasRejected("SSH is unavailable.")
 
-	def test_console_does_not_fall_back_unless_atlas_refuses_ssh(self):
-		for error in (
-			AtlasResourceGone("The server does not exist."),
-			AtlasConnectionError("Atlas rejected Central authentication."),
+		with self.assertRaisesRegex(frappe.ValidationError, "serial console"):
+			self.open_as(self.owner)
+		self.get_console_url.assert_called_once_with("vm-00001", mode="ssh")
+
+	def test_refused_tty_reports_the_atlas_rejection(self):
+		self.get_console_url.side_effect = AtlasRejected("The console is unavailable.")
+
+		with self.assertRaises(frappe.ValidationError) as raised:
+			self.open_as(self.owner, mode="tty")
+		self.assertEqual(raised.exception.envelope["code"], "ATLAS_REJECTED")
+
+	def test_console_rejects_an_unknown_mode(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.open_as(self.owner, mode="vnc")
+		self.get_console_url.assert_not_called()
+
+	def test_console_reports_atlas_failures_as_they_are(self):
+		for error, code in (
+			(AtlasResourceGone("The server does not exist."), "RESOURCE_GONE"),
+			(AtlasConnectionError("Atlas rejected Central authentication."), "REGION_UNAVAILABLE"),
 		):
 			with self.subTest(error=type(error).__name__):
 				self.get_console_url.reset_mock()
 				self.get_console_url.side_effect = error
 
-				with self.assertRaises(type(error)):
+				with self.assertRaises(frappe.ValidationError) as raised:
 					self.open_as(self.owner)
+				self.assertEqual(raised.exception.envelope["code"], code)
 				self.get_console_url.assert_called_once_with("vm-00001", mode="ssh")
 
 	def test_viewer_cannot_open_the_console(self):

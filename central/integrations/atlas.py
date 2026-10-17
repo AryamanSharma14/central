@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote, urlsplit
 
 import frappe
@@ -27,6 +27,8 @@ MAXIMUM_METADATA_KEY_BYTES = 128
 MAXIMUM_METADATA_BYTES = 48 * 1024
 # The largest page that the Atlas list routes return.
 HOST_PAGE_SIZE = 100
+
+ConsoleMode = Literal["ssh", "tty"]
 
 
 class AtlasClient:
@@ -211,7 +213,7 @@ class AtlasClient:
 			payload={"enabled": enabled},
 		)
 
-	def get_console_url(self, name: str, mode: str) -> str:
+	def get_console_url(self, name: str, mode: ConsoleMode) -> str:
 		"""Return the Atlas console page for a single-use token. The token expires in 30 seconds.
 
 		The token goes in the URL fragment, so the browser never sends it to a server."""

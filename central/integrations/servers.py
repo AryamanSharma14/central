@@ -13,7 +13,7 @@ from central.infrastructure.doctype.resource_action.resource_action import Resou
 from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine import firewall
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
-from central.integrations.atlas import AtlasClient
+from central.integrations.atlas import AtlasClient, ConsoleMode
 from central.server_models import FirewallChange
 from central.utils.units import (
 	gigabytes_to_mebibytes,
@@ -206,19 +206,20 @@ def reconcile(team: str | None = None) -> dict:
 	return {"synced": [], "stale": [], "queued": len(servers)}
 
 
-def get_console_url(server: VirtualMachine) -> str:
+def get_console_url(server: VirtualMachine, mode: ConsoleMode) -> str:
 	"""Return a single-use Atlas web console URL for a running server.
 
-	Atlas opens the session over SSH with a key it pushes for that session only. If Atlas
-	definitely refuses SSH, the console opens on the serial TTY, which every guest has."""
+	SSH opens a root shell with a key Atlas pushes for that session only. TTY opens the
+	shared serial console, which every guest has and which asks for a user password."""
 	if server.status != "Running":
 		frappe.throw(_("Start the server before you open its console."))
 
-	client = get_client(server)
 	try:
-		return client.get_console_url(server.atlas_vm_id, mode="ssh")
+		return get_client(server).get_console_url(server.atlas_vm_id, mode=mode)
 	except AtlasRejected:
-		return client.get_console_url(server.atlas_vm_id, mode="tty")
+		if mode != "ssh":
+			raise
+		frappe.throw(_("SSH did not start on this server. Open the serial console (TTY) instead."))
 
 
 def refresh_server(name: str) -> None:

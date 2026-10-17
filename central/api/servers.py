@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 from zoneinfo import ZoneInfo
 
 import frappe
@@ -12,7 +13,8 @@ from central.iam import can, get_server_capabilities
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
-from central.integrations.servers import get_cached_metrics, reconcile
+from central.integrations.atlas import ConsoleMode
+from central.integrations.servers import get_cached_metrics, get_console_url, reconcile
 from central.server_models import FirewallChange
 from central.utils.guards import require_capability
 
@@ -426,13 +428,16 @@ def refresh_servers(team: str | None = None) -> dict:
 	_lt("You can't open this server's console. Ask a team admin to review your access."),
 	server="resource_id",
 )
-def open_console(team: str | None = None, resource_id: str | None = None) -> dict:
-	"""Return a single-use web console URL for one server. Gated on `server:console`."""
-	from central.integrations.servers import get_console_url
+def open_console(team: str | None = None, resource_id: str | None = None, *, mode: ConsoleMode) -> dict:
+	"""Return a single-use web console URL for one server in SSH or TTY mode.
+	Gated on `server:console`."""
+	# Frappe skips type checks on a Literal of strings, so check the mode here.
+	if mode not in get_args(ConsoleMode):
+		frappe.throw(_("Choose SSH or TTY to open the console."))
 
 	server = frappe.get_doc("Virtual Machine", {"team": team, "resource_id": resource_id})
 
-	return {"url": get_console_url(server)}
+	return {"url": get_console_url(server, mode)}
 
 
 @frappe.whitelist(methods=["POST"])

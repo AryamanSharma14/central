@@ -3,7 +3,11 @@ import { Badge, Button, Dropdown, Tooltip } from 'frappe-ui'
 import { computed } from 'vue'
 import CopyableValue from '@/components/common/CopyableValue.vue'
 import ProviderAvatar from '@/components/servers/ProviderAvatar.vue'
-import type { ServerCommand, VirtualMachineRow } from '@/composables/useServers'
+import type {
+	ConsoleMode,
+	ServerCommand,
+	VirtualMachineRow,
+} from '@/composables/useServers'
 import type { ServerActions } from '@/lib/capabilities'
 import { formatPlanLabel } from '@/lib/planLabel'
 import { statusVisual } from '@/lib/serverMap'
@@ -27,7 +31,7 @@ const emit = defineEmits<{
 	open: []
 	pilot: []
 	command: [command: Exclude<ServerCommand, 'terminate'>]
-	console: []
+	console: [mode: ConsoleMode]
 	rename: []
 	snapshot: []
 	resize: []
@@ -118,7 +122,8 @@ const handlers: Partial<Record<ServerMenuVerb, () => void>> = {
 	restart: () => emit('command', 'restart'),
 	resize: () => emit('resize'),
 	snapshot: () => emit('snapshot'),
-	console: () => emit('console'),
+	'ssh-console': () => emit('console', 'ssh'),
+	'tty-console': () => emit('console', 'tty'),
 	rename: () => emit('rename'),
 	terminate: () => emit('terminate'),
 }

@@ -88,7 +88,14 @@ A creation request can carry `user_data` of up to 16 KiB, which is also the Atla
 
 Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. See [Public addresses](#public-addresses) for changes after creation. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
 
-A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
+A member with `server:console` can open the web console of a running server of any image. In the server actions, Web console opens a submenu with two modes. Central sends the selected mode to Atlas through `POST /virtual-machines/{id}/actions/console-token`.
+
+| Mode | Session | Password |
+| --- | --- | --- |
+| `ssh` | A new shell as `root`. Atlas adds a temporary key for the session and removes it when the session ends. The guest SSH service must run. | Not necessary. |
+| `tty` | The shared serial console. It replays recent boot output and stays open across a restart. Use it when SSH does not respond. | Necessary. The guest shows a login prompt. |
+
+`open_console(team, resource_id, mode)` accepts only `ssh` or `tty`. Central does not change the mode. If Atlas refuses an `ssh` token, the member sees a message that tells them to open the serial console. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
 
 ## Firewall
 

@@ -80,7 +80,7 @@ function changed(): void {
 			:description="
 				sshKeys.length
 					? 'Keys that can sign in to this server.'
-					: 'This server has no SSH key. Use the web console in Actions to sign in.'
+					: 'This server has no SSH key. To get a root shell, open Actions, then Web console, then SSH session.'
 			"
 		>
 			<template v-if="canEditKeys" #actions>
