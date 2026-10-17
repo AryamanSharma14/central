@@ -65,11 +65,20 @@ def has_paid_before(team: str) -> bool:
 
 
 def convert_team(team: str) -> None:
-	"""Turn the team's open trials into paid sites once it has an active payment method."""
-	for name in frappe.get_all(
-		"Site", filters={"team": team, "trial_state": ["in", ("Active", "Ended")]}, pluck="name"
-	):
+	"""Turn the team's running trials into paid sites once it has an active payment method. An
+	ended trial stays stopped until the customer keeps it, so a card never revives a site they left."""
+	for name in frappe.get_all("Site", filters={"team": team, "trial_state": "Active"}, pluck="name"):
 		convert_site(frappe.get_doc("Site", name, for_update=True))
+
+
+def keep_site(site: Site) -> None:
+	"""Convert an ended trial that the customer chose to keep, and start its server."""
+	if site.trial_state != "Ended":
+		frappe.throw(_("Only an ended trial can be kept."))
+	if not has_active_payment_method(site.team):
+		frappe.throw(_("Add a payment method to keep this site."))
+
+	convert_site(site)
 
 
 def convert_site(site: Site) -> None:
@@ -171,6 +180,7 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 	trial = sites[0]
 	return {
 		"state": trial.trial_state,
+		"can_keep": trial.trial_state == "Ended" and has_active_payment_method(trial.team),
 		"ends_on": trial.trial_ends_on,
 		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
 		"deletes_on": trial.trial_deletes_on,

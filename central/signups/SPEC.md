@@ -70,7 +70,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 |---|---|
 | A trial site from the signup flow, Team that has no payment method and has never paid | The Team has fewer open trial sites (Active or Ended), pending site creations, and provisioned servers whose site Central has not recorded yet than Central Settings, Trial Servers per Team. No credit is needed. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
-| Start an Ended trial's server | Refused. The Team must add a payment method, which converts the trial and starts the server. |
+| Start an Ended trial's server | Refused. The Team adds a payment method and then chooses Keep this site, which converts the trial and starts the server. |
 | Resize a trial server | Refused, because a trial server has no subscription. The console resize dialog and the in-app plan list ask for a payment method first. `get_composed_config` returns `trial`, and `billing_api.change_plan` refuses with "Add a payment method to change this site's plan." |
 
 ### Console
@@ -81,7 +81,9 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 A trial server has no subscription, so a trial creates no invoice. Central decides once, when the signup sends its creation request, whether the site is a free trial. It stores the answer in Free Trial on the Resource Action. Every later step reads that value and does not check the payment method again, so a card added or removed during creation does not change it. The daily backfill of missing subscriptions skips these servers too.
 
-When a payment method of the Team becomes active, every Active or Ended trial site of the Team becomes Converted:
+When a payment method of the Team becomes active, every Active trial site of the Team becomes Converted. An Ended trial stays Ended and stopped, so a card added for one product does not start and bill a site the customer left. To keep an Ended trial, a member with `billing:manage` chooses **Keep this site** in the console resize dialog (`central.api.servers.keep_trial_site`). It converts that one site and starts its server. Its deletion date applies until then.
+
+A site becomes Converted in these steps:
 
 1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
 2. A running or sleeping server gets its subscription now. A stopped server gets it when it starts. Until then, `get_composed_config` returns `starting`, and the console resize dialog says the server is starting on its paid plan and checks again.
@@ -91,7 +93,7 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, and the Team has an active payment method), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 

@@ -167,6 +167,8 @@ def submit_command(
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
 	if action == "start" and frappe.db.exists("Site", {"server": server.name, "trial_state": "Ended"}):
+		if has_active_payment_method(team):
+			frappe.throw(_("This trial has ended. Choose Keep this site to start it on its paid plan."))
 		frappe.throw(_("This trial has ended. Add a payment method to start it again."))
 	if action == "terminate" and server.is_termination_protected:
 		frappe.throw(_("Turn off termination protection before you terminate this server."))

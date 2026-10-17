@@ -45,16 +45,17 @@ test('A payment method during the trial earns the credit and opens the plans', a
 	await expect(dialog.getByRole('button', { name: 'Resize' })).toBeEnabled()
 })
 
-test('A card on a stopped trial says the server is starting instead of a dead end', async ({ page, trials }) => {
+test('A card leaves an ended trial stopped and offers to keep it', async ({ page, trials }) => {
 	const trial = await trials.start({ trialState: 'Ended', status: 'Stopped' })
 	await trials.addPaymentMethod(trial.team)
 
 	await openChangePlan(page, trial.audience)
 
 	const dialog = page.getByRole('dialog')
-	await expect(dialog.getByText('Your payment method is confirmed')).toBeVisible()
-	await expect(dialog.getByRole('button', { name: 'Check again' })).toBeVisible()
-	await expect(dialog.getByText("This server can't be resized right now.")).toHaveCount(0)
+	await expect(dialog.getByText('Your free trial has ended')).toBeVisible()
+	await expect(dialog.getByText(/Keep it before .+ to start it again on its paid plan/)).toBeVisible()
+	await expect(dialog.getByRole('button', { name: 'Keep this site' })).toBeVisible()
+	await expect(dialog.getByRole('button', { name: 'Add payment method' })).toHaveCount(0)
 })
 
 test('A payment method after the trial ended earns no credit', async ({ trials }) => {

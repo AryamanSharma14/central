@@ -261,7 +261,6 @@ class TestTrialLifecycle(SiteOnAMachine):
 
 	def test_an_active_payment_method_converts_the_team_trials(self):
 		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
-		self.site().db_set("trial_state", "Ended")
 		frappe.db.set_value(
 			"Site", self.site().name, "creation", add_days(now_datetime(), -3), update_modified=False
 		)
@@ -279,6 +278,45 @@ class TestTrialLifecycle(SiteOnAMachine):
 		self.assertEqual(self.sent_events(), ["trial_converted"])
 		VirtualMachine.ensure_subscription_enabled.assert_called()
 		self.assert_conversion_queued()
+
+	def test_a_payment_method_leaves_an_ended_trial_stopped(self):
+		self.site().db_set("trial_state", "Ended")
+		method = Mock(team=self.team.name, status="Active")
+		method.get_doc_before_save.return_value = Mock(status="Pending Validation")
+
+		with patch("central.signups.credit.grant_welcome_credits"):
+			credit.on_payment_method_update(method)
+
+		self.assertEqual(self.site().trial_state, "Ended")
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			self.assertTrue(trial.get_status(self.server.name)["can_keep"])
+
+	def test_keeping_an_ended_trial_converts_it_and_starts_its_server(self):
+		from central.api.servers import keep_trial_site
+
+		self.site().db_set("trial_state", "Ended")
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			keep_trial_site(self.team.name, self.server.resource_id)
+
+		self.assertEqual(self.site().trial_state, "Converted")
+		self.assert_conversion_queued()
+
+	def test_an_ended_trial_is_kept_only_with_a_payment_method(self):
+		from central.api.servers import keep_trial_site
+
+		self.site().db_set("trial_state", "Ended")
+		self.assertFalse(trial.get_status(self.server.name)["can_keep"])
+		with self.assertRaisesRegex(frappe.ValidationError, "Add a payment method"):
+			keep_trial_site(self.team.name, self.server.resource_id)
+
+		self.assertEqual(self.site().trial_state, "Ended")
+
+	def test_only_a_billing_manager_keeps_a_trial(self):
+		from central.api.servers import keep_trial_site
+
+		self.site().db_set("trial_state", "Ended")
+		with self.set_user("Guest"), self.assertRaises(frappe.PermissionError):
+			keep_trial_site(self.team.name, self.server.resource_id)
 
 	def test_a_sleeping_server_is_subscribed_when_its_trial_converts(self):
 		self.server.db_set("status", "Paused")
@@ -321,7 +359,8 @@ class TestTrialLifecycle(SiteOnAMachine):
 		status = trial.get_status(self.server.name)
 
 		self.assertEqual(
-			set(status), {"state", "ends_on", "days_left", "deletes_on", "credit", "sleeps_after_minutes"}
+			set(status),
+			{"state", "can_keep", "ends_on", "days_left", "deletes_on", "credit", "sleeps_after_minutes"},
 		)
 		self.assertEqual(status["sleeps_after_minutes"], trial.get_sleep_minutes())
 
@@ -376,7 +415,12 @@ class TestTrialLifecycle(SiteOnAMachine):
 	def test_an_ended_trial_cannot_be_started(self):
 		self.site().db_set("trial_state", "Ended")
 
-		with self.assertRaisesRegex(frappe.ValidationError, "trial has ended"):
+		with self.assertRaisesRegex(frappe.ValidationError, "Add a payment method"):
+			submit_command("start", self.team.name, self.server.name)
+		with (
+			patch("central.resource_actions.has_active_payment_method", return_value=True),
+			self.assertRaisesRegex(frappe.ValidationError, "Keep this site"),
+		):
 			submit_command("start", self.team.name, self.server.name)
 
 	def test_a_team_has_a_limited_number_of_free_trial_sites(self):
