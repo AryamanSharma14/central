@@ -28,75 +28,77 @@ def enable(team: str) -> str:
 
 
 def register_team(team: str) -> dict:
-	"""Register the team at Grove under the team id, then send the name of its tier and its
-	standing. Grove keeps nothing else about the team."""
+	"""Register the team at Grove under the team id, then send the name of its tier. Grove keeps
+	nothing else about the team."""
 	client = GroveClient.from_settings()
 	registered = client.provision_team(team) or {}
-	client.update_team(team, **get_team_limits(team))
+	client.update_team(**get_team_limits(team))
 	return registered
 
 
 def get_team_limits(team: str) -> dict:
-	"""What Central tells Grove about the team: the name of its tier, whose key count, monthly
-	spend limit and rate limits Grove holds (untiered: "", Grove's default tier), and whether its
-	account is suspended. Every team is paid and gated at Grove."""
+	"""What Central tells Grove about the team, and the body of the Webhook that carries it (a
+	`jinja` hook method, rendered when the delivery runs): the name of its tier, whose key count,
+	monthly spend limit and rate limits Grove holds (untiered: "", Grove's default tier), and
+	`observed_at`, the Billing Profile's `modified`, which Grove keeps so a retried or reordered
+	delivery never overwrites a newer one (no profile yet: None, and the body applies)."""
 	from central.billing.catalog.entitlements import get_team_caps
-	from central.billing.catalog.subscriptions import anchor_subscription
 
-	anchor = anchor_subscription(team)
+	observed_at = frappe.db.get_value("Billing Profile", team, "modified")
 	return {
+		"team": team,
 		"tier": get_team_caps(team).tier or "",
-		"suspended": bool(anchor)
-		and frappe.db.get_value("Subscription", anchor, "account_standing") == "Suspended",
+		"observed_at": str(observed_at) if observed_at else None,
 	}
 
 
-def sync_team(team: str) -> None:
-	"""Send the team's limits and standing to Grove. A no-op while AI is off."""
-	if get_ai_service(team):
-		GroveClient.from_settings().update_team(team, **get_team_limits(team))
-
-
-def on_tier_update(doc, method: str | None = None) -> None:
-	"""Billing Profile and Subscription hook: a team's tier or standing moved, so Grove follows.
-	A Billing Profile is named by its team."""
-	fields = ("account_standing",) if doc.doctype == "Subscription" else ("trust_tier_level",)
-	team = doc.team if doc.doctype == "Subscription" else doc.name
-	if any(doc.has_value_changed(field) for field in fields) and get_ai_service(team):
-		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
-
-
 def on_level_update(doc, method: str | None = None) -> None:
-	"""Trust Tier Level hook: a level's renamed tier reaches every AI team on it."""
-	if not doc.has_value_changed("tier"):
+	"""Trust Tier Level hook: a renamed label renames the Tier at Grove, with every team on it.
+	Direct and inside the save, since a Webhook body carries no old value: with Grove down the
+	save fails and is tried again later. A Central not enrolled at Grove still edits its levels."""
+	before = doc.get_doc_before_save()
+	if not (before and before.tier and doc.has_value_changed("tier")):
 		return
-	teams = frappe.get_all("Billing Profile", filters={"trust_tier_level": doc.name}, pluck="name")
-	for team in frappe.get_all(
-		"Team Service", filters={"team": ("in", teams), "add_on_service": AI_SERVICE}, pluck="team"
-	):
-		frappe.enqueue("central.services.ai.sync_team", team=team, enqueue_after_commit=True)
+	if frappe.get_cached_doc("AI Settings").is_enrolled:
+		GroveClient.from_settings().rename_tier(before.tier, doc.tier)
 
 
 def get_overview(team: str) -> dict:
 	"""The team's AI at a glance: `spend` (this month's, and the keys' caps against the tier's
 	spend limit), this month's `usage`, and the `geographies` a key may be minted in. What a key may call and how fast is the key's own: see `list_api_keys`."""
 	client = GroveClient.from_settings()
+	figures = client.get_figures(team)
 	return {
-		"spend": client.get_spend(team),
-		"usage": get_month_usage(team),
+		"spend": figures["spend"],
+		"usage": get_month_usage(team, figures["usage"]),
 		"geographies": client.list_geographies(),
 	}
 
 
-def get_month_usage(team: str) -> dict:
-	"""This month's requests, tokens and cost, with the window and Grove's as-of time."""
-	usage = GroveClient.from_settings().get_usage([team], period="This Month")
+def get_month_usage(team: str, usage: dict) -> dict:
+	"""This month's requests, tokens and cost off the team's figures, with the window, Grove's
+	as-of time and one total per day so far (`daily`) for the overview's sparklines."""
 	return {
 		**(usage.get(team) or {"requests": 0, "tokens": 0, "cost": 0}),
 		"from_date": usage["from_date"],
 		"to_date": usage["to_date"],
 		"as_of": usage["as_of"],
+		"daily": get_day_totals(usage),
 	}
+
+
+def get_day_totals(usage: dict) -> list[dict]:
+	"""Every day of the period in order, each with the team's requests, tokens and cost summed
+	over its models, zeros on a quiet day: one point per day for a sparkline."""
+	days = frappe.utils.date_diff(usage["to_date"], usage["from_date"]) + 1
+	totals = {
+		str(frappe.utils.add_days(usage["from_date"], offset)): {"requests": 0, "tokens": 0, "cost": 0}
+		for offset in range(days)
+	}
+	for row in usage["daily_summary"]:
+		for field in ("requests", "tokens", "cost"):
+			totals[row["day"]][field] += row[field]
+	return [{"day": day, **fields} for day, fields in totals.items()]
 
 
 def get_models(geography: str | None = None) -> list[dict]:

@@ -102,10 +102,10 @@ website_user_home_page = "dashboard"
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "central.utils.jinja_methods",
-# 	"filters": "central.utils.jinja_filters"
-# }
+jinja = {
+	# The body of the Webhook that carries a team's tier to Grove (AI Settings).
+	"methods": ["central.services.ai.get_team_limits"],
+}
 
 # Installation
 # ------------
@@ -188,17 +188,9 @@ doc_events = {
 		# without the setup prompt (the profile gate is otherwise enforced in the console).
 		"on_update": "central.billing.payments.provisioning.on_team_update",
 	},
-    # TODO: this needs to happen via bg jobs. Coz a faliure in receiving this should ideally have retries, etc
-	"Billing Profile": {
-		# Its level names the team's Tier at Grove, which holds the AI limits.
-		"on_update": "central.services.ai.on_tier_update",
-	},
-	"Subscription": {
-		# A suspended account suspends the team's AI keys at Grove, and recovery lifts it.
-		"on_update": "central.services.ai.on_tier_update",
-	},
+	# A Billing Profile's level reaches Grove by the Webhook AI Settings keeps, with retries.
 	"Trust Tier Level": {
-		# A level's renamed tier reaches every AI team on it.
+		# A level's renamed label renames the Tier at Grove.
 		"on_update": "central.services.ai.on_level_update",
 	},
 }
@@ -297,6 +289,8 @@ after_migrate = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.gateways.setup.ensure_gateway_records",
 	"central.billing.navigation.ensure_workspace_sidebars",
+	# The Webhook that carries a team's tier to Grove, so an edit to its spec rolls out.
+	"central.services.doctype.ai_settings.ai_settings.sync_webhook",
 ]
 
 # Testing

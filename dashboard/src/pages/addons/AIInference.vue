@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Alert, Button, Spinner, TabButtons } from 'frappe-ui'
+import { Alert, Button, Spinner, TabButtons, Tooltip } from 'frappe-ui'
 import { ref } from 'vue'
 import AIApiKeys from '@/components/addons/ai/AIApiKeys.vue'
 import AIOverview from '@/components/addons/ai/AIOverview.vue'
@@ -9,11 +9,12 @@ import { useAI } from '@/composables/useAI'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { useSession } from '@/composables/useSession'
-import { getErrorMessage, reportError } from '@/lib/feedback'
+import { getErrorMessage, reportError, successToast } from '@/lib/feedback'
 
 const { canManageServices } = useCapabilities()
 const { activeTeam } = useSession()
-const { ai, aiLoading, aiError, reloadAI, enable } = useAI()
+const { ai, aiLoading, aiError, reloadAI, enable, refreshing, refreshUsage } =
+	useAI()
 useBreadcrumbs().setBreadcrumbs([{ label: 'LLM' }])
 
 const tab = ref('overview')
@@ -32,6 +33,15 @@ const enableAI = async (): Promise<void> => {
 		reportError(e)
 	} finally {
 		enabling.value = false
+	}
+}
+
+const refresh = async (): Promise<void> => {
+	try {
+		await refreshUsage()
+		successToast('Usage refreshed.')
+	} catch (e) {
+		reportError(e, { title: 'Could not refresh usage' })
 	}
 }
 </script>
@@ -64,13 +74,24 @@ const enableAI = async (): Promise<void> => {
 				:primary-action="{ label: 'Retry', onClick: reloadAI }"
 			/>
 
-			<!-- One row: the tabs, then the open tab's own controls (teleported in). -->
+			<!-- One row: the tabs, then the open tab's own controls (teleported in) and Refresh usage. -->
 			<div
 				v-else-if="ai?.enabled"
 				class="mt-6 flex flex-wrap items-center justify-between gap-2"
 			>
 				<TabButtons v-model="tab" :options="tabs" />
-				<div id="ai-tab-controls" class="contents" />
+				<div class="flex flex-wrap items-center gap-2">
+					<div id="ai-tab-controls" class="contents" />
+					<!-- Icon only: `label` becomes its aria-label, the tooltip shows it. -->
+					<Tooltip text="Refresh usage">
+						<Button
+							label="Refresh usage"
+							icon="lucide-refresh-cw"
+							:loading="refreshing"
+							@click="refresh"
+						/>
+					</Tooltip>
+				</div>
 			</div>
 		</div>
 

@@ -22,13 +22,15 @@ export interface AIRateLimit {
 	value: number
 }
 
-// USD, as of Grove's last pull. `capped` is Σ the live keys' monthly caps, which the tier's
-// `spend_limit` bounds.
+// USD, as of Grove's last pull. `capped` is Σ the live keys' monthly caps; `committed` is what
+// this month has spoken for of the tier's `spend_limit`: each live key's cap or its month's spend,
+// whichever is more, plus what revoked keys spent. Grove checks a raise against `committed`.
 // Credit and invoices are Central's wallet and invoicing, not Grove's.
 export interface AISpend {
 	spent: number
 	month_spent: number
 	capped: number
+	committed: number
 	spend_limit: number
 	// How many live keys the plan allows; 0 is no limit.
 	max_keys: number
@@ -39,11 +41,13 @@ export interface AISpend {
 export interface AIGeography {
 	name: string
 	label: string
-	endpoint: string
+	// null while the geography has no gateway yet: a key cannot be minted there
+	endpoint: string | null
 	is_default: boolean
 }
 
-// This month so far, with the window and when Grove last counted.
+// This month so far, with the window, when Grove last counted, and one total per day
+// so far for the overview's sparklines.
 export interface AIMonthUsage {
 	requests: number
 	tokens: number
@@ -51,6 +55,7 @@ export interface AIMonthUsage {
 	from_date: string
 	to_date: string
 	as_of: string | null
+	daily: Omit<AIUsageDay, 'model'>[]
 }
 
 export interface AIState {
@@ -96,7 +101,7 @@ export interface UsageFilters {
 	key?: string
 }
 
-// A key as listed: never its secret. Its geography never changes; its cap may.
+// A key as listed: never its secret. Its geography never changes; its cap, whole USD, may.
 export interface AIApiKey {
 	name: string
 	title: string

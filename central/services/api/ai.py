@@ -56,17 +56,17 @@ def list_api_keys(team: str | None = None) -> list[dict]:
 	"""The team's keys, newest first, masked, each with its geography and the gateway it
 	calls, its monthly cap, its spend this month and in all, and its rate limits."""
 	require_ai(team)
-	keys = GroveClient.from_settings().list_keys(team)
+	keys = GroveClient.from_settings().get_figures(team)["keys"]
 	return [{field: row.get(field) for field in KEY_FIELDS} for row in keys]
 
 
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
 def create_api_key(
-	team: str | None = None, label: str | None = None, geography: str | None = None, cap: float | None = None
+	team: str | None = None, label: str | None = None, geography: str | None = None, cap: int | None = None
 ) -> dict:
-	"""Mint a key for the team in `geography` (Grove's default when none) with `cap` USD to
-	spend a month (none: the key is refused until it gets one), and return its secret.
+	"""Mint a key for the team in `geography` (Grove's default when none) with `cap` whole USD
+	to spend a month (none: the key is refused until it gets one), and return its secret.
 	This is the only time it is shown. `models` is what it may call, for the quickstart."""
 	require_ai(team)
 	label = (label or "").strip()
@@ -74,7 +74,9 @@ def create_api_key(
 		frappe.throw(_("A label is required."))
 
 	client = GroveClient.from_settings()
-	key = client.provision_key(team, label, geography or None, flt(cap) if cap is not None else None)
+	key = client.provision_key(
+		team, label, geography or None, whole_dollars(cap) if cap is not None else None
+	)
 	return {
 		"name": key["name"],
 		"label": label,
@@ -87,12 +89,34 @@ def create_api_key(
 
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
-def set_api_key_caps(team: str | None = None, caps: dict[str, float] | None = None) -> list[dict]:
-	"""Set the monthly caps of several of the team's keys in one go, {key: USD}. Grove saves all
-	or none: it refuses caps that add up past the tier's spend limit, and another team's key."""
+def set_api_key_caps(team: str | None = None, caps: dict[str, int] | None = None) -> list[dict]:
+	"""Set the monthly caps of several of the team's keys in one go, {key: whole USD}. Grove
+	saves all or none: it refuses caps that add up past the tier's spend limit, and another
+	team's key."""
 	require_ai(team)
-	rows = GroveClient.from_settings().update_caps(team, {key: flt(cap) for key, cap in (caps or {}).items()})
+	rows = GroveClient.from_settings().update_caps(
+		team, {key: whole_dollars(cap) for key, cap in (caps or {}).items()}
+	)
 	return [{field: row.get(field) for field in KEY_FIELDS} for row in rows]
+
+
+def whole_dollars(cap: int | float | str) -> int:
+	"""A monthly cap is whole US dollars. The console's inputs step by one; a fraction that
+	still arrives is refused, not rounded. Grove takes the figure as given."""
+	value = flt(cap)
+	if value != int(value):
+		frappe.throw(_("A cap is whole US dollars."))
+	return int(value)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_capability("service:view", VIEW_DENIED)
+def pull_usage(team: str | None = None) -> dict:
+	"""Ask Grove to pull the team's usage from its gateways now (the console's **Refresh usage**),
+	so the spend, keys and usage reads that follow are of this moment. Grove allows 2 an hour per
+	team."""
+	require_ai(team)
+	return GroveClient.from_settings().pull_usage(team)
 
 
 @frappe.whitelist(methods=["GET"])
@@ -128,7 +152,7 @@ def require_ai(team: str) -> None:
 
 def get_key_hash(team: str, key: str) -> str:
 	"""The hash Grove narrows usage by, for one of the team's own keys."""
-	for row in GroveClient.from_settings().list_keys(team):
+	for row in GroveClient.from_settings().get_figures(team)["keys"]:
 		if row["name"] == key:
 			return row["key_hash"]
 	frappe.throw(_("Unknown API key."), frappe.DoesNotExistError)

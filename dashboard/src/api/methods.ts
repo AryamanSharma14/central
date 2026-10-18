@@ -89,6 +89,7 @@ export const API = {
 	setAIApiKeyCaps: 'central.services.api.ai.set_api_key_caps',
 	aiModels: 'central.services.api.ai.get_models',
 	revokeAIApiKey: 'central.services.api.ai.revoke_api_key',
+	pullAIUsage: 'central.services.api.ai.pull_usage',
 
 	objectStorage: 'central.services.api.storage.get_object_storage',
 	bucketUsage: 'central.services.api.storage.get_bucket_usage',

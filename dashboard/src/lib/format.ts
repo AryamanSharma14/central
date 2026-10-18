@@ -36,6 +36,14 @@ export function signedMoney(
 	return `${sign} ${money(Math.abs(Number(amount ?? 0)), currency)}`
 }
 
+/** "1.3K", "112K", "2.4M" — a count that must fit a chip or a caption. */
+export function compactNumber(value: number): string {
+	return new Intl.NumberFormat(undefined, {
+		notation: 'compact',
+		maximumFractionDigits: 1,
+	}).format(value)
+}
+
 export { formatDateTime as formatSyncedAt } from '@/lib/datetime'
 
 export function capitalise(s: string | null | undefined): string {

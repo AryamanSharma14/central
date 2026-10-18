@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import frappe
 import requests
 from frappe import _
@@ -20,7 +22,8 @@ class GroveClient:
 	"""Calls Grove's control API (`grove.api`) as Central. A team is one Central Team at Grove,
 	named by the team id, under the key count, monthly spend limit and rate limits of its tier,
 	which Grove holds; each of its keys carries its own geography, models, rate limits and monthly cap. Grove owns the keys;
-	Central never proxies inference."""
+	Central never proxies inference. A tier change reaches Grove by the Webhook AI Settings keeps
+	(`grove.api.teams.team_webhook`), not through this client."""
 
 	def __init__(self, base_url: str, api_key: str, api_secret: str):
 		self.base_url = base_url
@@ -51,27 +54,37 @@ class GroveClient:
 		by `team`; `update_team` sets everything else. → `team` and `max_keys`."""
 		return self.call("grove.api.teams.provision_team", team=team)
 
-	def update_team(self, team: str, suspended: bool | None = None, tier: str | None = None) -> dict:
+	def update_team(
+		self,
+		team: str,
+		suspended: bool | None = None,
+		tier: str | None = None,
+		observed_at: str | None = None,
+	) -> dict:
 		"""The name of the team's `tier` at Grove ("" for none: Grove's default tier), whose key
 		count, monthly spend limit and rate limits Grove holds, and whether it is `suspended`,
-		each kept at Grove when None. → the team and the limits in force for it."""
-		return self.call("grove.api.teams.update_team", team=team, suspended=suspended, tier=tier)
+		each kept at Grove when None; `observed_at` is when Central read them, and Grove ignores
+		a body not newer than its last. → the team and the limits in force for it."""
+		return self.call(
+			"grove.api.teams.update_team", team=team, suspended=suspended, tier=tier, observed_at=observed_at
+		)
+
+	def rename_tier(self, old: str, new: str) -> None:
+		"""A trust tier label changed: Grove renames its Tier, and every team on it follows."""
+		self.call("grove.api.teams.rename_tier", old=old, new=new)
 
 	def provision_key(
-		self, team: str, title: str, geography: str | None = None, cap: float | None = None
+		self, team: str, title: str, geography: str | None = None, cap: int | None = None
 	) -> dict:
-		"""Mint a key in `geography` (Grove's default when None) with `cap` USD to spend a month
-		(0 when None: refused until it gets one): its `name`, `geography`, `gateway_url` and
-		`api_key`. The secret is never sent again."""
+		"""Mint a key in `geography` (Grove's default when None) with `cap` whole USD to spend a
+		month (0 when None: refused until it gets one): its `name`, `geography`, `gateway_url`
+		and `api_key`. The secret is never sent again."""
 		return self.call("grove.api.keys.provision_key", team=team, title=title, geography=geography, cap=cap)
 
-	def update_caps(self, team: str, caps: dict[str, float]) -> list[dict]:
-		"""Set several keys' monthly caps at once, {key: USD}; Grove saves all or none. → the keys
-		as `list_keys` lists them."""
+	def update_caps(self, team: str, caps: dict[str, int]) -> list[dict]:
+		"""Set several keys' monthly caps at once, {key: whole USD}; Grove saves all or none. →
+		the keys as `get_figures` lists them."""
 		return self.call("grove.api.keys.update_caps", team=team, caps=caps) or []
-
-	def list_keys(self, team: str) -> list[dict]:
-		return self.call("grove.api.keys.keys", team=team) or []
 
 	def revoke_key(self, team: str, key: str) -> None:
 		self.call("grove.api.keys.revoke_key", team=team, key=key)
@@ -84,13 +97,25 @@ class GroveClient:
 		return self.call("grove.api.catalog.available_models", team=team, key=key, geography=geography) or []
 
 	def list_geographies(self) -> list[dict]:
-		"""Where a key may be minted: `name`, `label`, `endpoint`, `is_default`."""
+		"""Where a key may be minted: `name`, `label`, `endpoint` (None while the geography has no
+		gateway; a key minted there is refused), `is_default`."""
 		return self.call("grove.api.catalog.geographies") or []
 
-	def get_spend(self, team: str) -> dict:
-		"""As of Grove's last pull, in USD: `spent`, `month_spent`, `capped` (Σ live caps)
-		against `spend_limit`; and `max_keys`, `suspended`."""
-		return self.call("grove.api.usage.spend", team=team)
+	def get_figures(self, team: str) -> dict:
+		"""What the console shows, as one entry Grove keeps until something moves it (a record lands,
+		a correction, a key or the team saved, its tier edited) and 30 minutes at most, so every
+		page shows one moment. `spend` in USD: `spent`, `month_spent`, `capped` (Σ live caps) and
+		`committed` (each live key's cap or its month's spend, whichever is more, plus revoked keys'
+		spend: what a raise is checked against) against `spend_limit`; `max_keys`; `suspended`.
+		`keys`: the team's keys, newest first, masked, each with its cap, spend and effective rate
+		limits. `usage`: this month across every key, as `get_usage` answers it."""
+		return self.call("grove.api.usage.figures", team=team)
+
+	def pull_usage(self, team: str) -> dict:
+		"""Ask Grove to pull the team's usage from its gateways now. Grove allows 2 an hour per
+		team, then refuses. → {"sync": the run that logged it, or None when there was nothing to
+		pull, "figures": the team's figures read afresh after it}."""
+		return self.call("grove.api.usage.pull_usage", team=team)
 
 	def get_usage(
 		self,
@@ -129,5 +154,21 @@ def read(response: requests.Response) -> dict | list:
 	if response.status_code in UNAVAILABLE:
 		raise GroveUnavailable(_("Grove is unavailable ({0}).").format(response.status_code))
 	if response.status_code >= 400:
-		frappe.throw(_("Grove request failed ({0}): {1}").format(response.status_code, response.text[:200]))
+		message = refusal_message(response)
+		frappe.throw(
+			message or _("Grove request failed ({0}): {1}").format(response.status_code, response.text[:200])
+		)
 	return response.json().get("message", {})
+
+
+def refusal_message(response: requests.Response) -> str | None:
+	"""Grove's own sentence from a refusal, so a person reads why: the first of Frappe's
+	`_server_messages`, else its `exception` line. None when the body is not Frappe's."""
+	try:
+		body = response.json()
+		messages = [
+			json.loads(raw).get("message") for raw in json.loads(body.get("_server_messages") or "[]")
+		]
+	except (ValueError, TypeError, AttributeError):
+		return None
+	return next((message for message in messages if message), None) or body.get("exception")

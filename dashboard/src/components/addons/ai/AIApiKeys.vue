@@ -20,7 +20,9 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import ListViewPagination from '@/components/common/list-view/ListViewPagination.vue'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
 import { useAI } from '@/composables/useAI'
+import { formatDateTime } from '@/lib/datetime'
 import { getErrorMessage, reportError } from '@/lib/feedback'
+import { compactNumber } from '@/lib/format'
 import type { AIApiKey, AIRateLimit, MintedKey } from '@/types/ai'
 
 interface Props {
@@ -50,6 +52,13 @@ loadApiKeys()
 // Every team is prepaid at Grove: the caps show once its spend has loaded.
 const prepaid = computed(() => !!ai.value?.spend)
 const spend = computed(() => ai.value?.spend)
+// When the spend and each key's month figure are from: Grove's last pull. A cap change is
+// checked against the live figure at Grove, which refuses and says so if it no longer fits.
+const asOf = computed(() =>
+	ai.value?.usage?.as_of
+		? formatDateTime(ai.value.usage.as_of)
+		: 'the last count',
+)
 const activeKeys = computed(() =>
 	apiKeys.value.filter((key) => key.status === 'active'),
 )
@@ -88,6 +97,9 @@ const capBarClass = (key: AIApiKey): string =>
 			? 'bg-surface-amber-7'
 			: 'bg-surface-gray-10'
 const geographies = computed(() => ai.value?.geographies ?? [])
+// Only a geography with a gateway can mint a key or be called; one without keeps its label for
+// the keys already listed under it.
+const mintable = computed(() => geographies.value.filter((g) => g.endpoint))
 const geographyLabel = (name: string): string =>
 	geographies.value.find((g) => g.name === name)?.label ?? name
 
@@ -127,14 +139,10 @@ const WINDOW_WORDS: Record<string, string> = {
 	'1d': 'per day',
 	'1M': 'per month',
 }
-const compact = new Intl.NumberFormat(undefined, {
-	notation: 'compact',
-	maximumFractionDigits: 1,
-})
 const limitChips = (limits: AIRateLimit[]) =>
 	limits.map((limit) => ({
 		key: `${limit.metric}:${limit.window}`,
-		label: `${compact.format(limit.value)} ${METRIC_LETTERS[limit.metric] ?? limit.metric}${WINDOW_LETTERS[limit.window] ?? ''}`,
+		label: `${compactNumber(limit.value)} ${METRIC_LETTERS[limit.metric] ?? limit.metric}${WINDOW_LETTERS[limit.window] ?? ''}`,
 		text: `${limit.value.toLocaleString()} ${METRIC_WORDS[limit.metric] ?? limit.metric} ${WINDOW_WORDS[limit.window] ?? limit.window}`,
 	}))
 
@@ -156,8 +164,8 @@ const createError = ref('')
 const openCreate = (): void => {
 	newLabel.value = ''
 	newGeography.value =
-		geographies.value.find((g) => g.is_default)?.name ??
-		geographies.value[0]?.name ??
+		mintable.value.find((g) => g.is_default)?.name ??
+		mintable.value[0]?.name ??
 		''
 	newCap.value = ''
 	createError.value = ''
@@ -165,7 +173,7 @@ const openCreate = (): void => {
 }
 
 const geographyOptions = computed(() =>
-	geographies.value.map((g) => ({ label: g.label, value: g.name })),
+	mintable.value.map((g) => ({ label: g.label, value: g.name })),
 )
 
 const create = async (): Promise<void> => {
@@ -197,20 +205,29 @@ const minted = ref<MintedKey | null>(null)
 const capsOpen = ref(false)
 const capValues = ref<Record<string, string>>({})
 const capsError = ref('')
-const capsTotal = computed(() =>
-	activeKeys.value.reduce(
-		(sum, key) => sum + (Number(capValues.value[key.name]) || 0),
+// What the month would have spoken for with these caps, as Grove checks it: each live key's
+// cap or what it spent this month, whichever is more, plus what revoked keys spent.
+const committedTotal = computed(() =>
+	apiKeys.value.reduce(
+		(sum, key) =>
+			sum +
+			(key.status === 'active'
+				? Math.max(Number(capValues.value[key.name]) || 0, key.month_spent)
+				: key.month_spent),
 		0,
 	),
 )
 // Grove checks only a raise, so a team past a lowered limit may still save lowers.
 const capsOverLimit = computed(
 	() =>
-		capsTotal.value > (spend.value?.spend_limit ?? 0) &&
-		capsTotal.value > (spend.value?.capped ?? 0),
+		committedTotal.value > (spend.value?.spend_limit ?? 0) &&
+		committedTotal.value > (spend.value?.committed ?? 0),
 )
+// A cap is whole US dollars, 0 included; Central refuses anything else.
+const isWholeCap = (value: string): boolean =>
+	Number.isInteger(Number(value)) && Number(value) >= 0
 const capsInvalid = computed(() =>
-	activeKeys.value.some((key) => !(Number(capValues.value[key.name]) >= 0)),
+	activeKeys.value.some((key) => !isWholeCap(capValues.value[key.name])),
 )
 
 const openCaps = (): void => {
@@ -247,8 +264,8 @@ const helpGatewayUrl = computed(
 
 const openHelp = (): void => {
 	helpGeography.value ||=
-		geographies.value.find((g) => g.is_default)?.name ??
-		geographies.value[0]?.name ??
+		mintable.value.find((g) => g.is_default)?.name ??
+		mintable.value[0]?.name ??
 		''
 	helpOpen.value = true
 }
@@ -324,9 +341,11 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 			/>
 			<div v-if="prepaid" class="mt-4 flex items-center justify-between gap-4">
 				<p class="text-p-xs text-ink-gray-5" aria-live="polite">
-					Caps add up to {{ usd(spend?.capped ?? 0) }} of your plan's
+					Caps and this month's spend take up
+					{{ usd(spend?.committed ?? 0) }}
+					of your plan's
 					{{ usd(spend?.spend_limit ?? 0) }}
-					a month · {{ keyCountLabel }}.
+					a month, as of {{ asOf }} · {{ keyCountLabel }}.
 				</p>
 				<Button
 					v-if="canManage && activeKeys.length"
@@ -526,7 +545,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				label: 'Create',
 				variant: 'solid',
 				loading: creating,
-				disabled: !newLabel.trim() || !newGeography,
+				disabled: !newLabel.trim() || !newGeography || !isWholeCap(newCap),
 				onClick: create,
 			},
 		]"
@@ -546,17 +565,25 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					:options="geographyOptions"
 					description="Where the key's requests are served. It cannot be changed later: create another key for another geography."
 				/>
-				<TextInput
-					v-if="prepaid"
-					v-model="newCap"
-					type="number"
-					min="0"
-					step="0.01"
-					label="Cap (USD)"
-					placeholder="0"
-					:description="`What this key may spend each month. Leave it at 0 to set it later: the key is refused until it has a cap.`"
-					@keyup.enter="create"
-				/>
+				<div v-if="prepaid" class="space-y-2">
+					<TextInput
+						v-model="newCap"
+						type="number"
+						min="0"
+						step="1"
+						label="Cap (USD)"
+						placeholder="0"
+						description="What this key may spend each month, in whole dollars. Leave it at 0 to set it later: the key is refused until it has a cap."
+						@keyup.enter="create"
+					/>
+					<p class="text-p-xs text-ink-gray-5">
+						Caps and this month's spend take up
+						{{ usd(spend?.committed ?? 0) }}
+						of your plan's
+						{{ usd(spend?.spend_limit ?? 0) }}
+						a month, as of {{ asOf }}.
+					</p>
+				</div>
 			</div>
 			<p v-if="createError" class="mt-2 text-p-sm text-ink-red-6">
 				{{ createError }}
@@ -599,7 +626,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 						class="w-36 shrink-0"
 						type="number"
 						min="0"
-						step="0.01"
+						step="1"
 						placeholder="0"
 						:autofocus="index === 0"
 						:aria-label="`Monthly cap for ${key.title} (USD)`"
@@ -609,7 +636,8 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				</div>
 			</div>
 			<p class="mt-4 text-p-sm text-ink-gray-5">
-				A key at 0 is refused until it gets a cap.
+				A key at 0 is refused until it gets a cap. Spend is as of {{ asOf }}:
+				Grove checks the live figure when you save.
 			</p>
 		</template>
 		<template #actions>
@@ -619,10 +647,10 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					:class="capsOverLimit ? 'text-ink-red-6' : 'text-ink-gray-5'"
 					aria-live="polite"
 				>
-					{{ usd(capsTotal) }}
+					{{ usd(committedTotal) }}
 					of your plan's
 					{{ usd(spend?.spend_limit ?? 0) }}
-					a month
+					a month, caps and this month's spend together, as of {{ asOf }}
 				</p>
 				<div class="flex items-center gap-2">
 					<Button
@@ -652,8 +680,8 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 			<div v-if="minted" class="space-y-5">
 				<Alert
 					theme="amber"
-					title="The key is shown only now"
-					description="Copy it somewhere safe. If you lose it, revoke it and create another."
+					title="The key is shown only once"
+					description="Copy it somewhere safe. If you lose it, revoke it and create another. It can take a few minutes to start working."
 				/>
 
 				<div>

@@ -86,6 +86,12 @@ const revokeKeyCall = useCall<{ name: string }, { team: string; key: string }>({
 	immediate: false,
 })
 
+const pullCall = useCall<{ sync: string | null }, { team: string }>({
+	url: method(API.pullAIUsage),
+	method: 'POST',
+	immediate: false,
+})
+
 // Row-level busy: the key currently mutating, so its control alone spins.
 const busyKey = ref('')
 
@@ -154,5 +160,16 @@ export function useAI() {
 				busyKey.value = ''
 			}
 		},
+
+		// Grove pulls the team's gateways now, then every "as of" on the page moves.
+		async refreshUsage(): Promise<void> {
+			await submitOrThrow(pullCall, { team: activeTeam.value! })
+			await Promise.all([
+				aiCall.reload(),
+				apiKeysCall.reload(),
+				usageParams.value.team ? usageCall.reload() : null,
+			])
+		},
+		refreshing: computed(() => pullCall.loading),
 	}
 }

@@ -3,7 +3,7 @@
 
 import frappe
 
-from central.billing.catalog.entitlements import evaluate_tier, get_ladder, get_team_caps, recompute_trust_tier
+from central.billing.catalog.entitlements import evaluate_tier, get_ladder, recompute_trust_tier
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
 from central.billing.tests.utils import clear_team_tier, complete_billing_profile, ensure_team
 
@@ -124,4 +124,3 @@ class TestRecomputeTrustTier(IntegrationTestCase):
 		# (no suspend is issued here — that is a non-payment directive on the token).
 		self.assertEqual(tier.tier, "t0")
 		self.assertEqual(tier.max_spend, 100)
-

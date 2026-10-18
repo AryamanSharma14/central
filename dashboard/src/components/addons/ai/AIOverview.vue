@@ -47,8 +47,16 @@ const spentPercent = computed(() => {
 	return limit > 0 ? Math.min(((usage.value?.cost ?? 0) / limit) * 100, 100) : 0
 })
 
-// A model call often costs a fraction of a cent, so small amounts keep 4 places.
-const usdPrecision = (value: number): number => (value > 0 && value < 1 ? 4 : 2)
+// A point a day so far this month under each count: its trend, where the Spent card
+// draws its limit bar. A month of zeros has no trend, and frappe-ui would draw it as a
+// flat line, so it draws nothing.
+const sparkline = (field: 'requests' | 'tokens') => {
+	const data = (usage.value?.daily ?? []).map((day) => day[field])
+	return {
+		type: 'line' as const,
+		data: data.some((value) => value > 0) ? data : [],
+	}
+}
 
 // ── Available models, per geography ──
 const geographies = computed(() => ai.value?.geographies ?? [])
@@ -102,17 +110,20 @@ const shownModels = computed(() =>
 				</p>
 
 				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+					<!-- The limit bar is this card's bottom graphic, level with the lines the
+					     other two draw: the card's body fills it and the bar row drops to the end. -->
 					<NumberCard
+						class="[&>div]:h-full [&>div>div:last-child]:mt-auto"
 						title="Spent"
 						:value="usage?.cost ?? null"
 						prefix="$"
-						:precision="usdPrecision(usage?.cost ?? 0)"
+						:precision="2"
 					>
 						<template #actions>
 							<Tooltip
 								:text="
 									prepaid
-										? `Your plan lets your keys spend $${(spend?.spend_limit ?? 0).toFixed(2)} a month; their caps add up to $${(spend?.capped ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
+										? `Your plan lets your keys spend $${(spend?.spend_limit ?? 0).toFixed(2)} a month; their caps and what they have spent this month take up $${(spend?.committed ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
 										: 'Your plan has no AI spend: upgrade it to give your keys a monthly cap.'
 								"
 							>
@@ -141,8 +152,16 @@ const shownModels = computed(() =>
 							</span>
 						</template>
 					</NumberCard>
-					<NumberCard title="Requests" :value="usage?.requests ?? null" />
-					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
+					<NumberCard
+						title="Requests"
+						:value="usage?.requests ?? null"
+						:sparkline="sparkline('requests')"
+					/>
+					<NumberCard
+						title="Tokens"
+						:value="usage?.tokens ?? null"
+						:sparkline="sparkline('tokens')"
+					>
 						<template #actions>
 							<Tooltip
 								text="Prompt and completion tokens together, across every model and key."
@@ -228,7 +247,9 @@ const shownModels = computed(() =>
 							<td class="py-3 pr-3 text-sm text-ink-gray-6">
 								{{ model.model_id }}
 							</td>
-							<td class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9">
+							<td
+								class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9"
+							>
 								{{ model.name }}
 							</td>
 
