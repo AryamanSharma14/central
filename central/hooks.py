@@ -186,11 +186,6 @@ doc_events = {
 		"validate": "central.users.validate_user_image",
 		"after_insert": "central.users.grant_central_user_role",
 	},
-	"Team": {
-		# Keep a staging-trial team's billing profile complete so it can create servers
-		# without the setup prompt (the profile gate is otherwise enforced in the console).
-		"on_update": "central.billing.payments.provisioning.on_team_update",
-	},
 	# A Billing Profile's level reaches Grove by the Webhook AI Settings keeps, with retries.
 	"Trust Tier Level": {
 		# A level's renamed label renames the Tier at Grove.
