@@ -15,7 +15,6 @@ import { computed, ref, watch } from 'vue'
 
 import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ListViewPagination from '@/components/common/list-view/ListViewPagination.vue'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
@@ -23,7 +22,7 @@ import { useAI } from '@/composables/useAI'
 import { formatDateTime } from '@/lib/datetime'
 import { getErrorMessage, reportError } from '@/lib/feedback'
 import { compactNumber } from '@/lib/format'
-import type { AIApiKey, AIRateLimit, MintedKey } from '@/types/ai'
+import type { AIApiKey, AIRateLimit } from '@/types/ai'
 
 interface Props {
 	canManage: boolean
@@ -183,7 +182,7 @@ const create = async (): Promise<void> => {
 	creating.value = true
 	createError.value = ''
 	try {
-		minted.value = await createApiKey({
+		await createApiKey({
 			label,
 			geography: newGeography.value,
 			...(prepaid.value && newCap.value !== ''
@@ -197,9 +196,6 @@ const create = async (): Promise<void> => {
 		creating.value = false
 	}
 }
-
-// The one time the secret is shown.
-const minted = ref<MintedKey | null>(null)
 
 // ── Caps: every live key's in one dialog, saved in one call ──
 const capsOpen = ref(false)
@@ -666,37 +662,6 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 						@click="saveCaps"
 					/>
 				</div>
-			</div>
-		</template>
-	</Dialog>
-
-	<Dialog
-		:model-value="!!minted"
-		:title="minted ? `API key - ${minted.label}` : ''"
-		size="2xl"
-		@update:model-value="(open: boolean) => !open && (minted = null)"
-	>
-		<template #default>
-			<div v-if="minted" class="space-y-5">
-				<Alert
-					theme="amber"
-					title="The key is shown only once"
-					description="Copy it somewhere safe. If you lose it, revoke it and create another. It can take a few minutes to start working."
-				/>
-
-				<div>
-					<label class="mb-1 block text-p-sm-medium text-ink-gray-7">
-						API key
-					</label>
-					<CopyableValue :value="minted.api_key" label="API key" block />
-				</div>
-
-				<!-- The examples carry the key and its own gateway, so what is copied runs as is. -->
-				<AIQuickstart
-					:gateway-url="minted.gateway_url"
-					:models="minted.models"
-					:api-key="minted.api_key"
-				/>
 			</div>
 		</template>
 	</Dialog>

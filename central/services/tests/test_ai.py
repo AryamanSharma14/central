@@ -346,6 +346,16 @@ class TestAI(IntegrationTestCase):
 		# One Grove read for spend and this month's usage: they are of one moment.
 		get_figures.assert_called_once_with(self.team)
 
+	def test_a_failed_models_read_does_not_cost_the_minted_secret(self):
+		self.enabled()
+		with (
+			patch.object(GroveClient, "provision_key", return_value=MINTED),
+			patch.object(GroveClient, "list_models", side_effect=GroveUnavailable),
+		):
+			created = api.create_api_key(self.team, "app", "eu", "5")
+		self.assertEqual((created["api_key"], created["models"]), (MINTED["api_key"], []))
+		self.assertNotIn("Grove", str(frappe.local.message_log), "the swallowed refusal leaves no message")
+
 	def test_a_key_is_minted_in_a_geography_with_a_cap_and_its_secret_is_returned_once(self):
 		self.enabled()
 		with (

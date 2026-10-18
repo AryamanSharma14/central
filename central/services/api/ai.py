@@ -82,8 +82,18 @@ def create_api_key(
 		"geography": key["geography"],
 		"gateway_url": key["gateway_url"],
 		"api_key": key["api_key"],
-		"models": ai.get_key_models(team, key["name"]),
+		"models": key_models_or_none(team, key["name"]),
 	}
+
+
+def key_models_or_none(team: str, key: str) -> list[dict]:
+	"""The models for the quickstart, or none: the secret is shown once, and a failed read of what
+	the key may call must not cost it. The Grove client has logged the failure already."""
+	try:
+		return ai.get_key_models(team, key)
+	except frappe.ValidationError:
+		frappe.clear_last_message()
+		return []
 
 
 @frappe.whitelist(methods=["POST"])

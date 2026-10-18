@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Alert, Button, Spinner, TabButtons, Tooltip } from 'frappe-ui'
+import { Alert, Button, Dialog, Spinner, TabButtons, Tooltip } from 'frappe-ui'
 import { ref } from 'vue'
 import AIApiKeys from '@/components/addons/ai/AIApiKeys.vue'
 import AIOverview from '@/components/addons/ai/AIOverview.vue'
+import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import AIUsage from '@/components/addons/ai/AIUsage.vue'
+import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useAI } from '@/composables/useAI'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
@@ -13,8 +15,17 @@ import { getErrorMessage, reportError, successToast } from '@/lib/feedback'
 
 const { canManageServices } = useCapabilities()
 const { activeTeam } = useSession()
-const { ai, aiLoading, aiError, reloadAI, enable, refreshing, refreshUsage } =
-	useAI()
+const {
+	ai,
+	aiLoading,
+	aiError,
+	reloadAI,
+	enable,
+	refreshing,
+	refreshUsage,
+	minted,
+	dismissMinted,
+} = useAI()
 useBreadcrumbs().setBreadcrumbs([{ label: 'LLM' }])
 
 const tab = ref('overview')
@@ -142,5 +153,38 @@ const refresh = async (): Promise<void> => {
 				</template>
 			</EmptyState>
 		</div>
+
+		<!-- The secret, shown once. It sits outside every branch above, so a reload that comes
+		     back unavailable or fails cannot take the dialog away before the key is copied. -->
+		<Dialog
+			:model-value="!!minted"
+			:title="minted ? `API key - ${minted.label}` : ''"
+			size="2xl"
+			@update:model-value="(open: boolean) => !open && dismissMinted()"
+		>
+			<template #default>
+				<div v-if="minted" class="space-y-5">
+					<Alert
+						theme="amber"
+						title="The key is shown only once"
+						description="Copy it somewhere safe. If you lose it, revoke it and create another. It can take a few minutes to start working."
+					/>
+
+					<div>
+						<label class="mb-1 block text-p-sm-medium text-ink-gray-7">
+							API key
+						</label>
+						<CopyableValue :value="minted.api_key" label="API key" block />
+					</div>
+
+					<!-- The examples carry the key and its own gateway, so what is copied runs as is. -->
+					<AIQuickstart
+						:gateway-url="minted.gateway_url"
+						:models="minted.models"
+						:api-key="minted.api_key"
+					/>
+				</div>
+			</template>
+		</Dialog>
 	</div>
 </template>

@@ -61,6 +61,10 @@ const createKeyCall = useCall<
 	immediate: false,
 })
 
+// The secret of the key just minted, shown once. Kept here, not in the keys tab, so the page
+// shows it from outside the tab area: a reload that comes back unavailable cannot unmount it.
+const minted = ref<MintedKey | null>(null)
+
 const capsCall = useCall<
 	AIApiKey[],
 	{ team: string; caps: Record<string, number> }
@@ -125,11 +129,18 @@ export function useAI() {
 		busyKey: computed(() => busyKey.value),
 		loadApiKeys: (): Promise<unknown> => apiKeysCall.reload(),
 
-		async createApiKey(key: NewKey): Promise<MintedKey> {
+		minted: computed(() => minted.value),
+		dismissMinted(): void {
+			minted.value = null
+		},
+
+		async createApiKey(key: NewKey): Promise<void> {
 			await submitOrThrow(createKeyCall, { team: activeTeam.value!, ...key })
-			// A cap moves the room left under the spend limit, so the overview reloads with the list.
-			await Promise.all([apiKeysCall.reload(), aiCall.reload()])
-			return createKeyCall.data!
+			// The secret is on screen before anything else can fail. A cap moves the room left
+			// under the spend limit, so the list and the overview reload after it; a reload that
+			// fails lands in its own error state and takes nothing from the dialog.
+			minted.value = createKeyCall.data!
+			void Promise.all([apiKeysCall.reload(), aiCall.reload()]).catch(() => {})
 		},
 
 		// Every cap in one call: Grove saves all or none, so caps can move between keys.
