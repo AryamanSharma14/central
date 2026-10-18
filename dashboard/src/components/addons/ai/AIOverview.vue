@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Badge, Button, Spinner, Tooltip } from 'frappe-ui'
+import { Badge, Button, Select, Spinner, Tooltip } from 'frappe-ui'
 import { NumberCard } from 'frappe-ui/charts'
-import { type Component, computed, ref } from 'vue'
+import { type Component, computed, ref, watch } from 'vue'
 import { useAI } from '@/composables/useAI'
 import { formatDateTime } from '@/lib/datetime'
+import { getErrorMessage } from '@/lib/feedback'
 import type { AIDialect } from '@/types/ai'
 import LucideAudioLines from '~icons/lucide/audio-lines'
 import LucideBinary from '~icons/lucide/binary'
@@ -33,19 +34,57 @@ const modalityIcons: Record<string, Component> = {
 function modalityLabel(modality: string): string {
 	return modality.charAt(0).toUpperCase() + modality.slice(1)
 }
-const { ai, aiLoading, models } = useAI()
+
+const { ai, aiLoading, models, modelsLoading, modelsError, loadModels } =
+	useAI()
 
 const usage = computed(() => ai.value?.usage ?? null)
-const balance = computed(() => ai.value?.balance ?? null)
+const spend = computed(() => ai.value?.spend ?? null)
+// A plan with no AI spend has nothing to fill: no bar.
+const prepaid = computed(() => !!spend.value && spend.value.spend_limit > 0)
+const spentPercent = computed(() => {
+	const limit = spend.value?.spend_limit ?? 0
+	return limit > 0 ? Math.min(((usage.value?.cost ?? 0) / limit) * 100, 100) : 0
+})
 
-// A model call often costs a fraction of a cent, so small amounts keep 4 places.
-const usdAmount = (value: number): string => {
-	const digits = value > 0 && value < 1 ? 4 : 2
-	return value.toLocaleString(undefined, {
-		minimumFractionDigits: digits,
-		maximumFractionDigits: digits,
-	})
+// A point a day so far this month under each count: its trend, where the Spent card
+// draws its limit bar. A month of zeros has no trend, and frappe-ui would draw it as a
+// flat line, so it draws nothing.
+const sparkline = (field: 'requests' | 'tokens') => {
+	const data = (usage.value?.daily ?? []).map((day) => day[field])
+	return {
+		type: 'line' as const,
+		data: data.some((value) => value > 0) ? data : [],
+	}
 }
+
+// ── Available models, per geography ──
+const geographies = computed(() => ai.value?.geographies ?? [])
+const defaultGeography = computed(
+	() =>
+		geographies.value.find((g) => g.is_default)?.name ??
+		geographies.value[0]?.name ??
+		'',
+)
+const geography = ref('')
+const geographyOptions = computed(() =>
+	geographies.value.map((g) => ({ label: g.label, value: g.name })),
+)
+// The list follows the pick; the first pick is Grove's default once the page knows it.
+watch(
+	defaultGeography,
+	(name) => {
+		if (!geography.value && name) geography.value = name
+	},
+	{ immediate: true },
+)
+watch(
+	geography,
+	(name) => {
+		if (name) loadModels(name)
+	},
+	{ immediate: true },
+)
 
 // The table starts short; the rest unfolds in place.
 const SHOWN = 6
@@ -70,21 +109,59 @@ const shownModels = computed(() =>
 					{{ usage?.as_of ? formatDateTime(usage.as_of) : 'the last count' }}.
 				</p>
 
-				<div class="mt-3 grid grid-cols-2 gap-4 md:grid-cols-4">
+				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+					<!-- The limit bar is this card's bottom graphic, level with the lines the
+					     other two draw: the card's body fills it and the bar row drops to the end. -->
 					<NumberCard
-						title="Balance"
-						:value="balance?.balance ?? null"
-						prefix="$"
-						:format="usdAmount"
-					/>
-					<NumberCard
+						class="[&>div]:h-full [&>div>div:last-child]:mt-auto"
 						title="Spent"
 						:value="usage?.cost ?? null"
 						prefix="$"
-						:format="usdAmount"
+						:precision="2"
+					>
+						<template #actions>
+							<Tooltip
+								:text="
+									prepaid
+										? `Your plan lets your keys spend $${(spend?.spend_limit ?? 0).toFixed(2)} a month; their caps and what they have spent this month take up $${(spend?.committed ?? 0).toFixed(2)} of it. Usage is billed at the end of the month.`
+										: 'Your plan has no AI spend: upgrade it to give your keys a monthly cap.'
+								"
+							>
+								<lucide-circle-help
+									class="size-4 text-ink-gray-5"
+									aria-label="What the monthly limit is"
+								/>
+							</Tooltip>
+						</template>
+						<template v-if="prepaid" #caption>
+							<div
+								class="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-gray-3"
+								role="progressbar"
+								:aria-valuenow="Math.round(spentPercent)"
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-label="Share of the monthly limit spent"
+							>
+								<div
+									class="h-full rounded-full bg-surface-gray-9"
+									:style="{ width: `${spentPercent}%` }"
+								/>
+							</div>
+							<span class="shrink-0 tabular-nums text-ink-gray-5">
+								of ${{ (spend?.spend_limit ?? 0).toFixed(2) }}
+							</span>
+						</template>
+					</NumberCard>
+					<NumberCard
+						title="Requests"
+						:value="usage?.requests ?? null"
+						:sparkline="sparkline('requests')"
 					/>
-					<NumberCard title="Requests" :value="usage?.requests ?? null" />
-					<NumberCard title="Tokens" :value="usage?.tokens ?? null">
+					<NumberCard
+						title="Tokens"
+						:value="usage?.tokens ?? null"
+						:sparkline="sparkline('tokens')"
+					>
 						<template #actions>
 							<Tooltip
 								text="Total tokens processed across the team's API keys, including input and output. Tokens measure model usage."
@@ -98,23 +175,58 @@ const shownModels = computed(() =>
 					</NumberCard>
 				</div>
 
-				<h2
-					class="text-base-semibold text-ink-gray-8 mt-8 border-t border-outline-gray-2 pt-8"
+				<div class="mt-8 border-t border-outline-gray-2 pt-8">
+					<div class="flex items-center justify-between gap-4">
+						<div class="min-w-0">
+							<h2 class="text-base-semibold text-ink-gray-8">
+								Available models
+							</h2>
+							<p class="mt-0.5 text-p-sm text-ink-gray-5">
+								What a key in this geography can call, what each model takes and
+								gives, and the APIs it answers on.
+							</p>
+						</div>
+						<Select
+							v-if="geographyOptions.length"
+							v-model="geography"
+							:options="geographyOptions"
+							side="bottom"
+							align="end"
+							aria-label="Geography"
+							class="w-fit shrink-0"
+						>
+							<template #prefix>
+								<span class="text-ink-gray-5">Geography</span>
+							</template>
+						</Select>
+					</div>
+				</div>
+
+				<div
+					v-if="modelsLoading && !models.length"
+					class="flex justify-center py-8"
 				>
-					Accessible models
-				</h2>
+					<Spinner class="size-5 text-ink-gray-5" />
+				</div>
 
-				<p class="mt-0.5 text-p-sm text-ink-gray-5">
-					Available models, supported input and output formats, and API
-					endpoints.
-				</p>
+				<div
+					v-else-if="modelsError && !models.length"
+					class="mt-3 flex items-center justify-between gap-3 rounded-6 border border-outline-gray-2 p-5"
+				>
+					<p class="text-p-sm text-ink-gray-7">
+						{{ getErrorMessage(modelsError, 'Models could not be loaded.') }}
+					</p>
+					<Button label="Try again" @click="loadModels(geography)" />
+				</div>
 
-				<table v-if="models.length" class="mt-3 w-full border-collapse">
+				<table v-else-if="models.length" class="mt-3 w-full border-collapse">
 					<thead>
 						<tr
 							class="border-b border-outline-gray-2 text-p-xs text-ink-gray-5"
 						>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Provider</th>
 							<th scope="col" class="py-2 pr-3 text-left text-xs">Model</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Model key</th>
 							<th scope="col" class="py-2 pr-3 text-left text-xs">Input</th>
 							<th scope="col" class="py-2 pr-3 text-left text-xs">Output</th>
 							<th scope="col" class="py-2 text-right text-xs">API</th>
@@ -123,6 +235,12 @@ const shownModels = computed(() =>
 
 					<tbody class="divide-y divide-outline-gray-1">
 						<tr v-for="model in shownModels" :key="model.name">
+							<td class="py-3 pr-3 text-sm text-ink-gray-7">
+								{{ model.provider }}
+							</td>
+							<td class="py-3 pr-3 text-sm text-ink-gray-6">
+								{{ model.model_id }}
+							</td>
 							<td class="py-3 pr-3 font-mono text-sm-medium text-ink-gray-9">
 								{{ model.name }}
 							</td>
@@ -161,9 +279,11 @@ const shownModels = computed(() =>
 					</tbody>
 				</table>
 
-				<p v-else class="mt-3 text-p-sm text-ink-gray-5">
-					No models are available to this team. Contact support to check model
-					access.
+				<p
+					v-else
+					class="mt-3 rounded-6 border border-outline-gray-2 p-8 text-center text-p-sm text-ink-gray-5"
+				>
+					No models in this geography yet
 				</p>
 
 				<Button

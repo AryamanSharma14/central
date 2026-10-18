@@ -1,19 +1,31 @@
 <script setup lang="ts">
-import { Button, Spinner, TabButtons } from 'frappe-ui'
+import { Alert, Button, Dialog, Spinner, TabButtons, Tooltip } from 'frappe-ui'
 import { ref } from 'vue'
 import AIApiKeys from '@/components/addons/ai/AIApiKeys.vue'
 import AIOverview from '@/components/addons/ai/AIOverview.vue'
+import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import AIUsage from '@/components/addons/ai/AIUsage.vue'
+import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useAI } from '@/composables/useAI'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { useSession } from '@/composables/useSession'
-import { getErrorMessage, reportError } from '@/lib/feedback'
+import { getErrorMessage, reportError, successToast } from '@/lib/feedback'
 
 const { canManageServices } = useCapabilities()
 const { activeTeam } = useSession()
-const { ai, aiLoading, aiError, reloadAI, models, enable } = useAI()
+const {
+	ai,
+	aiLoading,
+	aiError,
+	reloadAI,
+	enable,
+	refreshing,
+	refreshUsage,
+	minted,
+	dismissMinted,
+} = useAI()
 useBreadcrumbs().setBreadcrumbs([{ label: 'LLM' }])
 
 const tab = ref('overview')
@@ -32,6 +44,15 @@ const enableAI = async (): Promise<void> => {
 		reportError(e)
 	} finally {
 		enabling.value = false
+	}
+}
+
+const refresh = async (): Promise<void> => {
+	try {
+		await refreshUsage()
+		successToast('Usage refreshed.')
+	} catch (e) {
+		reportError(e, { title: 'Could not refresh usage' })
 	}
 }
 </script>
@@ -54,13 +75,34 @@ const enableAI = async (): Promise<void> => {
 				</div>
 			</div>
 
-			<!-- One row: the tabs, then the open tab's own controls (teleported in). -->
+			<!-- Grove down or in maintenance: the gateways keep serving keys, only this page waits. -->
+			<Alert
+				v-if="ai?.unavailable"
+				class="mt-6"
+				theme="amber"
+				title="LLM service is under maintenance"
+				description="Your API keys keep working. Usage, keys and limits can't be shown or changed until it is back."
+				:primary-action="{ label: 'Retry', onClick: reloadAI }"
+			/>
+
+			<!-- One row: the tabs, then the open tab's own controls (teleported in) and Refresh usage. -->
 			<div
-				v-if="ai?.enabled"
+				v-else-if="ai?.enabled"
 				class="mt-6 flex flex-wrap items-center justify-between gap-2"
 			>
 				<TabButtons v-model="tab" :options="tabs" />
-				<div id="ai-tab-controls" class="contents" />
+				<div class="flex flex-wrap items-center gap-2">
+					<div id="ai-tab-controls" class="contents" />
+					<!-- Icon only: `label` becomes its aria-label, the tooltip shows it. -->
+					<Tooltip text="Refresh usage">
+						<Button
+							label="Refresh usage"
+							icon="lucide-refresh-cw"
+							:loading="refreshing"
+							@click="refresh"
+						/>
+					</Tooltip>
+				</div>
 			</div>
 		</div>
 
@@ -85,13 +127,16 @@ const enableAI = async (): Promise<void> => {
 		</div>
 
 		<!-- Keyed on the team: a switch in the sidebar remounts the tab, so it lists that team. -->
-		<template v-else-if="ai?.enabled" :key="activeTeam">
+		<template v-else-if="ai?.enabled && !ai.unavailable" :key="activeTeam">
 			<AIOverview v-if="tab === 'overview'" />
 			<AIUsage v-else-if="tab === 'usage'" />
-			<AIApiKeys v-else :models="models" :can-manage="canManageServices" />
+			<AIApiKeys v-else :can-manage="canManageServices" />
 		</template>
 
-		<div v-else class="flex flex-1 items-center justify-center p-8">
+		<div
+			v-else-if="!ai?.enabled"
+			class="flex flex-1 items-center justify-center p-8"
+		>
 			<EmptyState
 				icon="lucide-bot"
 				title="Set up LLM"
@@ -108,5 +153,38 @@ const enableAI = async (): Promise<void> => {
 				</template>
 			</EmptyState>
 		</div>
+
+		<!-- The secret, shown once. It sits outside every branch above, so a reload that comes
+		     back unavailable or fails cannot take the dialog away before the key is copied. -->
+		<Dialog
+			:model-value="!!minted"
+			:title="minted ? `API key - ${minted.label}` : ''"
+			size="2xl"
+			@update:model-value="(open: boolean) => !open && dismissMinted()"
+		>
+			<template #default>
+				<div v-if="minted" class="space-y-5">
+					<Alert
+						theme="amber"
+						title="The key is shown only once"
+						description="Copy it somewhere safe. If you lose it, revoke it and create another. It can take a few minutes to start working."
+					/>
+
+					<div>
+						<label class="mb-1 block text-p-sm-medium text-ink-gray-7">
+							API key
+						</label>
+						<CopyableValue :value="minted.api_key" label="API key" block />
+					</div>
+
+					<!-- The examples carry the key and its own gateway, so what is copied runs as is. -->
+					<AIQuickstart
+						:gateway-url="minted.gateway_url"
+						:models="minted.models"
+						:api-key="minted.api_key"
+					/>
+				</div>
+			</template>
+		</Dialog>
 	</div>
 </template>

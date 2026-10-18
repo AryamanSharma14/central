@@ -3,6 +3,7 @@ import { Button, Select } from 'frappe-ui'
 import { AreaChart, BarChart } from 'frappe-ui/charts'
 import { computed, ref, watch } from 'vue'
 import { useAI } from '@/composables/useAI'
+import { compactNumber } from '@/lib/format'
 
 const { usage, usageLoading, usageError, loadUsage, apiKeys, loadApiKeys } =
 	useAI()
@@ -22,6 +23,10 @@ const period = ref(defaultPeriod)
 
 // '' is every key. A revoked key keeps its history, so it stays in the list.
 const apiKey = ref('')
+// Whether the period or the key narrowed the view: the empty state says so.
+const isFiltered = computed(
+	() => period.value !== defaultPeriod || apiKey.value !== '',
+)
 const keyOptions = computed(() => [
 	{ label: 'All', value: '' },
 	...apiKeys.value.map((key) => ({
@@ -31,15 +36,6 @@ const keyOptions = computed(() => [
 ])
 
 loadApiKeys()
-
-const isFiltered = computed(
-	() => period.value !== defaultPeriod || apiKey.value !== '',
-)
-
-const resetFilters = (): void => {
-	period.value = defaultPeriod
-	apiKey.value = ''
-}
 
 const reload = (): void => {
 	loadUsage({ period: period.value, key: apiKey.value })
@@ -84,12 +80,6 @@ const usd = (value: number): string =>
 		maximumFractionDigits: 4,
 	}).format(value)
 
-const compact = (value: number): string =>
-	new Intl.NumberFormat(undefined, {
-		notation: 'compact',
-		maximumFractionDigits: 1,
-	}).format(value)
-
 // "2026-09-24" reads as "9/24" on the axis.
 const shortDay = (day: string): string => {
 	const [, month, date] = day.split('-')
@@ -131,14 +121,6 @@ const asOf = computed(() =>
 							<span class="text-ink-gray-5">API Key</span>
 						</template>
 					</Select>
-					<button
-						v-if="isFiltered"
-						type="button"
-						class="text-p-sm text-ink-gray-7 underline underline-offset-2 hover:text-ink-gray-9"
-						@click="resetFilters"
-					>
-						Reset filters
-					</button>
 				</div>
 			</Teleport>
 
@@ -155,7 +137,7 @@ const asOf = computed(() =>
 				class="rounded-6 border border-outline-gray-2 p-8 text-center text-p-sm text-ink-gray-5"
 			>
 				{{ isFiltered
-					? 'No AI requests were recorded for these filters. Choose another period or reset the filters.'
+					? 'No AI requests were recorded for these filters. Choose another period or key.'
 					: 'No AI requests were recorded in the last 7 days. Use an API key from the API keys tab to send your first request, or choose another period to view earlier usage.' }}
 			</p>
 
@@ -206,7 +188,7 @@ const asOf = computed(() =>
 									requests: { label: 'Requests', smooth: true },
 								}"
 								:x-axis="dayAxis"
-								:y-axis="{ min: 0, format: compact }"
+								:y-axis="{ min: 0, format: compactNumber }"
 								:loading="usageLoading"
 							/>
 						</div>
@@ -215,14 +197,14 @@ const asOf = computed(() =>
 							class="h-72 rounded-6 border border-outline-gray-2 bg-surface-base p-5"
 						>
 							<BarChart
-								title="Cost (USD)"
-								:subtitle="usd(selected.cost)"
+								title="Tokens"
+								:subtitle="selected.tokens.toLocaleString()"
 								:data="selectedDays"
 								x="day"
-								y="cost"
-								:series-config="{ cost: { label: 'Cost' } }"
+								y="tokens"
+								:series-config="{ tokens: { label: 'Tokens' } }"
 								:x-axis="dayAxis"
-								:y-axis="{ format: usd }"
+								:y-axis="{ min: 0, format: compactNumber }"
 								:loading="usageLoading"
 							/>
 						</div>

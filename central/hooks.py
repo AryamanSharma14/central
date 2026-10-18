@@ -105,10 +105,10 @@ website_user_home_page = "dashboard"
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "central.utils.jinja_methods",
-# 	"filters": "central.utils.jinja_filters"
-# }
+jinja = {
+	# The body of the Webhook that carries a team's tier to Grove (AI Settings).
+	"methods": ["central.services.ai.get_team_limits"],
+}
 
 # Installation
 # ------------
@@ -186,9 +186,10 @@ doc_events = {
 		"validate": "central.users.validate_user_image",
 		"after_insert": "central.users.grant_central_user_role",
 	},
-	"Billing Profile": {
-		# Its email is the alert address of the team's Grove user when set.
-		"on_update": "central.services.ai.on_alert_address_update",
+	# A Billing Profile's level reaches Grove by the Webhook AI Settings keeps, with retries.
+	"Trust Tier Level": {
+		# A level's renamed label renames the Tier at Grove.
+		"on_update": "central.services.ai.on_level_update",
 	},
 	"Payment Method": {
 		"on_update": "central.signups.credit.on_payment_method_update",
@@ -256,6 +257,8 @@ after_migrate = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.gateways.setup.ensure_gateway_records",
 	"central.billing.navigation.ensure_workspace_sidebars",
+	# The Webhook that carries a team's tier to Grove, so an edit to its spec rolls out.
+	"central.services.doctype.ai_settings.ai_settings.sync_webhook",
 ]
 
 # Testing
