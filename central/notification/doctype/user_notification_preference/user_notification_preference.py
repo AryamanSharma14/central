@@ -1,6 +1,8 @@
 # Copyright (c) 2026, frappe and contributors
 # For license information, please see license.txt
 
+from typing import Self
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -15,12 +17,34 @@ class UserNotificationPreference(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		category: DF.Literal["Billing", "Server", "Team"]
+		category: DF.Literal["Billing", "Server", "Team", "Trial"]
 		email_enabled: DF.Check
 		in_app_enabled: DF.Check
 		team: DF.Link
 		user: DF.Link
 	# end: auto-generated types
+
+	@classmethod
+	def upsert(cls, user: str, team: str, category: str, email_enabled: bool, in_app_enabled: bool) -> Self:
+		"""Save one preference per user, team and category."""
+		values = {"email_enabled": int(email_enabled), "in_app_enabled": int(in_app_enabled)}
+		name = frappe.db.get_value(
+			"User Notification Preference", {"user": user, "team": team, "category": category}
+		)
+		if name:
+			doc = frappe.get_doc("User Notification Preference", name)
+			doc.update(values)
+			return doc.save()
+
+		return frappe.get_doc(
+			{
+				"doctype": "User Notification Preference",
+				"user": user,
+				"team": team,
+				"category": category,
+				**values,
+			}
+		).insert()
 
 	def validate(self):
 		existing = frappe.db.exists(

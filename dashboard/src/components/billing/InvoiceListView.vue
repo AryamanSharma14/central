@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
 import { Badge, Button, DateRangePicker } from 'frappe-ui'
-import { computed, h, ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
 	ListView,
 	type ListViewColumn,
@@ -58,86 +58,33 @@ const dateActive = computed(() => {
 const isOverdue = (inv: InvoiceSummary): boolean =>
 	String(inv.status).toLowerCase() === 'overdue'
 
-const columns = computed<ListViewColumn<InvoiceSummary>[]>(() => [
+const columns: ListViewColumn<InvoiceSummary>[] = [
 	{
-		id: 'invoice',
-		// The accessor is what search matches on — the number and the period as
-		// rendered ("May 2026"), per the placeholder's promise. Sorting stays
-		// chronological via sortingFn; the name would sort alphabetically.
-		accessorFn: (inv) =>
-			`${inv.name} ${billingPeriod(inv.period_start, inv.period_end)}`,
-		sortingFn: (a, b) =>
-			(a.original.period_end || '').localeCompare(b.original.period_end || ''),
-		header: 'Invoice',
-		size: 260,
-		cell: ({ row }) =>
-			h('div', { class: 'min-w-0 py-2.5' }, [
-				h(
-					'p',
-					{ class: 'truncate text-sm-medium leading-normal text-ink-gray-8' },
-					billingPeriod(row.original.period_start, row.original.period_end),
-				),
-				h(
-					'p',
-					{
-						class: [
-							'truncate text-p-sm',
-							isOverdue(row.original) ? 'text-ink-red-7' : 'text-ink-gray-5',
-						],
-					},
-					isOverdue(row.original)
-						? `${row.original.name} · Due ${shortDate(row.original.due_date)}`
-						: row.original.name,
-				),
-			]),
+		key: 'invoice',
+		label: 'Invoice',
+		// Search matches the number and the period as shown ("May 2026"). Sorting
+		// stays chronological; the name would sort alphabetically.
+		value: (invoice) =>
+			`${invoice.name} ${billingPeriod(invoice.period_start, invoice.period_end)}`,
+		sortable: true,
+		compare: (a, b) => (a.period_end || '').localeCompare(b.period_end || ''),
 	},
 	{
-		accessorKey: 'status',
-		header: 'Status',
-		size: 110,
-		meta: { align: 'end' },
-		cell: ({ row }) =>
-			h(Badge, {
-				theme: invoiceTheme(row.original.status),
-				variant: 'subtle',
-				label: row.original.status,
-			}),
+		key: 'status',
+		label: 'Status',
+		width: '7rem',
+		sortable: true,
+		align: 'end',
 	},
 	{
-		id: 'total',
-		accessorFn: (inv) => inv.total,
-		header: 'Amount',
-		size: 110,
-		meta: { align: 'end' },
-		cell: ({ row }) =>
-			h(
-				'span',
-				{ class: 'tabular-nums text-ink-gray-8' },
-				money(row.original.total, row.original.currency),
-			),
+		key: 'total',
+		label: 'Amount',
+		width: '7rem',
+		sortable: true,
+		align: 'end',
 	},
-	{
-		id: 'actions',
-		header: '',
-		enableSorting: false,
-		enableGlobalFilter: false,
-		meta: { align: 'end' },
-		// The wrapper stops the click from also selecting the row.
-		cell: ({ row }) =>
-			h('span', { onClick: (e: Event) => e.stopPropagation() }, [
-				h(Button, {
-					variant: 'ghost',
-					icon: 'lucide-download',
-					disabled: !row.original.has_pdf,
-					title: row.original.has_pdf
-						? 'Download PDF'
-						: 'The PDF is ready once the invoice is issued',
-					label: 'Download invoice',
-					onClick: () => downloadInvoice(row.original.name),
-				}),
-			]),
-	},
-])
+	{ key: 'actions', label: '', width: '2.5rem', align: 'end' },
+]
 
 const filters: ListViewFilter[] = [
 	{
@@ -203,6 +150,42 @@ const filters: ListViewFilter[] = [
 					</button>
 				</template>
 			</DateRangePicker>
+		</template>
+
+		<template #invoice="{ row }">
+			<div class="min-w-0 py-2.5">
+				<p class="truncate text-p-sm-medium text-ink-gray-8">
+					{{ billingPeriod(row.period_start, row.period_end) }}
+				</p>
+				<p
+					class="truncate text-p-sm"
+					:class="isOverdue(row) ? 'text-ink-red-7' : 'text-ink-gray-5'"
+				>
+					{{ isOverdue(row) ? `${row.name} · Due ${shortDate(row.due_date)}` : row.name }}
+				</p>
+			</div>
+		</template>
+
+		<template #status="{ row }">
+			<Badge :theme="invoiceTheme(row.status)" :label="row.status" />
+		</template>
+
+		<template #total="{ row }">
+			<span class="tabular-nums text-ink-gray-8">
+				{{ money(row.total, row.currency) }}
+			</span>
+		</template>
+
+		<template #actions="{ row }">
+			<Button
+				class="relative"
+				variant="ghost"
+				icon="lucide-download"
+				:disabled="!row.has_pdf"
+				:title="row.has_pdf ? 'Download PDF' : 'The PDF is ready once the invoice is issued'"
+				label="Download invoice"
+				@click="downloadInvoice(row.name)"
+			/>
 		</template>
 	</ListView>
 </template>

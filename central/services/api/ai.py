@@ -1,15 +1,14 @@
-from __future__ import annotations
-
 import frappe
 from frappe import _
 from frappe.utils import flt
+from frappe.utils.translations import _lt
 
 from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
 from central.utils.guards import require_capability
 
-VIEW_DENIED = "You can't view this team's AI."
-MANAGE_DENIED = "You can't manage this team's AI."
+VIEW_DENIED = _lt("You can't view this team's AI. Ask a team admin to review your access.")
+MANAGE_DENIED = _lt("You can't manage this team's AI. Ask a team admin to review your access.")
 KEY_FIELDS = (
 	"name",
 	"title",
@@ -71,7 +70,7 @@ def create_api_key(
 	require_ai(team)
 	label = (label or "").strip()
 	if not label:
-		frappe.throw(_("A label is required."))
+		frappe.throw(_("Enter a name for the API key so you can identify it later."))
 
 	client = GroveClient.from_settings()
 	key = client.provision_key(
@@ -133,6 +132,7 @@ def revoke_api_key(team: str | None = None, key: str | None = None) -> dict:
 	"""Revoke one of the team's keys. Grove refuses another team's key."""
 	require_ai(team)
 	GroveClient.from_settings().revoke_key(team, key)
+
 	return {"name": key}
 
 
@@ -147,7 +147,7 @@ def get_usage(team: str | None = None, period: str = "Last 7 Days", key: str | N
 
 def require_ai(team: str) -> None:
 	if not ai.get_ai_service(team):
-		frappe.throw(_("AI is not enabled for this team."))
+		frappe.throw(_("AI is not enabled for this team. Ask a team admin to enable it on the LLM page."))
 
 
 def get_key_hash(team: str, key: str) -> str:
@@ -155,4 +155,9 @@ def get_key_hash(team: str, key: str) -> str:
 	for row in GroveClient.from_settings().get_figures(team)["keys"]:
 		if row["name"] == key:
 			return row["key_hash"]
-	frappe.throw(_("Unknown API key."), frappe.DoesNotExistError)
+	frappe.throw(
+		_(
+			"This API key is not available on this team. Refresh the API keys list and select a key from this team."
+		),
+		frappe.DoesNotExistError,
+	)

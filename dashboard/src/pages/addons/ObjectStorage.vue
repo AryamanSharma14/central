@@ -66,8 +66,10 @@ const canCreate = computed(
 				:title="regions.length ? 'No buckets yet' : 'Not available yet'"
 				:description="
 					regions.length
-						? 'Create a bucket in a region near your servers. You get an S3 endpoint and a key that opens only that bucket.'
-						: 'Object Storage is not available in any region yet.'
+						? canCreate
+							? 'Create a bucket in a region near your servers. You get an S3 endpoint and a key that opens only that bucket.'
+							: 'This team has no buckets. Ask a team admin to create a bucket or grant you permission to manage object storage.'
+						: 'Object Storage is not available in any region right now. Contact support to check availability.'
 				"
 			>
 				<template v-if="canCreate" #action>

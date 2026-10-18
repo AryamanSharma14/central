@@ -14,6 +14,7 @@ from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
 from central.services.api import ai as api
 from central.services.doctype.ai_settings import ai_settings
+from central.tests.test_iam import ensure_user
 
 MINTED = {
 	"name": "k1",
@@ -165,6 +166,23 @@ class TestGroveClientCalls(IntegrationTestCase):
 			with grove_replies([]) as post:
 				call()
 			self.assertEqual(sent(post), expected)
+
+	def test_a_grove_refusal_shows_a_tenant_no_grove_detail(self):
+		marker = "grove-internal-" + frappe.generate_hash(length=8)
+		frappe.set_user(ensure_user("grove.tenant@example.test"))
+		self.addCleanup(frappe.set_user, "Administrator")
+
+		with patch("central.integrations.grove.requests.post") as post:
+			post.return_value.status_code = 500
+			post.return_value.text = marker
+			post.return_value.json.side_effect = ValueError
+			with self.assertRaises(frappe.ValidationError) as refused:
+				self.client.get_figures("TEAM-1")
+
+		self.assertNotIn(marker, str(refused.exception))
+		self.assertIn(
+			marker, frappe.get_last_doc("Error Log", filters={"method": "Grove request failed"}).error
+		)
 
 	def test_a_grove_refusal_is_raised_with_groves_own_sentence(self):
 		sentence = "This month's spend and caps would add up to 7.5 of a spend limit of 5."

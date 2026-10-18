@@ -1,3 +1,5 @@
+import type { ProductEmailNote } from './ProductEmailNote'
+
 export interface Product {
 	name: string
 	creation: string
@@ -23,4 +25,14 @@ export interface Product {
 	signup_app: string
 	/**	Landing Route : Data - Where the owner lands after signing in to a trial site, such as /raven, so the app can run its own setup. Leave empty to open Desk.	*/
 	landing_route?: string
+	/**	Trial Days : Int - Days a trial site of this product runs from when it is first ready. 0 uses Central Settings.	*/
+	trial_days?: number
+	/**	Trial Deletion Days : Int - Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings.	*/
+	trial_deletion_days?: number
+	/**	Use Product Branding in Emails : Check - Show this product's logo and title instead of Frappe Cloud's in signup codes and in emails about its sites. Needs a public logo.	*/
+	use_own_email_branding?: 0 | 1
+	/**	Getting Started URL : Data - An https:// page that shows a new customer how to start, such as the product's docs. The site_ready and trial_unopened emails link to it with a Get started button.	*/
+	getting_started_url?: string
+	/**	Email Notes : Table - Product Email Note - An extra paragraph for a lifecycle email about a site of this product, such as what to do first in site_ready.	*/
+	email_notes?: ProductEmailNote[]
 }

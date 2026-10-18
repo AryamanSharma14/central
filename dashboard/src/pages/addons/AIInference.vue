@@ -56,7 +56,7 @@ const refresh = async (): Promise<void> => {
 					<lucide-bot class="size-6" />
 				</span>
 				<div class="min-w-0">
-					<h1 class="text-xl font-semibold text-ink-gray-9">LLM</h1>
+					<h1 class="text-xl-semibold text-ink-gray-9">LLM</h1>
 					<p class="mt-0.5 text-p-base text-ink-gray-5">
 						Our hosted models and leading upstream models, through OpenAI and
 						Anthropic compatible APIs.
@@ -129,7 +129,7 @@ const refresh = async (): Promise<void> => {
 			<EmptyState
 				icon="lucide-bot"
 				title="Set up LLM"
-				description="Turn LLM on for your team, then create API keys to call the models from your own apps."
+				description="Enable LLM for your team, then create an API key to use the models."
 			>
 				<template v-if="canManageServices" #action>
 					<Button

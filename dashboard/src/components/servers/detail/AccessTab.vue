@@ -1,19 +1,56 @@
 <script setup lang="ts">
-import { Button } from 'frappe-ui'
-import { computed } from 'vue'
+import { Button, call } from 'frappe-ui'
+import { computed, ref } from 'vue'
+import { API } from '@/api/methods'
 import CopyButton from '@/components/common/CopyButton.vue'
 import SettingsSection from '@/components/common/SettingsSection.vue'
-import { openSettings } from '@/composables/useSettings'
+import EditSSHKeysDialog from '@/components/servers/EditSSHKeysDialog.vue'
+import SSHKeyDialog from '@/components/servers/SSHKeyDialog.vue'
+import { useSession } from '@/composables/useSession'
+import { useTeamSSHKeys } from '@/composables/useTeamSSHKeys'
+import { successToast } from '@/lib/feedback'
 import type { ServerOverview } from '@/types/servers'
 
 interface Props {
 	overview: ServerOverview
+	/** The viewer holds server:ssh-key, so they can change this server's keys. */
+	canManageKeys: boolean
 }
 
 const props = defineProps<Props>()
+const emit = defineEmits<{ changed: [] }>()
 
 const sshCommand = computed(() => props.overview.server.ssh_command)
 const sshKeys = computed(() => props.overview.server.ssh_keys)
+const canEditKeys = computed(
+	() => props.canManageKeys && props.overview.server.status !== 'Terminated',
+)
+const isEditing = ref(false)
+const isAdding = ref(false)
+
+const { activeTeam } = useSession()
+const { keys: teamKeys, create: createTeamKey } = useTeamSSHKeys()
+
+// A team without keys has nothing to pick, so it starts by adding one.
+function editKeys(): void {
+	if (teamKeys.value.length) isEditing.value = true
+	else isAdding.value = true
+}
+
+async function addToServer(title: string, publicKey: string) {
+	const key = await createTeamKey(title, publicKey)
+	await call(API.setServerSSHKeys, {
+		team: activeTeam.value,
+		resource_id: props.overview.server.resource_id,
+		ssh_keys: [...sshKeys.value.map((row) => row.name), key.name],
+	})
+	return key
+}
+
+function changed(): void {
+	successToast('SSH keys updated')
+	emit('changed')
+}
 </script>
 
 <template>
@@ -43,11 +80,14 @@ const sshKeys = computed(() => props.overview.server.ssh_keys)
 			:description="
 				sshKeys.length
 					? 'Keys that can sign in to this server.'
-					: 'This server was created without a team key. Use the web console in Actions to sign in.'
+					: 'This server has no SSH key. To get a root shell, open Actions, then Web console, then SSH session.'
 			"
 		>
-			<template #actions>
-				<Button label="Manage keys" @click="openSettings('ssh-keys')" />
+			<template v-if="canEditKeys" #actions>
+				<Button
+					:label="sshKeys.length ? 'Edit keys' : 'Add keys'"
+					@click="editKeys"
+				/>
 			</template>
 
 			<ul
@@ -66,5 +106,14 @@ const sshKeys = computed(() => props.overview.server.ssh_keys)
 				</li>
 			</ul>
 		</SettingsSection>
+
+		<EditSSHKeysDialog
+			v-model:open="isEditing"
+			:resource-id="overview.server.resource_id"
+			:keys="sshKeys"
+			@saved="changed"
+		/>
+
+		<SSHKeyDialog v-model="isAdding" :save="addToServer" @saved="changed" />
 	</div>
 </template>

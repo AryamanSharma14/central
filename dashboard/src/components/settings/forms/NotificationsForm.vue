@@ -4,12 +4,13 @@ import { computed, reactive, ref, watch } from 'vue'
 import { API, method } from '@/api/methods'
 import { teamParams, whenTeamReady } from '@/composables/useTeamScope'
 import { getErrorMessage, successToast } from '@/lib/feedback'
+import { submitOrThrow } from '@/lib/frappeCall'
 
 // Per-user notification preferences, one row per category. Email delivery and the
 // in-app feed toggle independently. Opt-out model: a category with no saved row is
 // enabled for both (see engine._email_enabled and the feed's in_app filter), so
 // every switch defaults to on and we only persist the user's explicit choices.
-type Category = 'Billing' | 'Server' | 'Team'
+type Category = 'Billing' | 'Server' | 'Team' | 'Trial'
 type Channels = { email: boolean; in_app: boolean }
 
 interface Preference {
@@ -34,6 +35,11 @@ const CATEGORIES: { key: Category; label: string; hint: string }[] = [
 		label: 'Team',
 		hint: 'Invitations, role changes and membership.',
 	},
+	{
+		key: 'Trial',
+		label: 'Trial',
+		hint: 'When a free trial ends, stops and is deleted.',
+	},
 ]
 
 function defaults(): Record<Category, Channels> {
@@ -41,6 +47,7 @@ function defaults(): Record<Category, Channels> {
 		Billing: { email: true, in_app: true },
 		Server: { email: true, in_app: true },
 		Team: { email: true, in_app: true },
+		Trial: { email: true, in_app: true },
 	}
 }
 
@@ -107,8 +114,7 @@ async function onSave(): Promise<void> {
 			email_enabled: state[key].email ? 1 : 0,
 			in_app_enabled: state[key].in_app ? 1 : 0,
 		}))
-		await save.submit({ ...teamParams(), preferences })
-		if (save.error) throw save.error
+		await submitOrThrow(save, { ...teamParams(), preferences })
 		await load.reload()
 		successToast('Notification preferences saved')
 	} catch (e) {

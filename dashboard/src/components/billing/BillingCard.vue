@@ -10,9 +10,9 @@ defineProps<{ title: string; description?: string; titleInfo?: string }>()
 
 <template>
 	<section
-		class="flex flex-col rounded-6 border border-outline-gray-2 bg-surface-base"
+		class="flex flex-col rounded-6 border border-outline-gray-1 bg-surface-base"
 	>
-		<header class="flex items-start justify-between gap-3 px-5 pt-5">
+		<header class="flex min-h-14 items-center justify-between gap-3 px-5 py-3">
 			<div class="min-w-0">
 				<div class="flex items-center gap-1.5">
 					<h2 class="truncate text-base-semibold text-ink-gray-8">
@@ -29,16 +29,17 @@ defineProps<{ title: string; description?: string; titleInfo?: string }>()
 					{{ description }}
 				</p>
 			</div>
-			<div class="-my-1 flex shrink-0 items-center">
+			<div class="flex shrink-0 items-center">
 				<slot name="action" />
 			</div>
 		</header>
 		<!-- Only render the body when there is body content — a description-only
          card (e.g. Stop billing) would otherwise carry the body's empty
          padding as a phantom gap. -->
-		<div v-if="$slots.default" class="flex-1 px-5 pb-5 pt-2">
+		<div v-if="$slots.default" class="flex flex-1 flex-col px-5 pb-5 pt-1">
 			<slot />
 		</div>
 		<div v-else class="pb-4" />
+		<slot name="footer" />
 	</section>
 </template>

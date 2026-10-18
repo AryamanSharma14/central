@@ -540,8 +540,13 @@ def billing_run_status(today=None) -> dict:
 		"pending_collection": pending_collection,
 		"collected": drafted - pending_collection,
 		"by_status": counts,
-		"failures": frappe.db.count(
-			"Error Log", {"method": BILLING_RUN_FAILURE, "creation": [">=", period_end]}
+		# Error Log can live outside the site database, where `frappe.db.count` cannot reach it.
+		"failures": len(
+			frappe.get_all(
+				"Error Log",
+				filters={"method": BILLING_RUN_FAILURE, "creation": [">=", period_end]},
+				pluck="name",
+			)
 		),
 	}
 

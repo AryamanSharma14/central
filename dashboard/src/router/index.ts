@@ -45,6 +45,11 @@ const routes = [
 		name: 'OnboardingProvisioning',
 		component: () => import('@/pages/onboarding/SiteReadyPage.vue'),
 	},
+	{
+		path: '/github/connect/:attempt?',
+		name: 'ConnectGitHub',
+		component: () => import('@/pages/github/ConnectGitHubPage.vue'),
+	},
 	// authenticated routes -> AppShell
 	{
 		path: '/',
@@ -110,18 +115,6 @@ const routes = [
 				name: 'BillingInvoices',
 				component: () => import('@/pages/billing/BillingInvoicesPage.vue'),
 				meta: { title: 'Invoices' },
-			},
-			{
-				path: 'billing/reports',
-				name: 'BillingReports',
-				component: () => import('@/pages/billing/BillingReportsPage.vue'),
-				meta: { title: 'Reports' },
-			},
-			{
-				path: 'billing/limits',
-				name: 'SpendingLimits',
-				component: () => import('@/pages/billing/SpendingLimitsPage.vue'),
-				meta: { title: 'Limit tiers' },
 			},
 			{
 				path: 'settings',

@@ -42,7 +42,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 		<div class="flex items-start gap-2">
 			<div class="min-w-0 flex-1">
 				<div class="flex items-center gap-2">
-					<span class="truncate text-base font-semibold text-ink-gray-9"
+					<span class="truncate text-base-semibold text-ink-gray-9"
 						>{{ node.pin.name }}</span
 					>
 					<Badge
@@ -63,7 +63,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 			</div>
 		</div>
 		<div class="mt-3 flex items-baseline justify-between gap-3 text-sm">
-			<span class="shrink-0 font-medium text-ink-gray-8">Region</span>
+			<span class="shrink-0 text-sm-medium text-ink-gray-8">Region</span>
 			<span class="truncate text-ink-gray-9"
 				>{{ node.pin.flag }} {{ node.pin.regionLabel }}</span
 			>
@@ -72,8 +72,8 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 			v-if="node.pin.publicIpv4"
 			class="mt-2 flex items-baseline justify-between gap-3 text-sm"
 		>
-			<span class="shrink-0 font-medium text-ink-gray-8">IP</span>
-			<span class="truncate font-mono text-[13px] text-ink-gray-9"
+			<span class="shrink-0 text-sm-medium text-ink-gray-8">IP</span>
+			<span class="truncate font-mono text-sm text-ink-gray-9"
 				>{{ node.pin.publicIpv4 }}</span
 			>
 		</div>
@@ -81,14 +81,14 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 			v-if="node.pin.plan"
 			class="mt-2 flex items-baseline justify-between gap-3 text-sm"
 		>
-			<span class="shrink-0 font-medium text-ink-gray-8">Plan</span>
+			<span class="shrink-0 text-sm-medium text-ink-gray-8">Plan</span>
 			<span class="truncate text-ink-gray-9">{{ node.pin.plan }}</span>
 		</div>
 		<div
 			v-if="node.pin.frappeVersion"
 			class="mt-2 flex items-baseline justify-between gap-3 text-sm"
 		>
-			<span class="shrink-0 font-medium text-ink-gray-8">Version</span>
+			<span class="shrink-0 text-sm-medium text-ink-gray-8">Version</span>
 			<span class="truncate text-ink-gray-9">{{ node.pin.frappeVersion }}</span>
 		</div>
 	</template>
@@ -96,7 +96,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 	<!-- Cluster: the servers at this spot -->
 	<template v-else-if="node.type === 'cluster'">
 		<div class="flex items-center justify-between gap-2 px-1.5 pb-1 pt-0.5">
-			<span class="min-w-0 truncate text-xs font-medium text-ink-gray-5">
+			<span class="min-w-0 truncate text-xs-medium text-ink-gray-5">
 				{{ node.members[0].flag }} {{ node.title }} ·
 				{{ node.members.length }}
 				servers
@@ -128,7 +128,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 					/>
 				</span>
 				<span class="min-w-0 flex-1">
-					<span class="block truncate text-sm font-medium text-ink-gray-8"
+					<span class="block truncate text-sm-medium text-ink-gray-8"
 						>{{ m.name }}</span
 					>
 					<span class="mt-0.5 block truncate text-xs text-ink-gray-5"
@@ -174,7 +174,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 	<!-- Empty region: what is offered here, and a direct path to create (markers never open cards).
 	     One region: the button creates. Several: each row creates in its own region. -->
 	<template v-else-if="node.type === 'plus'">
-		<div class="truncate text-base font-semibold text-ink-gray-9">
+		<div class="truncate text-base-semibold text-ink-gray-9">
 			{{ node.targets.length === 1 ? node.targets[0].flag : '' }}
 			{{ node.title }}
 		</div>
@@ -193,7 +193,7 @@ function canOpenBench(server: NonNullable<MapPin['server']>): boolean {
 			>
 				<ProviderAvatar :provider="target.provider" :size="24" />
 				<span class="min-w-0 flex-1">
-					<span class="block truncate text-sm font-medium text-ink-gray-8">
+					<span class="block truncate text-sm-medium text-ink-gray-8">
 						{{ target.provider || target.regionLabel }}
 					</span>
 					<span

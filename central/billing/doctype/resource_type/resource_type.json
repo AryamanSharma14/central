@@ -2,7 +2,7 @@
  "actions": [],
  "autoname": "field:resource_type_name",
  "creation": "2026-06-23 00:00:00.000000",
- "description": "A composition primitive a plan is built from (Compute, Memory, Disk, Transfer, Tokens, Storage, Backup). IP and Snapshot are NOT resource types — they are add-ons (ADR 0007).",
+ "description": "A composition primitive a plan is built from (Compute, Memory, Disk, Transfer, Tokens, Storage, Backup). IP and Snapshot are priced per unit but never bundled into a plan.",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",

@@ -6,6 +6,8 @@ import frappe
 import requests
 from frappe import _
 
+from central.iam import user_has_operator_bypass
+
 # Connect, read: a dashboard call must not hang on a Grove that is down.
 TIMEOUT = (30, 90)
 # What a Grove that is down or in maintenance answers; Frappe's maintenance mode is a 503.
@@ -34,6 +36,7 @@ class GroveClient:
 		settings = frappe.get_cached_doc("AI Settings")
 		if not settings.base_url or not settings.control_api_key:
 			frappe.throw(_("AI is not set up: enroll Central at Grove in AI Settings."))
+
 		return cls(settings.base_url, settings.control_api_key, settings.get_password("control_api_secret"))
 
 	@staticmethod
@@ -43,6 +46,7 @@ class GroveClient:
 		response = requests.post(
 			f"{base_url}/api/method/grove.api.control.create_control_client", json=body, timeout=TIMEOUT
 		)
+
 		return read(response)
 
 	def rotate_control_key(self) -> dict:
@@ -155,9 +159,13 @@ def read(response: requests.Response) -> dict | list:
 		raise GroveUnavailable(_("Grove is unavailable ({0}).").format(response.status_code))
 	if response.status_code >= 400:
 		message = refusal_message(response)
-		frappe.throw(
-			message or _("Grove request failed ({0}): {1}").format(response.status_code, response.text[:200])
-		)
+		if message:
+			frappe.throw(message)
+		detail = f"{response.status_code}: {response.text[:2000]}"
+		frappe.log_error(title="Grove request failed", message=detail)
+		if user_has_operator_bypass():
+			frappe.throw(_("Grove request failed ({0})").format(detail[:200]))
+		frappe.throw(_("The AI service could not complete the request. Try again later."))
 	return response.json().get("message", {})
 
 

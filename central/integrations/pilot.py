@@ -43,11 +43,14 @@ def get_bootstrap_metadata(action) -> dict[str, str]:
 	# Metal caps each metadata value at 1 KiB. Pilot merges pilot-common-config into
 	# common_config.toml and pilot-common-site-config into common_site_config.json at bootstrap.
 	metadata = {"pilot-central": json.dumps(bootstrap)}
-	common_site_config = frappe.get_cached_doc("Central Settings").get_common_site_config()
+	# Frappe's Pulse telemetry files a site's events under `fc_team`, so the events of a
+	# product on this server join the team's signup funnel in Central.
+	common_site_config = frappe.get_cached_doc("Central Settings").get_common_site_config() | {
+		"fc_team": action.team
+	}
 	if mailbox := UserMailAccount.assign(action):
 		common_site_config |= mailbox.get_site_config()
-	if common_site_config:
-		metadata["pilot-common-site-config"] = json.dumps(common_site_config)
+	metadata["pilot-common-site-config"] = json.dumps(common_site_config)
 
 	try:
 		metadata["pilot-common-config"] = json.dumps({"telemetry": get_telemetry_configuration(action)})
@@ -64,6 +67,7 @@ def get_telemetry_configuration(action) -> dict:
 		frappe.throw(frappe._("Region {0} has no telemetry host yet.").format(action.region))
 
 	token = mint_datum_token(region_id_of(action.region), action.server_id)
+
 	return {"endpoint": endpoint, "token": token}
 
 
@@ -110,6 +114,7 @@ def fetch_site_login_url(
 			title=f"Site login relay returned no URL: {site}", message=f"{gateway_url}: {response.text}"
 		)
 		return None
+
 	return url
 
 
@@ -135,6 +140,7 @@ def rename_admin_domain(server: str, base_url: str | None = None, tls: bool = Tr
 	Pilot queues the change as a task and returns it."""
 	expected = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	payload = {"domain": urlparse(expected).hostname, "tls": tls}
+
 	return _post_to_pilot(server, base_url or expected, "/api/v1/settings/admin-domain", payload)
 
 
@@ -150,6 +156,7 @@ def rename_site(
 	`make_primary` makes the new name the site's `host_name`, so its links use it."""
 	base_url = base_url or _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	payload = {"new_name": new_name, "keep_old_hostname": keep_old_hostname, "make_primary": make_primary}
+
 	return _post_to_pilot(server, base_url, f"/api/v1/sites/{quote(site, safe='')}/actions/rename", payload)
 
 
@@ -157,6 +164,7 @@ def _expected_gateway_url(server) -> str:
 	url = frappe.get_cached_doc("Region", server.region).get_vm_gateway_url(server.ipv6_address)
 	if not url:
 		frappe.throw(frappe._("Server {0} has no proxy hostname.").format(server.name))
+
 	return url
 
 
@@ -175,6 +183,7 @@ def _post_to_pilot(server: str, base_url: str, path: str, payload: dict) -> dict
 		allow_redirects=False,
 	)
 	response.raise_for_status()
+
 	return response.json()
 
 
@@ -182,4 +191,5 @@ def _gateway_url(value: str) -> str:
 	parsed = urlparse(value)
 	if parsed.scheme not in {"http", "https"} or not parsed.netloc:
 		frappe.throw(_("The Pilot gateway URL is not valid."))
+
 	return value.rstrip("/")

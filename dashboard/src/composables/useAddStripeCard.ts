@@ -70,9 +70,15 @@ export function useAddStripeCard({
 		{ team, publishableKey }: MountOptions,
 	): Promise<void> {
 		error.value = ''
-		if (!publishableKey) throw new Error('Stripe publishable key missing.')
+		if (!publishableKey)
+			throw new Error(
+				'The Stripe publishable key is missing, so card setup cannot start. Contact support.',
+			)
 		stripe = await loadStripe(publishableKey)
-		if (!stripe) throw new Error('Stripe.js failed to load.')
+		if (!stripe)
+			throw new Error(
+				'The Stripe payment library could not load. Check your connection and reopen this dialog to try again.',
+			)
 
 		// Swallow here so a reject doesn't become an unhandled rejection if the user
 		// cancels before submitting; submit() turns the null into a clean message.
@@ -96,8 +102,12 @@ export function useAddStripeCard({
 		error.value = ''
 		try {
 			const order = await orderPromise // usually already resolved by now
+			// The setup call's own message says why it failed, such as the provider being down.
 			if (!order?.client_secret)
-				throw new Error('Could not start card setup. Please try again.')
+				throw (
+					initiate.error ??
+					new Error('Could not start card setup. Please try again.')
+				)
 
 			const { paymentMethod, error: pmError } =
 				await stripe.createPaymentMethod({

@@ -402,6 +402,18 @@ export interface BillingProfile {
 	supported_currencies: Currency[]
 	/** GSTIN on file but not Active: invoices go out as unregistered. */
 	gst_lapsed?: boolean
+	/** A new server needs a payment method first: no credit covers it. */
+	payment_method_required?: boolean
+	/** What the team's first payment method adds, while the owner has not had it. */
+	welcome_credit?: WelcomeCredit | null
+}
+
+export interface WelcomeCredit {
+	amount: number
+	currency: Currency
+	validity_days: number
+	/** The last day a trial team can still earn it; null for a team without a trial. */
+	ends_on?: string | null
 }
 
 export type GstStatus =
@@ -439,7 +451,7 @@ export interface CollectionStatus {
 	currency: Currency
 }
 
-export type NotificationCategory = 'Billing' | 'Server' | 'Team'
+export type NotificationCategory = 'Billing' | 'Server' | 'Team' | 'Trial'
 export type NotificationSeverity = 'Info' | 'Success' | 'Warning' | 'Error'
 
 /** A Team Notification — one item in the console's unified in-app feed. */
@@ -614,3 +626,19 @@ export interface MeteredServices {
 export type PayingForItem =
 	| { kind: 'server'; id: string; cost: number | null; sub: SubscriptionRow }
 	| { kind: 'service'; id: string; cost: number | null; service: ServiceRow }
+
+/** The open free trial of a server's site, from `signups.trial.get_status`. */
+export interface ServerTrial {
+	state: 'Active' | 'Ended'
+	/** An ended trial whose team has a payment method, so it can be kept. */
+	can_keep?: boolean
+	/** The team has a payment method, but the plan is above its spending limit. */
+	held?: boolean
+	ends_on: string
+	days_left: number
+	deletes_on: string | null
+	/** The welcome credit a card adds before the trial ends, or null. */
+	credit?: WelcomeCredit | null
+	/** Idle minutes before the trial server sleeps. */
+	sleeps_after_minutes?: number
+}

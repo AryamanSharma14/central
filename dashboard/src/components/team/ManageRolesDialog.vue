@@ -152,7 +152,6 @@ const dialogOptions = computed(() => ({
 		{
 			label: 'Save',
 			variant: 'solid' as const,
-			loading: submitting.value,
 			disabled: !canSubmit.value,
 			onClick: submit,
 		},
@@ -173,7 +172,7 @@ const dialogOptions = computed(() => ({
 				<div class="flex items-center gap-3">
 					<Avatar :label="member?.full_name" size="2xl" />
 					<div class="min-w-0">
-						<p class="truncate font-medium text-ink-gray-9">
+						<p class="truncate text-base-medium text-ink-gray-9">
 							{{ member?.full_name }}
 						</p>
 						<p class="truncate text-p-sm text-ink-gray-5">

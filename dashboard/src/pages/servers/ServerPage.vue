@@ -24,7 +24,9 @@ import {
 	type VirtualMachineRow,
 } from '@/composables/useServers'
 import { useTerminateServer } from '@/composables/useTerminateServer'
+import { useTerminationProtection } from '@/composables/useTerminationProtection'
 import { getServerActions } from '@/lib/capabilities'
+import { successToast } from '@/lib/feedback'
 import { METRIC_PERIODS } from '@/lib/serverMetrics'
 import type { MetricsRange } from '@/types/servers'
 
@@ -43,12 +45,13 @@ const router = useRouter()
 const { setBreadcrumbs } = useBreadcrumbs()
 
 const {
-	canViewServers,
 	canPowerServer,
+	canManageNetwork,
 	canResizeServer,
 	canSnapshotServer,
 	canTerminateServer,
 	canOpenConsole,
+	canManageSSHKeys,
 } = useCapabilities()
 
 const { servers, sites, loaded, error: fleetError, reload } = useServerMapData()
@@ -71,7 +74,7 @@ const metricsRange = computed<MetricsRange>({
 		return {
 			period: METRIC_PERIODS.some((option) => option.value === period)
 				? String(period)
-				: '24h',
+				: '1h',
 			start: queryValue('start'),
 			end: queryValue('end'),
 		}
@@ -82,7 +85,7 @@ const metricsRange = computed<MetricsRange>({
 		router.replace({
 			query: {
 				...route.query,
-				period: period === '24h' ? undefined : period,
+				period: period === '1h' ? undefined : period,
 				start: isCustom ? (start ?? undefined) : undefined,
 				end: isCustom ? (end ?? undefined) : undefined,
 			},
@@ -105,14 +108,27 @@ const details = computed(() =>
 		: null,
 )
 
+const { setTerminationProtection, isSavingProtection } =
+	useTerminationProtection(resourceId)
+
+const protect = async (enabled: boolean): Promise<void> => {
+	if (!(await setTerminationProtection(enabled))) return
+
+	successToast(
+		enabled ? 'Termination protection is on' : 'Termination protection is off',
+	)
+	reloadOverview()
+}
+
 const site = computed(() =>
 	sites.value.find((row) => row.server === server.value?.name),
 )
 
 const actions = computed(() =>
 	getServerActions(server.value, {
-		open: canViewServers.value,
+		open: canOpenConsole.value,
 		power: canPowerServer.value,
+		network: canManageNetwork.value,
 		resize: canResizeServer.value,
 		snapshot: canSnapshotServer.value,
 		terminate: canTerminateServer.value,
@@ -171,12 +187,13 @@ const commandCopy = computed(() =>
 		? {
 				title: 'Stop server',
 				label: 'Stop',
-				message: 'Its sites go offline until you start it again.',
+				message:
+					'Sites on this server will be unavailable until you start it again.',
 			}
 		: {
 				title: 'Restart server',
 				label: 'Restart',
-				message: 'Its sites are unavailable for a moment while it restarts.',
+				message: 'Sites on this server will be unavailable during the restart.',
 			},
 )
 
@@ -227,8 +244,15 @@ watch(
 </script>
 
 <template>
-	<div class="h-full overflow-y-auto">
-		<div class="mx-auto w-full max-w-5xl p-3 md:p-4 xl:pt-8">
+	<div
+		class="h-full overflow-y-auto"
+		:class="{ 'lg:overflow-hidden': activeTab === 'overview' }"
+		style="scrollbar-gutter: stable"
+	>
+		<div
+			class="mx-auto w-full max-w-5xl p-3 md:p-4 xl:pt-8"
+			:class="{ 'lg:flex lg:h-full lg:min-h-0 lg:flex-col': activeTab === 'overview' }"
+		>
 			<div v-if="!loaded && !fleetError" class="space-y-6" aria-busy="true">
 				<Skeleton class="h-24 rounded-6" />
 				<Skeleton class="h-7 w-96 max-w-full rounded-4" />
@@ -258,23 +282,26 @@ watch(
 
 			<template v-else>
 				<Header
+					class="shrink-0"
 					:server="server"
 					:details="details?.server ?? null"
 					:actions="actions"
 					:site-url="site?.url ?? null"
 					:opening="isOpening"
 					:busy="busy === server.resource_id"
+					:is-saving-protection="isSavingProtection"
 					@open="open"
 					@pilot="openBench(server)"
 					@command="command"
-					@console="openConsole(server)"
+					@console="openConsole(server, $event)"
 					@rename="renaming = true"
 					@snapshot="pendingSnapshot = server"
 					@resize="resizing = true"
 					@terminate="pendingTerminate = server"
+					@protect="protect"
 				/>
 
-				<Tabs v-model="activeTab" class="mt-4">
+				<Tabs v-model="activeTab" class="mt-4 shrink-0 md:mt-8">
 					<TabList variant="browser-tab" size="md">
 						<TabTrigger
 							v-for="tab in TABS"
@@ -326,17 +353,32 @@ watch(
 					:metrics="metrics"
 					:metrics-error="metricsError"
 					@refresh="reloadMetrics"
-					class="mt-6"
+					class="mt-3 lg:min-h-0 lg:flex-1"
 				/>
 
 				<NetworkingTab
 					v-else-if="activeTab === 'networking'"
 					:server="server"
 					:overview="details"
+					:can-manage-network="!!actions.network"
+					:servers="
+						servers.filter(
+							(row) =>
+								row.resource_id !== server?.resource_id &&
+								row.status !== 'Terminated',
+						)
+					"
 					class="mt-6"
+					@changed="reloadOverview"
 				/>
 
-				<AccessTab v-else :overview="details" class="mt-6" />
+				<AccessTab
+					v-else
+					:overview="details"
+					:can-manage-keys="canManageSSHKeys"
+					class="mt-6"
+					@changed="reloadOverview"
+				/>
 			</template>
 		</div>
 
@@ -355,6 +397,7 @@ watch(
 			:loading="busy === pendingTerminate?.resource_id"
 			:error="terminateError"
 			:can-snapshot="actions.snapshot"
+			:is-protected="!!details?.server.is_termination_protected"
 			@confirm="terminate"
 		/>
 
@@ -370,7 +413,7 @@ watch(
 		<ResizeServerDialog
 			v-model:open="resizing"
 			:server="server ?? null"
-			@resized="reload"
+			@resized="reload(); reloadOverview()"
 		/>
 	</div>
 </template>

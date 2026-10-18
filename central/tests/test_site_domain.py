@@ -100,11 +100,9 @@ class TestSiteDomain(IntegrationTestCase):
 			route.failure_reason,
 			"Could not update this route. It will retry automatically.",
 		)
-		self.assertIn("HTTP 503", frappe.db.get_value("Error Log", route.error_log, "error"))
-		self.assertEqual(
-			frappe.db.get_value("Error Log", route.error_log, ["reference_doctype", "reference_name"]),
-			("Site Domain", route.name),
-		)
+		log = frappe.get_doc("Error Log", route.error_log)
+		self.assertIn("HTTP 503", log.error)
+		self.assertEqual((log.reference_doctype, log.reference_name), ("Site Domain", route.name))
 
 	def test_apply_records_an_unreachable_proxy(self):
 		route = self._route(f"down-{self.suffix}.com")
@@ -116,7 +114,7 @@ class TestSiteDomain(IntegrationTestCase):
 
 		route.reload()
 		self.assertEqual(route.status, "Failed")
-		self.assertIn("connection refused", frappe.db.get_value("Error Log", route.error_log, "error"))
+		self.assertIn("connection refused", frappe.get_doc("Error Log", route.error_log).error)
 
 	def test_apply_fails_without_a_server_address(self):
 		server = self._server("c", self.team, None)
@@ -180,6 +178,9 @@ class TestSiteDomain(IntegrationTestCase):
 		proxy.delete_domain.assert_called_once_with(domain.domain)
 		self.assertFalse(frappe.db.exists("Site Domain", {"server": self.server.name}))
 
+	def test_retry_is_post_only(self):
+		self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[SiteDomain.retry], ("POST",))
+
 	def test_a_failed_route_removal_stays_until_a_retry_removes_it(self):
 		route = self._route(f"stuck-{self.suffix}.com")
 		self.server.db_set("status", "Terminated")
@@ -195,7 +196,7 @@ class TestSiteDomain(IntegrationTestCase):
 			route.failure_reason,
 			"Could not remove this route. It will retry automatically.",
 		)
-		self.assertIn("HTTP 503", frappe.db.get_value("Error Log", route.error_log, "error"))
+		self.assertIn("HTTP 503", frappe.get_doc("Error Log", route.error_log).error)
 
 		proxy.delete_domain.side_effect = None
 		with patch(GET_PROXY_CLIENT, return_value=proxy), patch.object(frappe.db, "commit"):

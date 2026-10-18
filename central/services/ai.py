@@ -24,6 +24,7 @@ def enable(team: str) -> str:
 	)
 	# The route checked service:manage; Team Service is operator-only because it holds secrets.
 	service.insert(ignore_permissions=True)
+
 	return service.name
 
 

@@ -115,6 +115,26 @@ class TestStateDelivery(IntegrationTestCase):
 			self.deliver(self.state_report(), region="no-such-region")
 		self.assertEqual(str(wrong_secret.exception), str(unknown_region.exception))
 
+	def test_repeated_refusals_from_one_caller_are_logged_once(self):
+		ip = f"test-{frappe.generate_hash(length=8)}"
+		before = len(
+			frappe.get_all("Error Log", filters={"method": "Rejected regional state report"}, pluck="name")
+		)
+
+		with patch.object(frappe.local, "request_ip", ip, create=True):
+			for _ in range(3):
+				with self.assertRaises(frappe.PermissionError):
+					self.deliver(self.state_report(), region="x" * 5000)
+
+		logged = frappe.get_all(
+			"Error Log", filters={"method": "Rejected regional state report"}, pluck="error", limit=0
+		)
+		self.assertEqual(len(logged), before + 1)
+		self.assertLessEqual(
+			len(frappe.get_last_doc("Error Log", filters={"method": "Rejected regional state report"}).error),
+			200,
+		)
+
 	# — What Central does with an authenticated report
 
 	def test_a_new_state_is_queued_and_applied(self):
@@ -499,3 +519,20 @@ class TestCargoServiceDelivery(IntegrationTestCase):
 		reply = accept_cargo_report(raw_body=body, region=self.region.name, signature=signature)
 
 		self.assertEqual(reply["ignored"], "unreadable body")
+
+	# — Datum token delivery
+
+	def test_telemetry_coming_up_queues_a_datum_token_for_cargo(self):
+		with patch("central.integrations.state_delivery.frappe.enqueue_doc") as enqueue_doc:
+			self.deliver(self.service_report(service="telemetry"))
+
+		enqueue_doc.assert_called_once()
+		self.assertEqual(enqueue_doc.call_args.args, ("Region", self.region.name, "issue_cargo_datum_token"))
+		self.assertTrue(enqueue_doc.call_args.kwargs["deduplicate"])
+
+	def test_no_datum_token_is_queued_for_any_other_report(self):
+		with patch("central.integrations.state_delivery.frappe.enqueue_doc") as enqueue_doc:
+			self.deliver(self.service_report())
+			self.deliver(self.service_report(service="telemetry", status="Not Available"))
+
+		enqueue_doc.assert_not_called()

@@ -411,7 +411,16 @@ def begin_resize(
 		frappe.db.get_value(
 			"Virtual Machine",
 			doc.server_id,
-			["region", "status", "atlas_vm_id", "title"],
+			[
+				"region",
+				"status",
+				"atlas_vm_id",
+				"title",
+				"plan",
+				"vcpus",
+				"memory_megabytes",
+				"disk_gigabytes",
+			],
 			as_dict=True,
 			for_update=True,
 		)
@@ -463,6 +472,14 @@ def begin_resize(
 			"override_rate": float(override_rate) if override_rate is not None else None,
 			"preset_plan": preset_plan,
 			"shape": shape,
+			"from_plan": server.plan,
+			"from_shape": {
+				"vcpus": float(server.vcpus),
+				"memory_megabytes": int(server.memory_megabytes),
+				"disk_gigabytes": int(server.disk_gigabytes),
+			}
+			if server.vcpus and server.memory_megabytes and server.disk_gigabytes
+			else None,
 		}
 	)
 	# Billing validated the target and the route already checked server:resize.
@@ -929,19 +946,24 @@ def enforce_headroom(team: str, new_rate, exclude: str | None = None, for_update
 
 	`for_update` is for the caller that goes on to provision: it reads the run rate
 	under a lock so two creates cannot clear the same headroom."""
-	from central.billing.catalog.entitlements import get_team_caps
-
 	if new_rate is None:
 		frappe.throw(frappe._("This configuration cannot be priced in your currency."))
-	cap = frappe.utils.flt(get_team_caps(team).max_spend)
-	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
-	available = max(0.0, cap - running)
+	available = remaining_headroom(team, exclude, for_update)
 	if frappe.utils.flt(new_rate) > available:
 		frappe.throw(
 			frappe._("This configuration ({0}) exceeds your remaining headroom ({1}).").format(
 				frappe.utils.flt(new_rate), frappe.utils.flt(available)
 			)
 		)
+
+
+def remaining_headroom(team: str, exclude: str | None = None, for_update: bool = False) -> float:
+	"""The monthly spend the team can still add: its trust-tier cap minus its running run-rate."""
+	from central.billing.catalog.entitlements import get_team_caps
+
+	cap = frappe.utils.flt(get_team_caps(team).max_spend)
+	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
+	return max(0.0, cap - running)
 
 
 def project_run_rate(team: str, project: str, exclude: str | None = None) -> float:
@@ -1110,9 +1132,10 @@ def backfill_missing_subscriptions():
 	active one (e.g. the VirtualMachine's status was set Running outside the normal flow).
 	"""
 	from central.billing.doctype.subscription.subscription import create_subscription
+	from central.signups.trial import is_billing_deferred
 
 	running_servers = frappe.get_all("Virtual Machine", filters={"status": "Running"}, pluck="name")
 	for server_id in running_servers:
 		has_active_subscription = frappe.db.exists("Subscription", {"server_id": server_id, "enabled": 1})
-		if not has_active_subscription:
+		if not has_active_subscription and not is_billing_deferred(server_id):
 			create_subscription(server_id)

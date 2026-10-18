@@ -7,7 +7,7 @@ from central.api.sites import claim_site, get_site, login_site, onboarding_statu
 from central.errors import AtlasResourceGone
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
-from central.infrastructure.doctype.site.site import on_host
+from central.infrastructure.doctype.site.site import on_host, record_ready_sites
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.pilot import PilotLoginPending, fetch_site_login_url
 from central.integrations.servers import observe_server
@@ -15,8 +15,8 @@ from central.site_provisioning import (
 	signup_offering,
 	subdomain_availability,
 	trial_configuration,
-	trial_region_and_plan,
 )
+from central.tests.test_iam import ensure_user
 from central.www.dashboard import _onboarding_complete
 
 
@@ -225,19 +225,48 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertFalse(state["ready"])
 		self.assertIsNone(state["login_url"])
 
-	def test_first_successful_probe_records_and_announces_readiness(self):
+	def test_a_read_reports_readiness_without_recording_it(self):
 		site = self.site()
 		with (
 			patch("central.api.sites.is_site_reachable", return_value=True),
 			patch("central.notification.engine.queue_event") as queue_event,
 		):
-			get_site(site.name)
-			get_site(site.name)
+			self.assertTrue(get_site(site.name)["ready"])
+
+		self.assertIsNone(site.reload().ready_at)
+		queue_event.assert_not_called()
+
+	def test_the_scheduled_probe_leaves_a_site_that_is_not_a_trial(self):
+		site = self.site()
+		site.db_set("trial_state", "")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+		):
+			record_ready_sites()
+
+		self.assertIsNone(site.reload().ready_at)
+
+	def test_the_scheduled_probe_records_and_announces_readiness_once(self):
+		site = self.site()
+		site.db_set("trial_state", "Active")
+		self.server.db_set("status", "Running")
+		with (
+			patch.object(frappe.db, "commit"),
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+			patch("central.infrastructure.doctype.site.site.capture_trial_event") as capture,
+			patch("central.notification.engine.queue_event") as queue_event,
+		):
+			record_ready_sites()
+			record_ready_sites()
 
 		self.assertTrue(site.reload().ready_at)
+		self.assertEqual([call.args[0] for call in capture.call_args_list], ["trial_ready"])
 		queue_event.assert_called_once_with(
 			site.team,
 			"site_ready",
+			context=None,
 			reference_doctype="Site",
 			reference_name=site.name,
 		)
@@ -370,6 +399,55 @@ class TestSiteRoutes(SiteOnAMachine):
 			get_site(self.site().name)
 		with self.assertRaises(frappe.PermissionError):
 			login_site(self.site().name)
+
+	def test_a_viewer_reads_a_site_but_cannot_sign_in_as_administrator(self):
+		viewer = ensure_user("site.viewer@example.test")
+		self.team.append("members", {"user": viewer, "role": "Viewer", "status": "Active"})
+		self.team.save()
+		frappe.set_user(viewer)
+
+		with patch("central.api.sites.is_site_reachable", return_value=False):
+			self.assertEqual(get_site(self.site().name)["name"], self.site().name)
+		with self.assertRaises(frappe.PermissionError):
+			login_site(self.site().name)
+		with self.assertRaises(frappe.PermissionError):
+			claim_site(self.site().name)
+
+	def test_an_operator_opens_a_site_and_both_records_note_it(self):
+		site = self.site()
+		with patch.object(type(site), "get_login_url", return_value="https://site.example.test/desk?sid=x"):
+			self.assertEqual(site.open_as_administrator(), "https://site.example.test/desk?sid=x")
+
+		for doctype, name in (("Site", site.name), ("Virtual Machine", site.server)):
+			self.assertTrue(
+				frappe.db.exists(
+					"Comment",
+					{
+						"reference_doctype": doctype,
+						"reference_name": name,
+						"content": ("like", "%as Administrator%"),
+					},
+				)
+			)
+
+		frappe.set_user(ensure_user("site.member@example.test"))
+		with self.assertRaises(frappe.PermissionError):
+			site.open_as_administrator()
+
+	def test_an_operator_checks_readiness_and_it_is_recorded(self):
+		site = self.site()
+		with patch("central.integrations.pilot.is_site_reachable", return_value=True):
+			self.assertTrue(site.check_readiness())
+		self.assertTrue(site.reload().ready_at)
+
+	def test_a_missing_site_and_a_foreign_site_answer_alike(self):
+		frappe.set_user(ensure_user("outsider@example.test"))
+
+		with self.assertRaises(frappe.PermissionError) as foreign:
+			get_site(self.site().name)
+		with self.assertRaises(frappe.PermissionError) as missing:
+			get_site("no-such-site.example.test")
+		self.assertEqual(str(foreign.exception), str(missing.exception))
 
 	def test_status_is_get_and_login_is_post_only(self):
 		self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[get_site], ("GET", "QUERY"))
@@ -562,8 +640,11 @@ class TestTrialRegion(IntegrationTestCase):
 		"""A site's address is built from the zone, so without one there is no site."""
 		frappe.db.set_value("Region", {"status": "Active"}, "proxy_domain", None)
 
-		with self.assertRaises(frappe.ValidationError):
-			trial_region_and_plan("any-team")
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			self.assertRaisesRegex(frappe.ValidationError, "No region is offering"),
+		):
+			trial_configuration("any-team")
 
 
 class TestTrialImage(IntegrationTestCase):
@@ -577,7 +658,8 @@ class TestTrialImage(IntegrationTestCase):
 	def resolve(self, page: dict, signup_app: str | None = None) -> tuple[dict, dict]:
 		with (
 			patch("central.site_provisioning.signup_offering", return_value="pilot"),
-			patch("central.site_provisioning.trial_region_and_plan", return_value=("par-2", "plan-trial")),
+			patch("central.site_provisioning.trial_regions", return_value=["par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
 			patch("central.site_provisioning.list_images", return_value=page) as list_images,
 		):
 			return trial_configuration("any-team", signup_app), list_images.call_args.kwargs
@@ -617,8 +699,20 @@ class TestTrialImage(IntegrationTestCase):
 			self.resolve(page)
 
 	def test_a_region_that_offers_none_stops_the_trial(self):
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaisesRegex(frappe.ValidationError, "No trial image"):
 			self.resolve(self.images(0))
+
+	def test_a_later_region_with_the_image_serves_the_trial(self):
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			patch("central.site_provisioning.trial_regions", return_value=["blr-1", "par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
+			patch("central.site_provisioning.list_images", side_effect=[self.images(0), self.images(1)]),
+		):
+			configuration = trial_configuration("any-team", "raven")
+
+		self.assertEqual(configuration["region"], "par-2")
+		self.assertEqual(configuration["image_id"], "image-0")
 
 
 class TestSiteNaming(SiteOnAMachine):
@@ -634,13 +728,46 @@ class TestSiteNaming(SiteOnAMachine):
 		site = self.site()
 		site.db_set("rename_task", "task-2")
 
-		with patch(
-			"central.integrations.pilot.fetch_site_login_url",
-			side_effect=[None, "https://site.local/desk?sid=abc"],
-		) as login:
-			self.assertTrue(site.get_login_url())
+		with (
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				side_effect=[None, "https://site.local/desk?sid=abc"],
+			) as login,
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
 
 		self.assertEqual([call.args[2] for call in login.call_args_list], [site.rename_target, "site.local"])
+
+	def test_central_redirects_to_the_renamed_host_when_ready(self):
+		site = self.site()
+		site.db_set("rename_task", "task-2")
+		with (
+			patch("central.integrations.pilot.is_site_reachable", return_value=True) as probe,
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				return_value="https://site.local/desk?sid=abc",
+			) as login,
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
+		probe.assert_called_once_with(f"https://{site.rename_target}")
+		self.assertEqual(login.call_args.args[2], site.rename_target)
+		self.assertEqual(self.site().primary_url, f"https://{site.rename_target}")
+
+	def test_pending_route_keeps_the_automatic_redirect(self):
+		site = self.site()
+		site.db_set("rename_task", "task-2")
+		with (
+			patch("central.integrations.pilot.is_site_reachable", return_value=False),
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				return_value="https://site.local/desk?sid=abc",
+			) as login,
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
+		self.assertEqual(login.call_args.args[2], "site.local")
+		self.assertIsNone(self.site().renamed_at)
+		self.assertEqual(self.site().primary_url, site.url)
 
 	def test_the_address_stays_ours_and_theirs_is_only_a_rename_target(self):
 		site = self.site()
@@ -672,7 +799,7 @@ class TestSiteNaming(SiteOnAMachine):
 			site.apply_subdomain()
 
 		self.assertIn("Retry", site.rename_error)
-		self.assertIn("pilot unavailable", frappe.db.get_value("Error Log", site.rename_error_log, "error"))
+		self.assertIn("pilot unavailable", frappe.get_doc("Error Log", site.rename_error_log).error)
 
 		self.enqueue_doc.reset_mock()
 		site.retry_subdomain_rename()
@@ -704,7 +831,7 @@ class TestAdminHostname(SiteOnAMachine):
 		server = self.server.reload()
 		self.assertIsNone(server.admin_domain_task)
 		self.assertIn("retry", server.admin_domain_error)
-		self.assertIn("unreachable", frappe.db.get_value("Error Log", server.admin_domain_error_log, "error"))
+		self.assertIn("unreachable", frappe.get_doc("Error Log", server.admin_domain_error_log).error)
 
 	def test_a_response_without_a_task_leaves_it_to_the_next_report(self):
 		self.enroll()
@@ -827,19 +954,24 @@ class TestTrialFunnelEvents(SiteOnAMachine):
 			request_payload={"image_tags": {"purpose": "pilot"}, "site": {"product": "raven"}},
 		)
 
-	def test_a_trial_request_is_sent_once_with_its_product(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Site")
+	def captured(self, resource_type: str):
+		with patch("central.signups.funnel.capture") as capture:
+			self.queue(resource_type)
+			capture.assert_not_called()
+			frappe.db.after_commit.run()
+
+		return capture
+
+	def test_a_trial_request_is_sent_once_after_commit_under_the_customer_team(self):
+		capture = self.captured("Site")
 
 		capture.assert_called_once()
 		self.assertEqual(capture.call_args.args[0], "trial_requested")
+		self.assertEqual(capture.call_args.kwargs["team"], self.team.name)
 		self.assertEqual(capture.call_args.kwargs["properties"]["product"], "raven")
 
 	def test_a_server_request_sends_no_trial_event(self):
-		with patch("frappe.utils.telemetry.capture") as capture:
-			self.queue("Server")
-
-		capture.assert_not_called()
+		self.captured("Server").assert_not_called()
 
 
 class TestTrialSignIn(SiteOnAMachine):

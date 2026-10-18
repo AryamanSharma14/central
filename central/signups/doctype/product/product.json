@@ -18,7 +18,15 @@
   "subtitle",
   "image_section",
   "signup_app",
-  "landing_route"
+  "landing_route",
+  "trial_section",
+  "trial_days",
+  "column_break_trial",
+  "trial_deletion_days",
+  "emails_section",
+  "use_own_email_branding",
+  "getting_started_url",
+  "email_notes"
  ],
  "fields": [
   {
@@ -84,13 +92,63 @@
    "fieldname": "landing_route",
    "fieldtype": "Data",
    "label": "Landing Route"
+  },
+  {
+   "fieldname": "trial_section",
+   "fieldtype": "Section Break",
+   "label": "Trial"
+  },
+  {
+   "description": "Days a trial site of this product runs from when it is first ready. 0 uses Central Settings.",
+   "fieldname": "trial_days",
+   "fieldtype": "Int",
+   "label": "Trial Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_trial",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings.",
+   "fieldname": "trial_deletion_days",
+   "fieldtype": "Int",
+   "label": "Trial Deletion Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "emails_section",
+   "fieldtype": "Section Break",
+   "label": "Emails"
+  },
+  {
+   "default": "0",
+   "description": "Show this product's logo and title instead of Frappe Cloud's in signup codes and in emails about its sites. Needs a public logo.",
+   "fieldname": "use_own_email_branding",
+   "fieldtype": "Check",
+   "label": "Use Product Branding in Emails"
+  },
+  {
+   "description": "An https:// page that shows a new customer how to start, such as the product's docs. The site_ready and trial_unopened emails link to it with a Get started button.",
+   "fieldname": "getting_started_url",
+   "fieldtype": "Data",
+   "label": "Getting Started URL",
+   "options": "URL"
+  },
+  {
+   "description": "An extra paragraph for a lifecycle email about a site of this product, such as what to do first in site_ready.",
+   "fieldname": "email_notes",
+   "fieldtype": "Table",
+   "label": "Email Notes",
+   "options": "Product Email Note"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-10 10:11:22.909804",
- "modified_by": "Administrator",
+ "make_attachments_public": 1,
+ "modified": "2026-10-13 09:39:34.175260",
+ "modified_by": "prathamesh@frappe.io",
  "module": "Signups",
  "name": "Product",
  "naming_rule": "By fieldname",
@@ -103,6 +161,13 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Product Operator",
    "write": 1
   }
  ],

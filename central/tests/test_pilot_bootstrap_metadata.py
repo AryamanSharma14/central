@@ -20,6 +20,7 @@ def pilot_request():
 		hostname="pilot-1",
 		ssh_keys=[],
 		ssh_key_ids=[],
+		user_data="",
 		image_tags={"purpose": "pilot"},
 	)
 	return request
@@ -54,7 +55,7 @@ class TestPilotBootstrapMetadata(TestCase):
 		self.assertNotIn("pilot-common-config", payload["metadata"])
 		request.record_diagnostic.assert_called_once()
 
-	def test_every_server_gets_the_common_site_config(self):
+	def test_every_server_gets_the_common_site_config_and_its_team(self):
 		relay = {"raven_push_notification_server_url": "https://relay.example.test"}
 		with (
 			patch(f"{PILOT}.get_telemetry_base_url", return_value=None),
@@ -65,7 +66,7 @@ class TestPilotBootstrapMetadata(TestCase):
 		):
 			metadata = _create_payload(pilot_request())["metadata"]
 
-		self.assertEqual(json.loads(metadata["pilot-common-site-config"]), relay)
+		self.assertEqual(json.loads(metadata["pilot-common-site-config"]), relay | {"fc_team": "TEAM-00001"})
 
 	def test_the_server_mailbox_joins_the_common_site_config(self):
 		relay = {"raven_push_notification_server_url": "https://relay.example.test"}
@@ -83,5 +84,5 @@ class TestPilotBootstrapMetadata(TestCase):
 
 		self.assertEqual(
 			json.loads(metadata["pilot-common-site-config"]),
-			relay | {"mail_server": "smtp.example.test", "mail_port": 587},
+			relay | {"fc_team": "TEAM-00001", "mail_server": "smtp.example.test", "mail_port": 587},
 		)

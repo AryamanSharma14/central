@@ -13,6 +13,7 @@
   "server_id",
   "service_subject",
   "vm_snapshot",
+  "public_ip_server",
   "cluster",
   "pricing_mode",
   "plan",
@@ -157,6 +158,14 @@
    "options": "VM Snapshot",
    "read_only": 1,
    "description": "The snapshot a storage subscription bills. Mutually exclusive with server_id."
+  },
+  {
+   "fieldname": "public_ip_server",
+   "fieldtype": "Link",
+   "label": "Public IPv4 Of",
+   "options": "Virtual Machine",
+   "read_only": 1,
+   "description": "The server whose public IPv4 this subscription bills. Mutually exclusive with server_id."
   }
  ],
  "index_web_pages_for_search": 1,

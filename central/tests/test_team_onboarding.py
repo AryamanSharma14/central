@@ -11,6 +11,7 @@ from central.api.teams import (
 	set_onboarding_step,
 	skip_onboarding,
 )
+from central.billing.payments.provisioning import grant_welcome_credits
 from central.site_provisioning import create_trial_team
 
 
@@ -47,10 +48,9 @@ class TestTeamCreation(IntegrationTestCase):
 
 		self.assertEqual(frappe.db.get_value("Billing Profile", team, "country"), "India")
 		self.assertEqual(frappe.db.get_value("Billing Profile", team, "currency"), "INR")
-		self.assertTrue(
-			frappe.db.exists(
-				"Credit Ledger Entry", {"team": team, "reference_type": "Promotion", "currency": "INR"}
-			)
+		# Welcome credits wait for the team's first active payment method.
+		self.assertFalse(
+			frappe.db.exists("Credit Ledger Entry", {"team": team, "reference_type": "Promotion"})
 		)
 
 	def test_first_team_falls_back_to_india_when_the_country_is_unknown(self):
@@ -128,6 +128,7 @@ class TestTeamCreation(IntegrationTestCase):
 		with set_user(member):
 			accept_invitation(invitation)
 			personal_team = create_team("Personal Team")["name"]
+		grant_welcome_credits(personal_team)
 
 		self.assertTrue(
 			frappe.db.exists("Credit Ledger Entry", {"team": personal_team, "reference_type": "Promotion"})

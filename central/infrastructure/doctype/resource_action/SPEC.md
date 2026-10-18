@@ -18,7 +18,7 @@ Customer -> authorized service -> Resource Action -> queued integration worker
 
 The server APIs accept a Team, region, display name, image offering, regional image ID, and request key. A preset request adds a plan. A composed request adds a profile and resource quantities. Guest hostname, public IPv6, firewall, and SSH keys are separate inputs. A request selects saved [Team SSH Keys](../team_ssh_key/SPEC.md) in `ssh_key_ids` or pastes public keys in `ssh_keys`, not both. Keys are optional for every image. Each list can contain at most 20 keys, and each pasted key can contain at most 16,384 characters. A `snapshot` input replaces the offering and image with the source of the snapshot.
 
-Central checks the capability, current image selector, image availability, plan eligibility, resource sizes, and billing policy before saving the action. It locks the Team while reserving budget. Pending requests count toward the trial server limit and paid spending limit. A server can use from 1 through 32 whole virtual CPUs. Memory and disk must resolve to positive whole MiB values. The disk must fit the image.
+Central checks the capability, current image selector, image availability, plan eligibility, resource sizes, and billing policy before saving the action. It locks the Team while reserving budget. Pending requests count toward the trial server limit (Trial Servers Limit on the Limits tab of Central Settings, default 3, counted per owner for free trial sites) and the paid spending limit. A server can use from 1 through 32 whole virtual CPUs. Memory and disk must resolve to positive whole MiB values. The disk must fit the image.
 
 The request key is unique within a Team. Reusing it with identical inputs returns the same action. Reusing it with changed inputs fails. The saved configuration contains the accepted shape, image identity, currency, and billing cycle. The reserved rate becomes the opening subscription price even if the catalog changes while the request waits.
 
@@ -115,6 +115,14 @@ A scoped not-found response records the server as terminated, applies the billin
 The console selects region, offering, exact build, and compatible plan. It keeps no copy of the request: `central.api.servers.registry` returns the team's unfinished creations, and the form picks up the one this user started. A page reload, a second tab and a lost reply all reach the same record instead of starting another. Switching Teams clears the visible action and ignores late responses from the previous Team.
 
 Resize uses the same action flow. `central.api.servers.resize_server` validates the target and inserts the action. The integration grows a disk online when CPU and memory stay the same. When CPU or memory changes, it stops the VM and sends the full CPU, memory, and disk target. This call also sets the idle time to zero. On a disk-only grow, a server with idle sleep on also receives a separate resize call that changes only the idle time. So both paths turn sleep off. The integration starts the VM, records the observed shape, and then asks billing to reprice. A billing failure leaves the action at Sent, so recovery can finish the local change without repeating a confirmed remote resize.
+
+## Console resize selection
+
+The resize dialog separates CPU and memory from storage. Keep my disk uses the current disk with the selected CPU and memory. A smaller compute preset is allowed because the disk stays the same. Increase storage too uses the preset's disk or the custom storage control. Presets with less disk than the current server are disabled in this mode. Changing to this mode clears an incompatible selection. Custom storage starts at the current disk size and cannot shrink it.
+
+Every preset card shows its effective storage and price. A retained disk beyond the preset allowance adds the extra storage at the current disk rate. A missing required rate or a price above the spending limit prevents submission. The final summary shows the target CPU, memory, storage, price, and power effect. CPU or memory changes require a restart on a running server. A storage increase alone does not. A stopped server starts after a resize. Central validates the target before it queues the action. A failure to load resize options shows an error and a Retry button. Submission stays unavailable until the options load.
+
+The catalog returns `spend_limit_enforced` with the available budget. Staging trials are exempt from the spending limit. The console preserves this exemption when it checks the price including retained storage.
 
 ## Validation
 

@@ -17,6 +17,12 @@ export function download(path: string, params: Record<string, string>): string {
 }
 
 export const API = {
+	getGitHubConnectionAttempt:
+		'central.api.integrations.github.get_connection_attempt',
+	getGitHubInstallationRepositories:
+		'central.api.integrations.github.get_installation_repositories',
+	completeGitHubConnection:
+		'central.api.integrations.github.complete_connection',
 	myTeams: 'central.api.identity.my_teams',
 	myCapabilities: 'central.api.identity.my_capabilities',
 	myInvitations: 'central.api.identity.my_invitations',
@@ -60,17 +66,25 @@ export const API = {
 	openConsole: 'central.api.servers.open_console',
 	resizeServer: 'central.api.servers.resize_server',
 	renameServer: 'central.api.servers.rename_server',
+	setTerminationProtection: 'central.api.servers.set_termination_protection',
+	updateServerFirewall: 'central.api.servers.update_server_firewall',
+	setServerPublicIp: 'central.api.servers.set_server_public_ip',
+	setServerIpv4Internet: 'central.api.servers.set_server_ipv4_internet',
+	publicIpv4Pricing: 'central.api.servers.public_ipv4_pricing',
 	terminateServer: 'central.api.servers.terminate_server',
+	keepTrialSite: 'central.api.servers.keep_trial_site',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',
 	serverHostnames: 'central.api.servers.server_hostnames',
 	listImageOfferings: 'central.api.images.list_offerings',
 	listRegionalImages: 'central.api.images.list_images',
+	imageEligiblePlans: 'central.api.images.eligible_plans',
 	listTeamSSHKeys: 'central.api.ssh_keys.list_team_ssh_keys',
 	createTeamSSHKey: 'central.api.ssh_keys.create_team_ssh_key',
 	rotateTeamSSHKey: 'central.api.ssh_keys.rotate_team_ssh_key',
 	retryTeamSSHKeySync: 'central.api.ssh_keys.retry_team_ssh_key_sync',
 	deleteTeamSSHKey: 'central.api.ssh_keys.delete_team_ssh_key',
+	setServerSSHKeys: 'central.api.ssh_keys.set_server_ssh_keys',
 
 	// ── Snapshots (central.api.snapshots) ──
 	// server:view reads them and their price; server:snapshot takes, keeps and deletes.
@@ -99,6 +113,8 @@ export const API = {
 	deleteBucket: 'central.services.api.storage.delete_bucket',
 	listBucketObjects: 'central.services.api.storage.list_objects',
 	bucketObjectUrl: 'central.services.api.storage.get_object_url',
+	bucketUploadUrl: 'central.services.api.storage.get_upload_url',
+	deleteBucketObjects: 'central.services.api.storage.delete_objects',
 
 	getProduct: 'central.api.signups.get_product',
 	sendCode: 'central.api.auth.send_code',

@@ -9,12 +9,12 @@ from frappe import _
 
 from central.errors import AtlasConnectionError, AtlasRejected, AtlasResourceGone
 from central.iam import can_on_any_server
-from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
-from central.infrastructure.doctype.user_mail_account.user_mail_account import UserMailAccount
+from central.infrastructure.doctype.virtual_machine import firewall
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
-from central.integrations.atlas import AtlasClient
+from central.integrations.atlas import AtlasClient, ConsoleMode
+from central.server_models import FirewallChange
 from central.utils.units import (
 	gigabytes_to_mebibytes,
 	mebibytes_to_gigabytes,
@@ -25,6 +25,9 @@ from central.utils.units import (
 # A resize may move the VM to another host, so the wait is generous enough to cover a migration.
 POWER_WAIT_SECONDS = 15 * 60
 POWER_POLL_SECONDS = 5
+# Atlas attaches or detaches a public address in seconds; a slower change shows on the next read.
+ADDRESS_WAIT_SECONDS = 30
+ADDRESS_POLL_SECONDS = 2
 METRICS_CACHE_SECONDS = 60
 MIB = 1024 * 1024
 
@@ -84,6 +87,8 @@ def observe_server(server: VirtualMachine) -> str:
 			# Atlas reports the guest's public IPv6 as a prefix. A /128 is one address.
 			"public_ipv6": (network.get("public_ipv6") or "").removesuffix("/128") or None,
 			"gateway_url": gateway,
+			"has_ipv4_internet": bool(network.get("ipv4_internet_access")),
+			**firewall.get_observed_firewall(network),
 		},
 	)
 
@@ -94,18 +99,14 @@ def observe_server(server: VirtualMachine) -> str:
 	# A Pilot machine carries a site, and this report is where its address arrives.
 	Site.create_once_addressable(server.name)
 	ResourceAction.confirm_observed_status(server.name, status)
+
 	return status
 
 
 def resize_server(server: VirtualMachine, shape: dict) -> None:
-	"""Apply a new size on Atlas, then start the server.
-
-	A CPU or memory change needs a stopped VM and may move it to a host that fits (a
-	`migrating` state during the wait), so it stops the VM and sends CPU, memory and disk in
-	one resize. A disk-only grow uses the online disk API, because the resize API needs a
-	stopped VM for a disk change too. Every call sets absolute values, so repeating the
-	resize is safe. A resized server has outgrown the hobby idle shutdown, so both paths
-	turn it off."""
+	"""Apply a new size on Atlas, then start the server. Safe to repeat: every call sets
+	absolute values. A CPU or memory change stops the server first; a disk-only grow does not.
+	Either path turns off the trial idle shutdown."""
 	client = get_client(server)
 	remote = client.get_vm(server.atlas_vm_id)
 	compute, disk = remote.get("compute") or {}, remote.get("disk") or {}
@@ -116,6 +117,9 @@ def resize_server(server: VirtualMachine, shape: dict) -> None:
 
 	is_reshaping = (compute.get("cpu_millicores"), compute.get("memory_mib")) != (cpu_millicores, memory_mib)
 	if is_reshaping:
+		# Atlas refuses to stop a sleeping VM, so wake it first.
+		if remote.get("current_state") == "paused":
+			wait_for_power_state(client, server.atlas_vm_id, "start", "running")
 		wait_for_power_state(client, server.atlas_vm_id, "stop", "stopped")
 
 		try:
@@ -134,6 +138,27 @@ def resize_server(server: VirtualMachine, shape: dict) -> None:
 
 	wait_for_power_state(client, server.atlas_vm_id, "start", "running")
 	observe_server(server)
+
+
+def hold_server_stopped(server: VirtualMachine) -> None:
+	"""Stop a server so that traffic does not wake it. Atlas refuses to stop a sleeping VM,
+	and only an explicit stop keeps a VM down, so the server is started first. Safe to repeat."""
+	client = get_client(server)
+	wait_for_power_state(client, server.atlas_vm_id, "start", "running")
+	wait_for_power_state(client, server.atlas_vm_id, "stop", "stopped")
+	observe_server(server)
+
+
+def convert_trial_server(server: str, start: bool) -> None:
+	"""Background job: turn idle sleep off on a converted trial server, and start it when the
+	trial had stopped it. Safe to repeat."""
+	document = frappe.get_doc("Virtual Machine", server)
+	client = get_client(document)
+	client.disable_idle_shutdown(document.atlas_vm_id)
+	if start:
+		wait_for_power_state(client, document.atlas_vm_id, "start", "running")
+
+	observe_server(document)
 
 
 def wait_for_power_state(client: AtlasClient, vm_id: str, action: str, state: str) -> None:
@@ -181,19 +206,20 @@ def reconcile(team: str | None = None) -> dict:
 	return {"synced": [], "stale": [], "queued": len(servers)}
 
 
-def get_console_url(server: VirtualMachine) -> str:
+def get_console_url(server: VirtualMachine, mode: ConsoleMode) -> str:
 	"""Return a single-use Atlas web console URL for a running server.
 
-	Atlas opens the session over SSH with a key it pushes for that session only. If Atlas
-	definitely refuses SSH, the console opens on the serial TTY, which every guest has."""
+	SSH opens a root shell with a key Atlas pushes for that session only. TTY opens the
+	shared serial console, which every guest has and which asks for a user password."""
 	if server.status != "Running":
 		frappe.throw(_("Start the server before you open its console."))
 
-	client = get_client(server)
 	try:
-		return client.get_console_url(server.atlas_vm_id, mode="ssh")
+		return get_client(server).get_console_url(server.atlas_vm_id, mode=mode)
 	except AtlasRejected:
-		return client.get_console_url(server.atlas_vm_id, mode="tty")
+		if mode != "ssh":
+			raise
+		frappe.throw(_("SSH did not start on this server. Open the serial console (TTY) instead."))
 
 
 def refresh_server(name: str) -> None:
@@ -208,19 +234,65 @@ def get_client(server: VirtualMachine) -> AtlasClient:
 
 	instance = frappe.get_cached_doc("Region", server.region)
 	tenant_id = frappe.db.get_value("Team", server.team, "tenant_id")
+
 	return AtlasClient(instance, tenant_id)
 
 
+def update_firewall(server: VirtualMachine, change: FirewallChange) -> None:
+	"""Change the firewall on Atlas, then read the result back."""
+	get_client(server).update_network(server.atlas_vm_id, {"firewall": firewall.get_atlas_firewall(change)})
+	observe_server(server)
+
+
+def set_public_ip(server: VirtualMachine, version: int, is_attached: bool) -> bool:
+	"""Attach or detach the public IPv4 or IPv6 address, then wait briefly for Atlas to apply it.
+	Returns False when the change is still in progress. A public IPv4 needs IPv4 internet access,
+	so attaching one turns it on first."""
+	client = get_client(server)
+	if is_attached and version == 4 and not server.has_ipv4_internet:
+		client.update_network(server.atlas_vm_id, {"ipv4_internet_access": True})
+
+	if is_attached:
+		client.attach_public_ip(server.atlas_vm_id, version)
+	else:
+		client.detach_public_ip(server.atlas_vm_id, version)
+
+	is_done = wait_for_public_ip(client, server.atlas_vm_id, version, is_attached)
+	observe_server(server)
+	return is_done
+
+
+def wait_for_public_ip(client: AtlasClient, vm_id: str, version: int, is_attached: bool) -> bool:
+	deadline = time.monotonic() + ADDRESS_WAIT_SECONDS
+	while time.monotonic() < deadline:
+		network = client.get_vm(vm_id).get("network") or {}
+		if bool(network.get(f"public_ipv{version}")) == is_attached:
+			return True
+		time.sleep(ADDRESS_POLL_SECONDS)
+
+	return False
+
+
+def set_ipv4_internet(server: VirtualMachine, enabled: bool) -> None:
+	"""Turn IPv4 internet access on or off, then read the result back. Atlas keeps it on while
+	the server has a public IPv4."""
+	get_client(server).update_network(server.atlas_vm_id, {"ipv4_internet_access": enabled})
+	observe_server(server)
+
+
+def set_termination_protection(server: VirtualMachine, enabled: bool) -> None:
+	"""Change termination protection on Atlas, then record the state Atlas reports."""
+	remote = get_client(server).set_termination_protection(server.atlas_vm_id, enabled)
+	if type(remote.get("is_termination_protected")) is not bool:
+		raise AtlasConnectionError(_("Atlas returned an invalid termination protection state."))
+
+	server.db_set("is_termination_protected", remote["is_termination_protected"])
+
+
 def mark_terminated(server: VirtualMachine) -> None:
-	"""Record a server as gone, revoke the pilot credentials bound to it, and remove its mailbox."""
+	"""Record a server as gone. Its on_update revokes its Pilot and removes its mailbox."""
 	server.status = "Terminated"
 	VirtualMachine.mark_terminated(server.name)
-	UserMailAccount.queue_removal(server=server.name)
-	credentials = frappe.get_all(
-		"Pilot Credential", filters={"team": server.team, "server": server.name}, pluck="name"
-	)
-	for name in credentials:
-		PilotCredential.revoke_by_id(name)
 
 
 def get_cached_metrics(server: VirtualMachine, start: datetime, end: datetime | None = None) -> dict:
@@ -236,11 +308,13 @@ def get_cached_metrics(server: VirtualMachine, start: datetime, end: datetime | 
 			"points": get_metric_points(payload["samples"], server.vcpus),
 			"sample_interval_seconds": payload["sample_interval_seconds"],
 		}
-	except (AtlasConnectionError, AtlasRejected, AtlasResourceGone):
-		frappe.log_error(title=f"Atlas metrics unavailable: {server.name}")
+	except AtlasConnectionError:
+		# No frame locals: they hold the Atlas bearer token.
+		frappe.log_error(title=f"Atlas metrics unavailable: {server.name}", message=frappe.get_traceback())
 		metrics = {"available": False}
 
 	frappe.cache.set_value(key, metrics, expires_in_sec=METRICS_CACHE_SECONDS)
+
 	return metrics
 
 
@@ -264,6 +338,7 @@ def get_metric_point(previous: dict, sample: dict, vcpus: float) -> dict:
 		return change / seconds if is_up and change >= 0 else None
 
 	cpu_microseconds_per_second = rate("compute", "cpu_microseconds")
+
 	return {
 		"time": sample["timestamp"],
 		"is_up": sample["up"],

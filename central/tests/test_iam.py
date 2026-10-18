@@ -54,9 +54,9 @@ class TestCentralIAM(IntegrationTestCase):
 	def test_fixtures_create_capability_catalog_and_system_roles(self):
 		# 16 capabilities across two live planes: central (8) + atlas (8). v5 merges
 		# server:open into server:view. The bench plane remains deferred.
-		self.assertEqual(frappe.db.count("Capability"), 16)
+		self.assertEqual(frappe.db.count("Capability"), 17)
 		self.assertEqual(frappe.db.count("Capability", {"plane": "central"}), 8)
-		self.assertEqual(frappe.db.count("Capability", {"plane": "atlas"}), 8)
+		self.assertEqual(frappe.db.count("Capability", {"plane": "atlas"}), 9)
 		self.assertEqual(frappe.db.count("Capability", {"plane": "bench"}), 0)
 		# The retired roles are gone; the five-rung ladder is all that remains.
 		self.assertEqual(frappe.db.count("Team Role", {"is_system": 1}), 5)
@@ -74,6 +74,7 @@ class TestCentralIAM(IntegrationTestCase):
 			for cap in (
 				"server:create",
 				"server:power",
+				"server:network",
 				"server:resize",
 				"server:snapshot",
 				"server:ssh-key",
@@ -187,21 +188,6 @@ class TestCentralIAM(IntegrationTestCase):
 			["cluster:view", "server:view", "service:view"],
 		)
 		self.assertEqual(effective["teams"][team.name]["grants"][0]["source"], "member")
-
-	def test_permission_probe_evaluates_on_save(self):
-		team = self.make_team("IAM Probe Team", self.viewer, "Viewer")
-		probe = frappe.get_doc(
-			{
-				"doctype": "IAM Permission Probe",
-				"user": self.viewer,
-				"team": team.name,
-				"capability": "server:terminate",
-			}
-		)
-		probe.insert()
-
-		self.assertFalse(probe.allowed)
-		self.assertIn(team.name, probe.resolved_grants)
 
 	def test_new_user_gets_the_central_user_role_and_no_team(self):
 		email = f"iam.signup.{frappe.generate_hash(length=8)}@example.test"

@@ -342,6 +342,23 @@ class TestEmailFanout(EngineTestBase):
 		self.assertNotIn("Reason", body)
 
 	@patch("central.notification.engine.frappe.sendmail")
+	def test_a_failed_email_is_logged_under_its_event_type(self, mock_sendmail):
+		self._ensure_event_type("logged_event", category="Billing", required_cap="billing:view")
+		mock_sendmail.side_effect = Exception("smtp down")
+
+		from central.notification.engine import dispatch
+
+		dispatch(TEAM, "logged_event", message="hello")
+
+		self.assertTrue(
+			frappe.get_all(
+				"Error Log",
+				limit=1,
+				filters={"method": ("like", "Notification email send failed: logged_event -> %")},
+			)
+		)
+
+	@patch("central.notification.engine.frappe.sendmail")
 	def test_emails_qualified_members(self, mock_sendmail):
 		"""All active members with the required capability receive an email."""
 		self._ensure_event_type(
@@ -701,7 +718,7 @@ class TestReportPilotEvent(EngineTestBase):
 		)[0]
 		self.assertEqual(row.title, "Resource limit breached: my-bench")
 		self.assertEqual(row.message, "my-bench: cpu_usage_limit at 95.0%")
-		self.assertEqual((row.action_label, row.action_route), ("View server", "/servers"))
+		self.assertEqual((row.action_label, row.action_route), ("View server", "/servers/"))
 
 
 class TestTemplateContext(EngineTestBase):

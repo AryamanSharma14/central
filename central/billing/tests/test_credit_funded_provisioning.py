@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
-"""Billing details are asked for when credits stop covering the bill, not before.
+"""Billing details and a payment method are asked for when credits stop covering
+the bill, not before.
 
 Provisioning is allowed while the wallet funds it; the invoice is held until the
 details arrive.
@@ -111,13 +112,13 @@ class TestCreditFundedProvisioning(CreditFundedTestBase):
 		# Still no legal name or address on file — and nothing asked for one.
 		self.assertFalse(frappe.db.get_value("Billing Profile", TEAM, "legal_name"))
 
-	def test_details_are_asked_for_once_credits_fall_short(self):
+	def test_a_payment_method_is_asked_for_once_credits_fall_short(self):
 		self._grant(500)  # a third of the plan's monthly rate
 
 		with self.assertRaises(frappe.ValidationError) as caught:
 			self._purchase()
 
-		self.assertIn("legal name", str(caught.exception))
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_METHOD_REQUIRED")
 
 	def test_no_credits_asks_for_details_as_before(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -139,7 +140,22 @@ class TestCreditFundedProvisioning(CreditFundedTestBase):
 			with self.assertRaises(frappe.ValidationError):
 				self._purchase()
 
-	def test_a_complete_profile_needs_no_credits(self):
+	def test_a_complete_profile_without_a_payment_method_is_refused(self):
+		complete_billing_profile(TEAM)
+
+		with self.assertRaises(frappe.ValidationError):
+			self._purchase()
+
+	def test_a_payment_method_or_manual_checkout_needs_no_credits(self):
+		complete_billing_profile(TEAM)
+		with patch("central.resource_actions.has_active_payment_method", return_value=True):
+			self.assertEqual(self._purchase(), RATE)
+
+		frappe.db.set_value("Billing Profile", TEAM, "collection_mode", "Manual Checkout")
+		self.assertEqual(self._purchase(), RATE)
+
+	@IntegrationTestCase.change_settings("Central Settings", require_payment_method=0)
+	def test_a_complete_profile_is_enough_when_the_requirement_is_off(self):
 		complete_billing_profile(TEAM)
 
 		self.assertEqual(self._purchase(), RATE)

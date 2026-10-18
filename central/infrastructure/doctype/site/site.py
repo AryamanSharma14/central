@@ -1,12 +1,11 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils.telemetry import capture
+
+from central.signups.funnel import capture_trial_event
 
 if TYPE_CHECKING:
 	from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
@@ -15,15 +14,8 @@ IMAGE_SITE_NAME = "site.local"
 
 
 class Site(Document):
-	"""The site a Pilot image already carries, on the machine that runs it.
-
-	Central builds no site. Cargo bakes one bench and one site into every image, and the
-	image answers for it on a `site-*` hostname alias, so a machine with an enrolled
-	Pilot always has exactly one site, at an address its own mesh address decides.
-
-	This record therefore holds only what belongs to the site: which machine it is, and
-	the name that machine knows it by. Its address is its name and its state is the
-	machine's, so neither is copied here, where the two could drift apart."""
+	"""The one site that a Pilot image carries, on the machine that runs it.
+	Its address is its name and its state is the machine's, so neither is copied here."""
 
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
@@ -39,30 +31,43 @@ class Site(Document):
 		rename_error: DF.SmallText | None
 		rename_error_log: DF.Link | None
 		rename_task: DF.Data | None
+		renamed_at: DF.Datetime | None
 		server: DF.Link
 		site_name: DF.Data
 		subdomain: DF.Data | None
 		team: DF.Link
+		trial_cost: DF.Currency
+		trial_currency: DF.Link | None
+		trial_deletes_on: DF.Date | None
+		trial_ends_on: DF.Date | None
+		trial_error: DF.SmallText | None
+		trial_last_notice: DF.Data | None
+		trial_state: DF.Literal["", "Active", "Ended", "Converted", "Deleted"]
 	# end: auto-generated types
 
 	@property
 	def rename_target(self) -> str:
-		"""The hostname the customer chose, which the bench is renamed onto.
-
-		It is only ever a rename target. Nothing reads it and nothing is sent to it, because
-		it does not serve until the rename lands. Their name and ours share the regional
-		zone, and the site's own name already carries it, so this is built from ours."""
+		"""The hostname the customer chose, which the bench is renamed onto. Nothing is sent to it
+		before the rename lands."""
 		_, zone = self.name.split(".", 1)
 		return f"{self.subdomain}.{zone}"
 
 	@property
 	def url(self) -> str:
-		"""The site's address: the one the region derives from the machine itself.
-
-		It answers before the customer has chosen a name and after the bench is renamed
-		onto theirs, so it is what every reader, probe and sign-in uses. The proxy
-		terminates TLS in front of it."""
+		"""The automatic address used for readiness probes and the initial signup handoff."""
 		return f"https://{self.name}"
+
+	@property
+	def primary_url(self) -> str:
+		"""The address the console shows: the customer's subdomain once the rename has landed."""
+		return Site.get_primary_url(self.name, self.subdomain, self.renamed_at)
+
+	@staticmethod
+	def get_primary_url(name: str, subdomain: str | None, renamed_at: str | None) -> str:
+		if not subdomain or not renamed_at:
+			return f"https://{name}"
+		_, zone = name.split(".", 1)
+		return f"https://{subdomain}.{zone}"
 
 	@property
 	def status(self) -> str | None:
@@ -71,12 +76,9 @@ class Site(Document):
 
 	@classmethod
 	def create_once_addressable(cls, server: str) -> None:
-		"""Write down the site of a machine that has reached a routable address.
-
-		A region reports on a machine repeatedly and this runs on every report, because
-		the address arrives on one of them and nothing says which. It writes once: a
-		machine that already has a site, runs no Pilot, or has no address yet is left
-		alone, and so is one whose image has no site."""
+		"""Record the site of a machine that has a routable address. It runs on every report and
+		writes once; a machine with a site, without Pilot, without an address, or whose image has no
+		site is left alone."""
 		if frappe.db.exists("Site", {"server": server}):
 			return
 
@@ -112,26 +114,39 @@ class Site(Document):
 		# The verified regional server report owns creation of this system mirror.
 		site.insert(ignore_permissions=True)
 
+	def before_insert(self) -> None:
+		from central.signups.trial import start_trial
+
+		start_trial(self)
+
+	def after_insert(self) -> None:
+		from central.signups.trial import convert_if_paid
+
+		convert_if_paid(self)
+
 	def mark_claimed(self) -> None:
 		"""Record the first successful login handoff and schedule the optional rename."""
 		if not self.claimed_at:
 			self.db_set("claimed_at", frappe.utils.now_datetime())
-			capture("trial_claimed", "central", properties={"product": self.product})
+			capture_trial_event("trial_claimed", self.team, self.product, user=frappe.session.user)
 
 		self.enqueue_subdomain_rename()
 
 	def record_ready(self) -> None:
-		"""Record and announce the first successful probe of the site's public address."""
-		if self.ready_at:
+		"""Record and announce the first successful probe of the site's public address. The locking
+		read keeps the scheduled probe and a console request from both announcing it."""
+		if frappe.db.get_value("Site", self.name, "ready_at", for_update=True):
 			return
 
 		self.db_set("ready_at", frappe.utils.now_datetime())
 		self.capture_ready()
 		from central.notification.engine import queue_event
 
+		product = frappe.db.get_value("Product", self.product, "title") if self.product else None
 		queue_event(
 			self.team,
 			"site_ready",
+			context={"product": product} if product else None,
 			reference_doctype=self.doctype,
 			reference_name=self.name,
 		)
@@ -141,14 +156,11 @@ class Site(Document):
 		requested_at = frappe.db.get_value(
 			"Resource Action", {"server": self.server, "action": "create"}, "creation"
 		)
-		capture(
+		capture_trial_event(
 			"trial_ready",
-			"central",
-			user=frappe.get_cached_value("Team", self.team, "owner_user"),
-			properties={
-				"product": self.product,
-				"seconds_to_ready": (self.ready_at - requested_at).total_seconds() if requested_at else None,
-			},
+			self.team,
+			self.product,
+			seconds_to_ready=(self.ready_at - requested_at).total_seconds() if requested_at else None,
 		)
 
 	def enqueue_subdomain_rename(self) -> None:
@@ -167,11 +179,8 @@ class Site(Document):
 		)
 
 	def apply_subdomain(self) -> None:
-		"""Move the bench onto the name the customer chose, once and never again.
-
-		Pilot renames on its own task, so this returns as soon as the rename is accepted
-		rather than finished. Both hostnames keep serving throughout, which is what lets
-		the customer be signed in at our address while theirs is still coming up."""
+		"""Rename the bench onto the customer's chosen name, once. It returns when Pilot accepts
+		the rename, and both hostnames serve until it finishes."""
 		from central.integrations.pilot import rename_site
 
 		if not self.subdomain or self.rename_task:
@@ -214,24 +223,79 @@ class Site(Document):
 		self.db_set({"rename_error": None, "rename_error_log": None})
 		self.enqueue_subdomain_rename()
 
-	def get_login_url(self, user: str | None = None) -> str | None:
-		"""A one-click session for `user`, or for Administrator, on the address the customer
-		can reach. The public name is Central's, so putting the session onto that address is
-		Central's to do.
+	@frappe.whitelist(methods=["POST"])
+	def extend_trial(self, days: int) -> None:
+		"""Operator action: give the trial more days, and start an ended trial again."""
+		from central.signups.trial import extend_trial
 
-		Pilot only accepts a token for the name the site has on the bench. That is the
-		customer's name once the rename ran, and the stable image alias before it."""
-		from central.integrations.pilot import fetch_site_login_url
+		frappe.only_for("System Manager")
+		extend_trial(self, days)
+		self.add_comment("Info", _("{0} extended the trial by {1} days.").format(frappe.session.user, days))
+
+	@frappe.whitelist(methods=["POST"])
+	def end_trial_now(self) -> None:
+		"""Operator action: end an active trial today. Its server stops."""
+		from central.signups.trial import end_trial
+
+		frappe.only_for("System Manager")
+		if self.trial_state != "Active":
+			frappe.throw(_("Only an active trial can be ended."))
+
+		end_trial(self, frappe.utils.getdate())
+		self.add_comment("Info", _("{0} ended the trial.").format(frappe.session.user))
+
+	@frappe.whitelist(methods=["POST"])
+	def retry_trial_step(self) -> None:
+		"""Operator action: run today's trial step again after a failure."""
+		from central.signups.trial import advance_trial
+
+		frappe.only_for("System Manager")
+		self.db_set("trial_error", None)
+		advance_trial(self, frappe.utils.getdate())
+
+	@frappe.whitelist(methods=["POST"])
+	def open_as_administrator(self) -> str | None:
+		"""Operator action: a one-click login to this site, recorded on the site and its server."""
+		frappe.only_for("System Manager")
+		url = self.get_login_url(frappe.session.user)
+		note = _("{0} opened site {1} as Administrator.").format(frappe.session.user, self.name)
+		self.add_comment("Info", note)
+		frappe.get_doc("Virtual Machine", self.server).add_comment("Info", note)
+		return url
+
+	@frappe.whitelist(methods=["POST"])
+	def check_readiness(self) -> bool:
+		"""Operator action: probe the site's address now, and record readiness when it answers."""
+		from central.integrations.pilot import is_site_reachable
+
+		self.check_permission("read")
+		is_ready = is_site_reachable(self.url)
+		if is_ready:
+			self.record_ready()
+
+		return is_ready
+
+	def get_login_url(self, user: str | None = None) -> str | None:
+		"""A one-click session for `user`, or for Administrator, on the site's public address.
+		Use the customer hostname only after its route answers and Pilot accepts its site name."""
+		from central.integrations.pilot import fetch_site_login_url, is_site_reachable
 
 		gateway, audience = self.get_pilot_access()
 		if not gateway or not audience:
 			return None
 
 		login_user, full_name = self.get_login_user(user)
-		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if self.rename_task else [IMAGE_SITE_NAME]
+		renamed_ready = (
+			self.subdomain and self.rename_task and is_site_reachable(f"https://{self.rename_target}")
+		)
+		if renamed_ready and not self.renamed_at:
+			self.db_set("renamed_at", frappe.utils.now_datetime())
+		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if renamed_ready else [IMAGE_SITE_NAME]
 		for pilot_name in pilot_names:
 			if minted := fetch_site_login_url(gateway, audience, pilot_name, login_user, full_name):
-				return on_host(minted, self.name, self.get_landing_route())
+				host = self.name if pilot_name == IMAGE_SITE_NAME else self.rename_target
+				return on_host(minted, host, self.get_landing_route())
+
 		return None
 
 	def get_landing_route(self) -> str | None:
@@ -248,6 +312,7 @@ class Site(Document):
 
 		if not user or not self.is_trial() or self.team not in get_user_team_names(user):
 			return None, None
+
 		return user, frappe.db.get_value("User", user, "full_name")
 
 	def is_trial(self) -> bool:
@@ -269,7 +334,25 @@ class Site(Document):
 		audience = frappe.db.get_value(
 			"Pilot Credential", {"server": self.server, "team": self.team, "status": "Active"}, "audience_id"
 		)
+
 		return (gateway.rstrip("/") if gateway else None), audience
+
+
+def record_ready_sites() -> None:
+	"""Scheduled job: probe each running trial site that has not answered yet, so readiness and
+	its email do not wait for the customer to come back. A sleeping server is not Running, so the
+	probe does not wake it. Other sites record readiness when someone opens them."""
+	from central.integrations.pilot import is_site_reachable
+
+	for name in frappe.get_all(
+		"Site",
+		filters={"trial_state": "Active", "ready_at": ["is", "not set"], "server.status": "Running"},
+		pluck="name",
+	):
+		site = frappe.get_doc("Site", name)
+		if is_site_reachable(site.url):
+			site.record_ready()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's readiness if a later probe fails
 
 
 def on_host(url: str, host: str, path: str | None = None) -> str:
@@ -289,6 +372,7 @@ def get_server_hostnames(team: str, server: str | None) -> list[str]:
 	filters = {"team": team, "server": server}
 	sites = frappe.get_all("Site", filters=filters, pluck="name")
 	domains = frappe.get_all("Site Domain", filters={**filters, "status": "Active"}, pluck="name")
+
 	return sorted({*sites, *domains})
 
 
@@ -296,3 +380,5 @@ def on_doctype_update():
 	# The fleet reads a team's sites, then drops the machine each one already stands for.
 	frappe.db.add_index("Site", ["team", "server"])
 	frappe.db.add_index("Site", ["product"])
+	# The daily trial job reads trials by state and the day they end.
+	frappe.db.add_index("Site", ["trial_state", "trial_ends_on"])

@@ -14,14 +14,16 @@ export type ServerMenuVerb =
 	| 'restart'
 	| 'resize'
 	| 'snapshot'
-	| 'console'
+	| 'ssh-console'
+	| 'tty-console'
 	| 'rename'
 	| 'terminate'
 
 export interface ServerMenuOptions {
 	/** This machine carries a site. Open goes to that site, not the bench. */
 	opensSite?: boolean
-	/** The caller shows Overview and Open itself, as on the server page. */
+	/** The caller shows Overview and Open itself, and its Settings tab offers Resize
+	 *  and Terminate, as on the server page. */
 	isOnServerPage?: boolean
 }
 
@@ -36,9 +38,15 @@ export function getServerMenuGroups(
 	run: Run,
 	options: ServerMenuOptions = {},
 ): DropdownOption[][] {
-	const entry = (verb: ServerMenuVerb, label: string, icon: string) => ({
+	const entry = (
+		verb: ServerMenuVerb,
+		label: string,
+		icon: string,
+		description?: string,
+	) => ({
 		label,
 		icon,
+		description,
 		onClick: () => run(verb),
 	})
 
@@ -49,7 +57,7 @@ export function getServerMenuGroups(
 	const groups: DropdownOption[][] = [
 		getViewItems(server, allowed, entry, options),
 		isBusy ? [] : getPowerItems(server, allowed, entry),
-		isChangeable ? getChangeItems(allowed, entry) : [],
+		isChangeable ? getChangeItems(allowed, entry, options) : [],
 		[
 			// Renaming is rare, so it lives on the server page only.
 			...(options.isOnServerPage && allowed.resize
@@ -61,7 +69,7 @@ export function getServerMenuGroups(
 				onClick: () => copyServerId(server),
 			},
 		],
-		isChangeable && allowed.terminate
+		isChangeable && allowed.terminate && !options.isOnServerPage
 			? [{ ...entry('terminate', 'Terminate', 'lucide-trash-2'), theme: 'red' }]
 			: [],
 	]
@@ -81,10 +89,24 @@ export function getServerMenu(
 	)
 }
 
+/** A submenu's items as flat options named "Parent: Child", for a list that cannot nest. */
+export function withSubmenuItems(option: DropdownOption): DropdownOption[] {
+	if (!option.submenu) return [option]
+
+	return option.submenu
+		.filter((item): item is DropdownOption => !('group' in item))
+		.map((item) => ({
+			...item,
+			label: `${option.label}: ${item.label}`,
+			disabled: option.disabled || item.disabled,
+		}))
+}
+
 type Entry = (
 	verb: ServerMenuVerb,
 	label: string,
 	icon: string,
+	description?: string,
 ) => DropdownOption
 
 function getViewItems(
@@ -119,8 +141,23 @@ function getViewItems(
 
 	if (allowed.console && !isBusy)
 		items.push({
-			...entry('console', 'Web console', 'lucide-terminal'),
+			label: 'Web console',
+			icon: 'lucide-square-terminal',
 			disabled: !isRunning,
+			submenu: [
+				entry(
+					'ssh-console',
+					'SSH session',
+					'lucide-terminal',
+					'Shell as root. No password needed.',
+				),
+				entry(
+					'tty-console',
+					'Serial console (TTY)',
+					'lucide-monitor-cog',
+					'Boot output and login prompt. Needs a user password.',
+				),
+			],
 		})
 
 	return items
@@ -147,10 +184,11 @@ function getPowerItems(
 function getChangeItems(
 	allowed: ServerActions,
 	entry: Entry,
+	{ isOnServerPage }: ServerMenuOptions,
 ): DropdownOption[] {
 	const items: DropdownOption[] = []
 
-	if (allowed.resize)
+	if (allowed.resize && !isOnServerPage)
 		items.push(entry('resize', 'Resize', 'lucide-sliders-horizontal'))
 
 	if (allowed.snapshot)

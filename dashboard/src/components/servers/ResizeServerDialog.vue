@@ -2,16 +2,19 @@
 import {
 	Alert,
 	Button,
-	Checkbox,
 	Dialog,
 	LoadingIndicator,
+	Radio,
+	RadioGroup,
+	Skeleton,
 	Tabs,
 } from 'frappe-ui'
-import { computed, toRef } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import PlanGroup from '@/components/servers/PlanGroup.vue'
+import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
-import { money } from '@/lib/format'
+import { configSpecs } from '@/lib/composed'
 import { formatGb } from '@/lib/units'
 
 interface Props {
@@ -27,6 +30,8 @@ const {
 	resizeCall,
 	plansLoading,
 	resizable,
+	trial,
+	starting,
 	nothingToShow,
 	resizeError,
 	losesLockedRate,
@@ -50,6 +55,11 @@ const {
 	computeOnly,
 	currentPrice,
 	totalPrice,
+	totalShape,
+	selectionError,
+	canConfirm,
+	optionsError,
+	reloadOptions,
 	downtimeNote,
 	changed,
 	confirm,
@@ -57,6 +67,8 @@ const {
 	close: () => (model.value = false),
 	resized: () => emit('resized'),
 })
+
+const trialPanel = ref<InstanceType<typeof TrialUpgradePanel> | null>(null)
 
 const open = computed({
 	get: () => model.value,
@@ -67,7 +79,11 @@ const open = computed({
 </script>
 
 <template>
-	<Dialog v-model="open" title="Resize server" size="3xl">
+	<Dialog
+		v-model="open"
+		:title="trial ? 'Upgrade your site' : 'Resize server'"
+		size="3xl"
+	>
 		<template #default>
 			<!-- Keep the dialog stable while Central accepts the resize request. -->
 			<div
@@ -75,18 +91,50 @@ const open = computed({
 				class="flex flex-col items-center gap-3 py-10 text-center"
 			>
 				<LoadingIndicator class="h-6 w-6 text-ink-gray-5" />
-				<p class="text-p-base font-medium text-ink-gray-8">Starting resize…</p>
+				<p class="text-p-base-medium text-ink-gray-8">Starting resize…</p>
 				<p class="max-w-xs text-p-sm text-ink-gray-5">
-					The reshape runs in the background. The server shows “Resizing” in the
-					list and comes back on its own when it’s done.
+					Follow progress in the server list.
 				</p>
 			</div>
-			<p
-				v-else-if="configCall.loading || plansLoading"
-				class="text-p-sm text-ink-gray-5"
+			<div
+				v-else-if="(configCall.loading && !trial && !starting) || plansLoading"
+				class="space-y-4"
+				aria-busy="true"
+				aria-label="Loading resize options"
 			>
-				Loading…
-			</p>
+				<div class="space-y-2">
+					<Skeleton class="h-4 w-full rounded-4" />
+					<Skeleton class="h-4 w-2/3 rounded-4" />
+				</div>
+				<div class="grid gap-3 sm:grid-cols-2">
+					<Skeleton v-for="index in 2" :key="index" class="h-16 rounded-6" />
+				</div>
+				<div class="grid gap-3 sm:grid-cols-3">
+					<Skeleton v-for="index in 6" :key="index" class="h-24 rounded-6" />
+				</div>
+			</div>
+			<div v-else-if="optionsError" class="space-y-3">
+				<Alert
+					theme="red"
+					title="Couldn't load resize options"
+					:description="optionsError"
+				/>
+				<Button label="Retry" @click="reloadOptions" />
+			</div>
+			<TrialUpgradePanel
+				v-else-if="trial"
+				ref="trialPanel"
+				:trial="trial"
+				:checking="configCall.loading"
+				:server-id="server?.resource_id ?? ''"
+				@check="configCall.reload()"
+			/>
+			<Alert
+				v-else-if="starting"
+				theme="blue"
+				title="Your payment method is confirmed"
+				description="We are starting your server on its paid plan. This takes about a minute, then the plans show here."
+			/>
 			<p
 				v-else-if="!resizable || nothingToShow"
 				class="text-p-sm text-ink-gray-5"
@@ -99,24 +147,21 @@ const open = computed({
 					v-if="losesLockedRate && lock"
 					theme="amber"
 					title="Resizing will change your rate"
-					:description="`You pay ${money(lock.locked_rate, lock.currency)}/mo for this size; it now lists at ${money(lock.list_rate, lock.currency)}/mo. Any resize is priced at today's rates, and the old rate doesn't come back, including if you resize to this size again later.`"
+					description="Resizing uses today’s rates. Your current rate cannot be restored."
 				/>
 
-				<div class="space-y-2 text-p-base text-ink-gray-7">
-					<p>
-						You can change CPU and memory only, or grow the disk too. You can
-						only move to a smaller size later if you keep the disk as it is.
-					</p>
-					<p>{{ downtimeNote }}</p>
-				</div>
-
-				<div class="rounded-6 border border-outline-gray-2 px-3 py-2.5">
-					<Checkbox
-						v-model="computeOnly"
-						label="CPU and memory only"
-						:description="`Keeps the ${formatGb(currentDisk)} GB disk as it is.`"
+				<p class="text-p-sm text-ink-gray-7">
+					Choose a new CPU and memory size. You can also increase storage, but
+					you cannot reduce it later.
+				</p>
+				<RadioGroup v-model="computeOnly" label="Storage" padded>
+					<Radio
+						:value="true"
+						:label="`Keep ${formatGb(currentDisk)} GB disk`"
 					/>
-				</div>
+					<Radio :value="false" label="Increase storage" />
+				</RadioGroup>
+				<p class="text-p-sm text-ink-gray-6">Prices include storage.</p>
 
 				<Tabs v-if="hasTabs" v-model="activeTab" :tabs="classTabs">
 					<template #tab-panel="{ tab }">
@@ -124,6 +169,7 @@ const open = computed({
 							class="pt-4"
 							:omit-disk="computeOnly"
 							:min-disk="computeOnly ? undefined : currentDisk"
+							:current-disk="currentDisk"
 							:current-plan="currentPlanKey"
 							:presets="groups[tab.value] ?? []"
 							:profile="designableProfile(String(tab.value))"
@@ -141,6 +187,7 @@ const open = computed({
 					v-else
 					:omit-disk="computeOnly"
 					:min-disk="computeOnly ? undefined : currentDisk"
+					:current-disk="currentDisk"
 					:current-plan="currentPlanKey"
 					:presets="flatPresets"
 					:profile="flatProfile"
@@ -152,11 +199,54 @@ const open = computed({
 					v-model:selected-plan="selectedPlan"
 					v-model:composed-config="composedConfig"
 				/>
+				<Alert v-if="selectionError" theme="red" :title="selectionError" />
+				<div
+					v-if="totalShape && changed"
+					class="space-y-2 border-t border-outline-gray-2 pt-4"
+					aria-live="polite"
+				>
+					<p class="text-sm-medium text-ink-gray-9">After resizing</p>
+					<p class="text-p-sm text-ink-gray-7">{{ configSpecs(totalShape) }}</p>
+					<p class="text-p-sm text-ink-gray-6">
+						{{ downtimeNote }}
+						Your files are kept.
+					</p>
+				</div>
 			</div>
 		</template>
 		<template #actions>
+			<div v-if="starting" class="flex justify-end">
+				<Button
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+			</div>
+			<div v-else-if="trial && trialPanel" class="flex justify-end">
+				<Button
+					v-if="trial.can_keep"
+					variant="solid"
+					icon-left="lucide-play"
+					label="Keep this site"
+					:loading="trialPanel?.keeping"
+					@click="trialPanel?.keep()"
+				/>
+				<Button
+					v-else-if="trial.held || trialPanel?.methodAdded"
+					label="Check again"
+					:loading="configCall.loading"
+					@click="configCall.reload()"
+				/>
+				<Button
+					v-else
+					variant="solid"
+					icon-left="lucide-credit-card"
+					label="Add payment method"
+					@click="trialPanel?.addMethod()"
+				/>
+			</div>
 			<div
-				v-if="resizable && !resizeCall.loading"
+				v-else-if="resizable && !resizeCall.loading"
 				class="flex items-center justify-end gap-4"
 			>
 				<p v-if="totalPrice" class="text-p-sm text-ink-gray-6">
@@ -165,12 +255,12 @@ const open = computed({
 						class="lucide-arrow-right mx-1 inline-block size-3.5 align-[-2px]"
 						aria-label="to"
 					/>
-					<span class="font-medium text-ink-gray-9">{{ totalPrice }}</span>
+					<span class="text-p-sm-medium text-ink-gray-9">{{ totalPrice }}</span>
 				</p>
 				<Button
 					variant="solid"
 					label="Resize"
-					:disabled="!changed"
+					:disabled="!canConfirm"
 					@click="confirm"
 				/>
 			</div>

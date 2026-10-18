@@ -9,11 +9,10 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-# Central's console feature flags. One Single, one Check per flag, read at page
-# boot (get_context) so the SPA can hide a whole area before its routes mount.
-
 
 class CentralSettings(Document):
+	"""Console feature flags, one Check each, read at page boot so the console can hide an area."""
+
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
@@ -29,12 +28,43 @@ class CentralSettings(Document):
 		enable_llm_service: DF.Check
 		enable_object_storage_service: DF.Check
 		enable_pdf_print_service: DF.Check
+		github_app_id: DF.Data | None
+		github_app_slug: DF.Data | None
+		github_client_id: DF.Data | None
+		github_client_secret: DF.Password | None
+		github_private_key: DF.Password | None
+		github_webhook_secret: DF.Password | None
 		invitation_expiry_days: DF.Int
+		invitation_resend_cooldown_minutes: DF.Int
+		invitations_per_hour: DF.Int
+		sign_in_code_attempts: DF.Int
+		sign_in_codes_per_email: DF.Int
+		require_payment_method: DF.Check
+		trial_days: DF.Int
+		trial_deletion_days: DF.Int
 		trial_idle_shutdown_minutes: DF.Int
+		trial_notice_days: DF.Int
+		trial_servers_per_team: DF.Int
 		wildcard_domain: DF.Data | None
 	# end: auto-generated types
 
 	def validate(self) -> None:
+		self.validate_limits()
+		self.validate_common_site_config()
+
+	def on_update(self) -> None:
+		from central.infrastructure.doctype.github_connection.github_connection import GitHubConnection
+
+		if self.has_value_changed("github_app_id"):
+			GitHubConnection.disable_all()
+
+	def validate_limits(self) -> None:
+		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""
+		for fieldname in ("invitations_per_hour", "sign_in_code_attempts", "sign_in_codes_per_email"):
+			if self.get(fieldname) < 1:
+				frappe.throw(_("{0} must be at least 1.").format(_(self.meta.get_label(fieldname))))
+
+	def validate_common_site_config(self) -> None:
 		from central.integrations.atlas import MAXIMUM_METADATA_BYTES
 
 		try:
@@ -47,7 +77,7 @@ class CentralSettings(Document):
 			frappe.throw(_("Common Site Config must fit in {0} bytes.").format(MAXIMUM_METADATA_BYTES))
 
 	def get_common_site_config(self) -> dict:
-		return json.loads(self.common_site_config or "{}")
+		return frappe.parse_json(self.common_site_config or "{}")
 
 	def feature_flags(self) -> dict[str, bool]:
 		"""The console's feature flags as a plain {name: bool} map for window boot.

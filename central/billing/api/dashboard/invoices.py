@@ -749,9 +749,9 @@ def create_topup_order(
 			gw = _enabled_gateway_for_currency(currency, "Razorpay")
 			if not gw:
 				frappe.throw(
-					_("PayPal via Razorpay needs an enabled Razorpay gateway that handles {0}.").format(
-						currency
-					),
+					_(
+						"PayPal through Razorpay needs an enabled Razorpay gateway that supports {0}. Choose another payment method, or contact support."
+					).format(currency),
 					frappe.ValidationError,
 				)
 			display_paypal = True
@@ -779,9 +779,11 @@ def create_topup_order(
 	# top-up attaches to the one customer every later charge reuses (the card #05 and
 	# mandate #08 paths share this same Gateway Customer row). ensure_gateway_customer
 	# commits the row the instant it mints, so a failed order can't orphan it.
+	from central.billing.gateways.base import customer_safe_gateway_errors
 	from central.billing.payments.payments import ensure_gateway_customer
 
-	customer_id = ensure_gateway_customer(team, gw, adapter)
+	with customer_safe_gateway_errors():
+		customer_id = ensure_gateway_customer(team, gw, adapter)
 	receipt = f"topup-{team}-{frappe.generate_hash(length=8)}"
 	notes = {"team": team, "purpose": "wallet_topup"}
 	# Both rails collect the card in-app: Razorpay in its hosted sheet over the
@@ -795,7 +797,8 @@ def create_topup_order(
 	# The split rides with the order, so the wallet gets what was ordered even if the
 	# tax rate changes before the payment is captured.
 	notes["credit"] = str(amount)
-	handles = adapter.create_order(total, currency, receipt, notes=notes, customer=customer_id)
+	with customer_safe_gateway_errors():
+		handles = adapter.create_order(total, currency, receipt, notes=notes, customer=customer_id)
 	# The SPA branches on adapter_key: Stripe → PaymentIntent Element, Razorpay → hosted
 	# sheet, Paypal → PayPal Buttons against the returned order_id (ADR 0007). For a
 	# Via-Razorpay PayPal top-up the adapter_key is Razorpay (settlement runs there) and
@@ -859,7 +862,12 @@ def confirm_topup(
 			if minor is None:
 				# A captured payment always carries an amount; a response without
 				# one must not fall through to the client-supplied figure.
-				frappe.throw(_("Razorpay reported no amount for this payment."), frappe.ValidationError)
+				frappe.throw(
+					_(
+						"Razorpay returned no amount for this payment. Check your credit balance and payment history before paying again. Contact support if you were charged but no credit appears."
+					),
+					frappe.ValidationError,
+				)
 			amount = frappe.utils.flt(minor) / 100
 			credit = (payment.get("notes") or {}).get("credit")
 			if payment.get("currency"):
@@ -871,7 +879,12 @@ def confirm_topup(
 		ok = capture.get("status") == "COMPLETED"
 		reference = capture.get("id")
 		if capture.get("amount") is None:
-			frappe.throw(_("PayPal reported no amount for this capture."), frappe.ValidationError)
+			frappe.throw(
+				_(
+					"PayPal returned no amount for this payment capture. Check your credit balance and payment history before paying again. Contact support if you were charged but no credit appears."
+				),
+				frappe.ValidationError,
+			)
 		amount = frappe.utils.flt(capture["amount"])
 		if capture.get("currency"):
 			currency = capture["currency"].upper()
@@ -884,13 +897,23 @@ def confirm_topup(
 		reference = intent.get("id")
 		minor = intent.get("amount_received") or intent.get("amount")
 		if minor is None:
-			frappe.throw(_("Stripe reported no amount for this payment intent."), frappe.ValidationError)
+			frappe.throw(
+				_(
+					"Stripe returned no amount for this payment intent. Check your credit balance and payment history before paying again. Contact support if you were charged but no credit appears."
+				),
+				frappe.ValidationError,
+			)
 		amount = frappe.utils.flt(minor) / 100
 		credit = (intent.get("metadata") or {}).get("credit")
 		if intent.get("currency"):
 			currency = intent["currency"].upper()
 	if not ok:
-		frappe.throw(_("Payment confirmation failed."), frappe.ValidationError)
+		frappe.throw(
+			_(
+				"The payment could not be confirmed. Check your credit balance and payment history before paying again. Contact support if you were charged but no credit appears."
+			),
+			frappe.ValidationError,
+		)
 	return credits.purchase(
 		team,
 		amount,

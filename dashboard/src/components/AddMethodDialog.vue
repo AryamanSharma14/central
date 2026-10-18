@@ -294,7 +294,7 @@ watch(open, (isOpen) => {
 						class="flex w-full items-center gap-2.5 rounded-6 border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
 						:class="
 							selected?.instrument === tile.instrument
-								? 'border-outline-gray-4'
+								? 'border-outline-gray-6 bg-surface-gray-2'
 								: 'border-outline-gray-2 hover:border-outline-gray-3'
 						"
 						:disabled="loading || !!blockedReason(tile)"
@@ -305,7 +305,7 @@ watch(open, (isOpen) => {
 							class="size-4 shrink-0 text-ink-gray-7"
 							aria-hidden="true"
 						/>
-						<span class="text-base font-medium text-ink-gray-9"
+						<span class="text-base-medium text-ink-gray-9"
 							>{{ tile.label }}</span
 						>
 						<span
@@ -320,6 +320,11 @@ watch(open, (isOpen) => {
 							>{{ blockedReason(tile) }}</span
 						>
 						<span v-else class="ml-auto flex shrink-0 items-center gap-1.5">
+							<span
+								v-if="selected?.instrument === tile.instrument"
+								class="lucide-circle-check mr-1 size-4 text-ink-gray-9"
+								aria-hidden="true"
+							/>
 							<PaymentNetworkMark
 								v-for="mark in marks[tile.instrument] ?? []"
 								:key="mark"
@@ -337,7 +342,7 @@ watch(open, (isOpen) => {
 						v-model="phone"
 						label="Phone number"
 						placeholder="Mobile number"
-						description="A recurring card on this rail needs a contact number. Saved to your billing profile."
+						description="A phone number is required to set up automatic card payments. It will be saved to your billing profile."
 					/>
 				</div>
 

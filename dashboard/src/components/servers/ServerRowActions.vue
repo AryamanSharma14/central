@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
-import type { VirtualMachineRow } from '@/composables/useServers'
+import type { ConsoleMode, VirtualMachineRow } from '@/composables/useServers'
 import { getServerActions } from '@/lib/capabilities'
 import { getServerMenu, type ServerMenuVerb } from '@/lib/serverMenu'
 
@@ -30,7 +30,7 @@ const emit = defineEmits<{
 	restart: [server: VirtualMachineRow]
 	resize: [server: VirtualMachineRow]
 	snapshot: [server: VirtualMachineRow]
-	console: [server: VirtualMachineRow]
+	console: [server: VirtualMachineRow, mode: ConsoleMode]
 	terminate: [server: VirtualMachineRow]
 }>()
 
@@ -43,7 +43,8 @@ const handlers: Partial<Record<ServerMenuVerb, () => void>> = {
 	restart: () => emit('restart', props.server),
 	resize: () => emit('resize', props.server),
 	snapshot: () => emit('snapshot', props.server),
-	console: () => emit('console', props.server),
+	'ssh-console': () => emit('console', props.server, 'ssh'),
+	'tty-console': () => emit('console', props.server, 'tty'),
 	terminate: () => emit('terminate', props.server),
 }
 

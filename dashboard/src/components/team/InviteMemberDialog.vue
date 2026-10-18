@@ -82,7 +82,13 @@ async function send(): Promise<void> {
 </script>
 
 <template>
-	<Dialog v-model="open" title="Invite members" size="2xl">
+	<Dialog
+		v-model="open"
+		title="Invite members"
+		size="2xl"
+		:show-close-button="false"
+		:dismissible="!saving"
+	>
 		<template #default>
 			<Alert
 				v-if="requestError"

@@ -2,95 +2,98 @@
 import { Badge, Button, LoadingText } from 'frappe-ui'
 import { computed } from 'vue'
 import BillingCard from '@/components/billing/BillingCard.vue'
+import CopyButton from '@/components/common/CopyButton.vue'
 import { useBillingOverview } from '@/composables/useBillingOverview'
 import { useCapabilities } from '@/composables/useCapabilities'
 
-// Billing contact & tax — one card combining the invoice contact (email +
-// address) and tax details (region + GSTIN). Edit opens the shared profile dialog
-// (owned by the page).
 defineEmits<{ edit: [] }>()
+
 const { profile } = useBillingOverview()
 const { canManageBilling } = useCapabilities()
 
 const loading = computed(() => profile.loading && !profile.data)
 const email = computed(() => profile.data?.email || '')
-const address = computed(() => {
+
+const streetLines = computed(() => {
 	const p = profile.data
-	if (!p) return ''
+
+	if (!p) return []
+
 	return [
-		p.address_line1,
-		p.address_line2,
-		p.city,
-		p.state,
+		[p.address_line1, p.address_line2].filter(Boolean).join(', '),
+		[p.city, p.state, p.pincode].filter(Boolean).join(' '),
 		p.country,
-		p.pincode,
-	]
-		.filter(Boolean)
-		.join(', ')
+	].filter((line): line is string => Boolean(line))
 })
+
 const country = computed(() => profile.data?.country || '')
 const gstin = computed(() => profile.data?.gstin || '')
 const isIndia = computed(() => country.value === 'India')
 const gstStatus = computed(() => profile.data?.gst_status || '')
-const gstTheme = computed(() =>
-	gstStatus.value === 'Active' ? 'green' : 'red',
-)
 </script>
 
 <template>
 	<BillingCard title="Billing details">
-		<template #action>
-			<Button
-				v-if="canManageBilling"
-				variant="ghost"
-				size="xs"
-				icon="lucide-pencil"
-				label="Edit billing details"
-				@click="$emit('edit')"
-			/>
+		<template v-if="canManageBilling" #action>
+			<Button size="sm" label="Edit" @click="$emit('edit')" />
 		</template>
 
 		<LoadingText v-if="loading" :lines="4" />
 
-		<dl v-else class="space-y-4 pt-3 text-base">
-			<div class="flex justify-between gap-3">
-				<dt class="text-ink-gray-5">Billing email</dt>
-				<dd
-					class="truncate text-right"
-					:class="email ? 'text-ink-gray-8' : 'text-ink-gray-5'"
-				>
-					{{ email || 'Not set' }}
-				</dd>
-			</div>
-			<div class="flex justify-between gap-3">
-				<dt class="shrink-0 text-ink-gray-5">Billing address</dt>
-				<!-- Capped at half the row so a long address wraps into a block, with
-				     paragraph leading since it's the one value here that runs to
-				     multiple lines. -->
-				<dd
-					class="max-w-[50%] text-right text-p-base"
-					:class="address ? 'text-ink-gray-8' : 'text-ink-gray-5'"
-				>
-					{{ address || 'Not set' }}
-				</dd>
-			</div>
-			<div class="flex justify-between gap-3">
-				<dt class="text-ink-gray-5">Tax region</dt>
-				<dd
-					class="text-right"
-					:class="country ? 'text-ink-gray-8' : 'text-ink-gray-5'"
-				>
-					{{ country || 'Not set' }}
-				</dd>
-			</div>
-			<div v-if="isIndia" class="flex items-center justify-between gap-3">
+		<dl
+			v-else
+			class="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-p-sm"
+		>
+			<dt class="text-ink-gray-5">Email</dt>
+			<dd class="flex min-w-0 items-center gap-1.5">
+				<template v-if="email">
+					<span class="truncate text-ink-gray-8">{{ email }}</span>
+					<CopyButton class="-my-1" :text="email" />
+				</template>
+				<span v-else class="text-ink-gray-5">Not set</span>
+			</dd>
+
+			<dt class="text-ink-gray-5">Address</dt>
+			<dd class="text-ink-gray-8">
+				<template v-if="streetLines.length">
+					<span v-for="line in streetLines" :key="line" class="block">
+						{{ line }}
+					</span>
+				</template>
+				<span v-else class="text-ink-gray-5">Not set</span>
+			</dd>
+
+			<dt class="text-ink-gray-5">Tax region</dt>
+			<dd :class="country ? 'text-ink-gray-8' : 'text-ink-gray-5'">
+				{{ country || 'Not set' }}
+			</dd>
+
+			<template v-if="isIndia">
 				<dt class="text-ink-gray-5">GSTIN</dt>
-				<dd v-if="gstin" class="flex items-center gap-2 text-right">
-					<Badge v-if="gstStatus" :label="gstStatus" :theme="gstTheme" />
-					<span class="font-mono text-ink-gray-8">{{ gstin }}</span>
+				<dd class="flex items-center gap-2">
+					<template v-if="gstin">
+						<span class="font-mono text-ink-gray-8">{{ gstin }}</span>
+						<Badge
+							v-if="gstStatus"
+							:label="gstStatus"
+							:theme="gstStatus === 'Active' ? 'green' : 'red'"
+						/>
+					</template>
+					<template v-else>
+						<button
+							v-if="canManageBilling"
+							type="button"
+							class="text-ink-blue-link transition-opacity hover:opacity-80"
+							@click="$emit('edit')"
+						>
+							Add GSTIN
+						</button>
+						<span class="text-ink-gray-5">
+							{{ canManageBilling ? '· needed for tax credit' : 'Not set' }}
+						</span>
+					</template>
 				</dd>
-				<Badge v-else label="Not set" />
-			</div>
+			</template>
 		</dl>
 	</BillingCard>
 </template>

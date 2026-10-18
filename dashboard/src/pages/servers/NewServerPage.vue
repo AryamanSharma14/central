@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Alert, Button, Select, TabButtons, Tabs, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
+import PaymentMethodFlow from '@/components/billing/PaymentMethodFlow.vue'
 import ChoiceCards from '@/components/common/ChoiceCards.vue'
 import CreateServerButton from '@/components/servers/CreateServerButton.vue'
 import CreationStatusPanel from '@/components/servers/CreationStatusPanel.vue'
@@ -47,6 +48,9 @@ const {
 	summary,
 	canSubmit,
 	submit,
+	nameError,
+	paymentMethodRequired,
+	welcomeCredit,
 	source,
 	snapshotName,
 	snapshotOptions,
@@ -62,6 +66,8 @@ const {
 	imagesError,
 	reloadImages,
 	sshKeyIds,
+	hasPublicIpv4,
+	ipv4PriceLabel,
 	hasPublicIpv6,
 	isFirewallEnabled,
 	action,
@@ -74,6 +80,7 @@ const {
 	submitting,
 	submitError,
 } = useServerCreation()
+const paymentFlow = ref<InstanceType<typeof PaymentMethodFlow> | null>(null)
 
 const { setBreadcrumbs } = useBreadcrumbs()
 setBreadcrumbs([
@@ -124,16 +131,33 @@ watch(
 			<div class="vt-server-form w-full p-4 md:p-6 lg:w-1/2">
 				<p v-if="loading" class="text-p-sm text-ink-gray-5">Loading regions…</p>
 				<p v-else-if="!regions.length" class="text-p-sm text-ink-gray-5">
-					No active regions are available right now.
+					No regions are accepting new servers right now. Try again later, or
+					contact support.
 				</p>
 
 				<div v-else class="space-y-8">
+					<Alert
+						v-if="paymentMethodRequired"
+						title="Add a payment method to create servers"
+						icon="lucide-credit-card"
+						:description="
+							welcomeCredit
+								? `Servers are billed monthly. Add a payment method to get ${welcomeCredit}.`
+								: 'Servers are billed monthly to your payment method.'
+						"
+						:primary-action="{
+							label: 'Add payment method',
+							onClick: () => paymentFlow?.start(),
+						}"
+					/>
+
 					<section class="grid gap-3 md:grid-cols-2">
 						<TextInput
 							v-focus
 							v-model="name"
 							label="Name"
 							required
+							:error="nameError"
 							size="md"
 							placeholder="e.g. Acme Production"
 							:maxlength="60"
@@ -169,7 +193,8 @@ watch(
 								v-else-if="snapshotOptions.length < 2"
 								class="text-p-sm text-ink-gray-5"
 							>
-								No snapshots are available in this region.
+								No snapshots are available in this region. Select another
+								region, or choose Image to create a server without a snapshot.
 							</p>
 							<Select
 								v-else
@@ -223,6 +248,8 @@ watch(
 					<section v-if="image">
 						<h2 class="mb-3 text-base-semibold text-ink-gray-8">Network</h2>
 						<ServerNetworkOptions
+							v-model:has-public-ipv4="hasPublicIpv4"
+							:ipv4-price-label="ipv4PriceLabel"
 							v-model:has-public-ipv6="hasPublicIpv6"
 							v-model:is-firewall-enabled="isFirewallEnabled"
 						/>
@@ -232,7 +259,7 @@ watch(
 						<div class="mb-3 flex items-center justify-between gap-3">
 							<h2 class="text-base-semibold text-ink-gray-8">Region</h2>
 							<span class="text-xs text-ink-gray-5"
-								>Or pick a pin on the map</span
+								>Or select a region on the map</span
 							>
 						</div>
 						<ChoiceCards
@@ -242,7 +269,7 @@ watch(
 							@update:model-value="selectRegion"
 						>
 							<template #icon="{ option }">
-								<span class="text-xl leading-none" aria-hidden="true">
+								<span class="text-xl" aria-hidden="true">
 									{{ regionFlags[option.value] }}
 								</span>
 							</template>
@@ -288,19 +315,20 @@ watch(
 							v-else-if="bracketExhausted"
 							class="rounded-6 border border-outline-gray-2 bg-surface-gray-1 px-4 py-3"
 						>
-							<p class="text-p-sm font-medium text-ink-gray-8">
+							<p class="text-p-sm-medium text-ink-gray-8">
 								You've reached your spending limit
 							</p>
 							<p class="mt-1 text-p-sm text-ink-gray-5">
-								No plans (preset or custom) fit your remaining headroom in this
-								region. Remove a server to free some up, or contact support to
-								raise your limit.
+								No plans fit your remaining spending limit in this region.
+								Remove a server to free some up, or contact support to raise
+								your limit.
 							</p>
 						</div>
 
 						<p v-else-if="nothingToShow" class="text-p-sm text-ink-gray-5">
 							No plans are available for this region within your current
-							spending limit.
+							spending limit. Select another region, or contact support to
+							review your limit.
 						</p>
 
 						<Tabs v-else-if="hasTabs" v-model="activeTab" :tabs="classTabs">
@@ -385,5 +413,6 @@ watch(
 				</ServerSummary>
 			</div>
 		</div>
+		<PaymentMethodFlow ref="paymentFlow" />
 	</div>
 </template>

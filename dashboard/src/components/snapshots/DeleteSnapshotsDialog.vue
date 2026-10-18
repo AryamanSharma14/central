@@ -30,7 +30,7 @@ const title = computed(() =>
 	<ConfirmDialog
 		v-model:target="target"
 		:title="title"
-		confirm-label="Yes, delete"
+		:confirm-label="title"
 		theme="red"
 		size="md"
 		:loading="loading"

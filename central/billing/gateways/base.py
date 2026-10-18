@@ -7,10 +7,12 @@ interface; adding a gateway is one subclass passing the shared contract suite.
 """
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 import frappe
+from frappe import _
 
 
 def header_value(headers: dict, name: str):
@@ -69,6 +71,24 @@ class GatewayAuthError(GatewayError):
 	Distinct from GatewayTimeout (transient) — bad keys never become good on
 	retry, so setup is rejected rather than queued.
 	"""
+
+
+@contextmanager
+def customer_safe_gateway_errors():
+	"""Turn a gateway failure into a message a customer can act on, and keep the gateway's own
+	message, which can name a credential, in the Error Log for the operator."""
+	try:
+		yield
+	except GatewayError as e:
+		frappe.log_error(title=f"Payment gateway failed: {type(e).__name__}", message=frappe.get_traceback())
+		message = (
+			_("We could not reach the payment provider. Try again in a few minutes.")
+			if isinstance(e, GatewayTimeout)
+			else _(
+				"The payment provider could not process this request. Contact support if this keeps happening."
+			)
+		)
+		frappe.throw(message, frappe.ValidationError)
 
 
 class GatewayUnsupported(GatewayError):

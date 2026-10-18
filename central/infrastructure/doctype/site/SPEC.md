@@ -20,10 +20,11 @@ Only what belongs to the site. Its address is its name and its state is the mach
 | `ready_at` | the first successful public readiness probe |
 | `claimed_at` | the first successful login handoff |
 | `rename_task` | the Pilot task that accepted the requested rename |
+| `renamed_at` | when a sign-in first found the requested hostname answering |
 | `rename_error` | a safe reason when Pilot did not accept the rename |
 | `rename_error_log` | the related operator Error Log |
 
-`Site.url` is `https://` and the name. `Site.status` reads the machine's status. Neither is a column.
+`Site.url` is `https://` and the name. `Site.primary_url` is the requested hostname after `renamed_at` is set, otherwise `Site.url`. `Site.status` reads the machine's status. None of these is a column.
 
 ## The address
 
@@ -67,17 +68,39 @@ login_site --> mint a fresh login for site.local
 
 ## Readiness
 
-Nothing is provisioned during signup, so readiness is not a build finishing. `central.api.sites.get_site` reports `ready` when one request to `<url>/api/method/ping` answers. The first successful probe records `ready_at`, queues one `site_ready` notification after commit, and sends the `trial_ready` [funnel event](../../../signups/doctype/product/SPEC.md#signup-funnel). It does not create a login session. The console polls this read and calls the POST-only `central.api.sites.login_site` operation when the user opens the site.
+Nothing is provisioned during signup, so readiness is not a build finishing. A site is ready when one request to `<url>/api/method/ping` answers. `central.api.sites.get_site` and `central.api.sites.onboarding_status` report `ready` but do not record it, because Frappe rolls back the writes of a GET request. These record readiness: the POST operations `claim_site` and `login_site`, the **Check Readiness** Desk action, and the scheduled job `central.infrastructure.doctype.site.site.record_ready_sites`. The job runs every 5 minutes and probes each Active trial site that has no `ready_at` and whose server is Running, so readiness does not wait for the customer to come back. A sleeping server is not Running, so the job does not wake it. The first recorded probe sets `ready_at`, queues one `site_ready` notification after commit, and sends the `trial_ready` [funnel event](../../../signups/doctype/product/SPEC.md#signup-funnel). A locking read makes sure that this happens once. A probe does not create a login session. The console polls `onboarding_status` and calls `claim_site` when the site is ready.
 
 `central.api.sites.onboarding_status(team, product)` first finds the selected product's non-terminated Site that the caller can view in the Team. If none exists, it follows the latest matching Site creation requested by the caller. A plain signup follows only creations without a product. It does not adopt a normal server creation or another team member's pending request. The response reports whether the site was claimed, so a returning customer can find it in the resource list. A Running state report schedules a full server refresh, so the Site record does not wait for the periodic reconciliation job.
 
 ## Sign-in
 
-Central mints the session and puts the returned session on `Site.url`, because the public name is Central's. The token names the site by the name Pilot has for it: the customer's name once the rename task was accepted, then the image name `site.local` when Pilot does not know the new name yet. A Pilot token for one name does not reach a site that now answers to that name under another one, so Central must ask for the current name.
+Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The first sign-in on the customer hostname sets `renamed_at`. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
 
 On a trial site, a member of the site's team signs in as their own user. Pilot creates the user as a System Manager the first time they open the site, so they can finish the app's own setup. An operator outside the team, and every other site, signs in as Administrator.
 
 A Pilot 401 leaves the site unclaimed and tells the console to retry with bounded backoff for up to 120 seconds. Other login failures return no URL and use the manual sign-in fallback. Central waits up to 120 seconds for each login request.
+
+## Plan change page
+
+A site's users have no Central account. When a plan change from the site stops the server, Central shows them a public page that follows the change. The page lives on Central, so it stays up while the server restarts.
+
+1. `central.billing.api.billing_api.change_plan` queues the resize and returns `progress_url`. It returns a URL only when the server runs exactly one Site.
+2. The URL is `/upgrading?action=<Resource Action>&site=<Site>&_signature=<signature>`. Frappe's `get_signed_params` signs it with the site secret. The link does not expire.
+3. `central/www/upgrading.py` checks the signature and renders the page. A wrong signature, or an action that does not resize the Site's server, shows "This link is not valid".
+4. The page asks `central.api.sites.plan_change_progress` every 3 seconds. The endpoint allows guests, checks the same signature, and allows 60 requests a minute for each action.
+5. The step comes from the Resource Action status: `saving`, `moving`, `starting`, `ready` or `failed`. The step is `ready` only when `Site.primary_url` answers a ping.
+6. On `ready`, the page counts down 5 seconds and opens `Site.primary_url`. The user can stay on the page.
+
+`PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
+
+## Operator actions
+
+A System Manager has two actions on the Site form in Desk:
+
+| Action | Effect |
+| --- | --- |
+| **Open as Administrator** | Opens a one-click session on the site. Central records it as a Comment on the Site and on its server. |
+| **Check Readiness** | Probes the site's address now, and records readiness when the site answers. |
 
 ## Migration
 
@@ -94,10 +117,12 @@ The patch removes a Site only when the request of its server names an image with
 | Signup image | `Image Offering.available_in` = `Signup` or `Both` | one offering, lowest title, `Signup` preferred |
 | Signup image tags | `SIGNUP_IMAGE_TAGS` in `central/site_provisioning.py` | `has_site=1`, `frappe_version=develop` |
 | Product app tag | [`Product.signup_app`](../../../signups/doctype/product/SPEC.md) | `app=raven` |
-| Trial plan | `Plan.available_on_trial` | the cheapest eligible plan in the first Active region, by name, that has a proxy zone and offers a trial plan |
+| Trial region and plan | `Plan.available_on_trial` | the first Active region, by name, that has a proxy zone, offers a trial plan, and has a trial image for the signup. Central takes that region's cheapest active plan marked Available on Trial that is eligible for the Team. This applies to production and staging Teams. No marked eligible plan means no trial is available. |
 
 Cargo must bake the image site as `site.local`, or Pilot does not recognise the site and no login can be minted.
 
-Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. A region without a matching image is skipped, so the next region can serve the trial. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
+
+The site name page shows the zone of that same region: `central.api.sites.site_domain(team, product)` makes the region choice that creation makes. `central.api.sites.check_subdomain` checks a name in every trial zone, because the region is chosen only when the site is created.
 
 Give the trial plan the shape the image was baked at. A region restores a warm image from memory only when the vCPU count, memory and disk all match, and a trial that misses the shape cold-boots instead. `BUILD_SPEC` in Cargo's `cargo/image_builder/doctype/pilot_image/builder.py` holds that shape.

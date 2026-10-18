@@ -490,20 +490,39 @@ def change_plan(plan: str | None = None) -> dict:
 	"""Switch this bench's server onto a preset `plan`: validates + re-locks the rate at
 	the current rate card and queues the VM reshape (stop→resize→start). The server is
 	resolved from the credential — a pilot can only resize its own server, never another
-	server on the same team. Returns `{queued, resized}`."""
+	server on the same team. Returns `{queued, resized, progress_url}`; `progress_url` is the
+	public page that follows the change when the server runs one site."""
 	from central.billing.catalog.subscriptions import begin_resize
+	from central.signups.trial import get_status
 
 	server = _server()
 	if not plan:
 		frappe.throw(frappe._("A plan is required."), frappe.ValidationError)
 	subscription = frappe.db.get_value("Subscription", {"team": _team(), "server_id": server}, "name")
+	if not subscription and get_status(server):
+		frappe.throw(frappe._("Add a payment method to change this site's plan."), frappe.ValidationError)
 	if not subscription:
 		frappe.throw(
 			frappe._("No subscription for server {0} on this team.").format(server), frappe.ValidationError
 		)
 	# The subscription lookup above is scoped to the credential's own server.
 	with _as_operator():
-		return {"subscription": subscription, **begin_resize(subscription, plan=plan)}
+		result = begin_resize(subscription, plan=plan)
+
+	return {"subscription": subscription, **result, "progress_url": _plan_change_url(server, result)}
+
+
+def _plan_change_url(server: str, result: dict) -> str | None:
+	"""The waiting page for a queued resize of a server that runs exactly one site."""
+	from central.infrastructure.doctype.site.plan_change import PlanChange
+
+	# Two rows are enough to tell "exactly one site" from "several".
+	sites = frappe.get_all("Site", filters={"server": server}, pluck="name", limit=2)
+	if not result.get("queued") or len(sites) != 1:
+		return None
+
+	action = frappe.get_doc("Resource Action", result["action"])
+	return PlanChange(frappe.get_doc("Site", sites[0]), action).url
 
 
 # ── Metered services (team-level: AI tokens, email, PDF, …) ──────────────────
@@ -700,14 +719,16 @@ def save_billing_profile(**fields) -> dict:
 # nosemgrep: guest-whitelisted-method -- pilot_credential_auth verifies the caller below.
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 @pilot_credential_auth
-def get_billing_summary() -> dict:
+def get_billing_summary(site: str | None = None) -> dict:
 	"""Everything the in-app Billing tab renders for this bench's server: current plan
 	(+ spec labels for the usage meters), the cycle estimate, the credit balance (with
-	an insufficient-balance flag) and whether a payment method / profile exist. Usage
+	an insufficient-balance flag), whether a payment method / profile exist, and the
+	site's open trial. `site` names the site on a server with several. Usage
 	percentages are filled in by the bench (host-local)."""
 	from central.billing.api.dashboard._shared import _profile_complete
 	from central.billing.api.dashboard.invoices import get_forecast
 	from central.billing.revenue import credits
+	from central.signups.trial import get_status
 
 	team, server = _team(), _server()
 	with _as_operator():  # team + server fixed by credential
@@ -737,6 +758,7 @@ def get_billing_summary() -> dict:
 		},
 		"payment_method": {"label": default["label"], "name": default["name"]} if default else None,
 		"profile_complete": _profile_complete(team),
+		"trial": get_status(server, site),
 	}
 
 

@@ -74,18 +74,72 @@ Atlas must return the following fields with each build:
 
 Cargo's current Pilot image contains `default-bench` and `site.local`. Server and signup flows use that image layout. Ubuntu uses a base image. SSH keys are optional. See [Image Offering](../central/infrastructure/doctype/image_offering/SPEC.md) for selectors and pagination.
 
-Server creation has two customer options, stored on `Virtual Machine` as `has_public_ipv6` and `is_firewall_enabled`. Central sends an option to Atlas only when the customer selects it:
+Server creation has three network options. Central sends an option to Atlas only when the customer selects it:
 
 | Option | Atlas create field |
 | --- | --- |
+| Public IPv4 | `public_ipv4: "auto"`. Refused when the region has no IPv4 price. |
 | Public IPv6 | `public_ipv6: "auto"` |
 | Firewall | `firewall.enabled: true` with the rules below |
 
-The firewall allows all inbound traffic from the mesh prefix `fdaa::/16`, because an enabled Atlas firewall also filters mesh traffic and the regional gateway reaches a machine over the mesh. It also allows inbound ICMP, inbound TCP ports 22, 80, and 443, and all outbound traffic. Without the option, Central sends `firewall.enabled: false`, which permits all traffic.
+Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
-Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
+A creation request can carry `user_data` of up to 16 KiB, which is also the Atlas limit. Central sends it to Atlas unchanged as `guest.user_data`, and cloud-init in the guest runs it on first boot. A caller uses it to set up a server without signing in after creation. Central saves it on the Resource Action with the other creation inputs, so it must not hold a long-lived secret.
 
-A member with `server:console` can open the web console of a running server of any image. Central asks Atlas for a single-use console token in `ssh` mode through `POST /virtual-machines/{id}/actions/console-token`. If Atlas definitely refuses the `ssh` token, Central asks for a `tty` token instead, because every guest has a serial console. Central does not fall back when it cannot authenticate, reach Atlas, or confirm the result, or when the VM does not exist. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
+Atlas reports the guest public IPv6 as a `/128` prefix. Central stores the address without the prefix length in `public_ipv6`, and stores `public_ipv4` as reported. See [Public addresses](#public-addresses) for changes after creation. The overview shows `ssh root@<address>` for every image and uses the IPv6 address first. See [Team SSH Key](../central/infrastructure/doctype/team_ssh_key/SPEC.md) for selected keys and rotation.
+
+A member with `server:console` can open the web console of a running server of any image. In the server actions, Web console opens a submenu with two modes. Central sends the selected mode to Atlas through `POST /virtual-machines/{id}/actions/console-token`.
+
+| Mode | Session | Password |
+| --- | --- | --- |
+| `ssh` | A new shell as `root`. Atlas adds a temporary key for the session and removes it when the session ends. The guest SSH service must run. | Not necessary. |
+| `tty` | The shared serial console. It replays recent boot output and stays open across a restart. Use it when SSH does not respond. | Necessary. The guest shows a login prompt. |
+
+`open_console(team, resource_id, mode)` accepts only `ssh` or `tty`. Central does not change the mode. If Atlas refuses an `ssh` token, the member sees a message that tells them to open the serial console. Central returns `<region base URL>/vm_console#token=<token>`. The dashboard asks for a new token each time a member opens the console from the overview or the server actions, because Atlas spends the token on first use. It opens the Atlas URL in one popup window per server, so a second request replaces the session in that window. The token expires after 30 seconds and stays in the URL fragment, so the browser does not send it to a server.
+
+## Firewall
+
+The Networking tab of a server shows its firewall. A member with `server:network` can change it.
+
+| Change | What Central sends | Confirmation |
+| --- | --- | --- |
+| Turn the firewall on or off | `enabled`, plus default rules when enabling an empty firewall | When it opens every port, or blocks SSH or all outbound traffic |
+| Apply changes | `inbound` and `outbound` only | When the saved rules block SSH or all outbound traffic on an enabled firewall |
+| Copy to other servers | `enabled`, `inbound`, and `outbound` | None. The dialog names the servers. |
+
+Rule edits stay in the browser until the customer selects Apply changes. Rules are edited inline, with one column header for each direction. A removed row stays visible with Keep rule. Reset all pending changes in the options menu restores the saved lists. An unchanged background observation does not replace a pending draft. If the saved rules change, Apply changes is blocked until the customer resets the draft to the latest saved rules. The presets Web server, SSH only, and Private only fill the rule lists for review before applying. Enabling a firewall with no saved rules allows SSH, HTTP, HTTPS and all outgoing connections.
+
+Each row selects a service and either Anyone on the internet or Specific addresses. Anyone permits both IPv4 and IPv6. Specific addresses shows an inline input for the first IP address or canonical CIDR range. Add IP address adds it to the rule. The selected addresses use the same searchable Frappe UI MultiSelect pattern as the SSH key field during server creation. A customer can deselect an address, clear the selection, or add another address. A single IP becomes a one-address range. Incomplete rules show guidance and cannot be applied. Invalid entries show a field error. An empty TCP or UDP port means all ports for that protocol. Custom ports stay editable when their value matches a preset service port. Central validates the complete change before sending it to Atlas.
+
+`update_server_firewall` takes a list of servers and returns an error or `null` for each one. Central validates the change first: protocol `any`, `tcp`, `udp`, or `icmp`; ports only for TCP and UDP, as one port or one ascending range; address ranges in canonical CIDR form; and each rule only once.
+
+Central sends the change through `PATCH /virtual-machines/{id}/network`. Atlas replaces each firewall field it gets and keeps the others. Central puts these system rules before the customer's inbound rules, and the dashboard does not show them.
+
+| Rule | Why |
+| --- | --- |
+| All traffic from `fdaa::/16` | The console and the regional gateway reach a machine over the mesh, and an enabled firewall filters mesh traffic too. |
+| All traffic from `fdac::/16` | WireGuard gateway clients. Atlas still drops them unless the VM opts in to gateway access. |
+| ICMP from anywhere | IPv6 neighbour discovery and path MTU need it. |
+
+Atlas checks at most 50 address ranges across all rules, system rules included. The PATCH reply does not hold the firewall, so Central reads the VM again. Every read stores `is_firewall_enabled` and the customer's rules in `firewall_rules`. A server that Central has not read since this field was added shows its firewall after the next reconcile, which runs every 10 minutes.
+
+## Public addresses
+
+A member with `server:network` on a server can attach or detach its public IPv4 and IPv6 addresses, and turn IPv4 internet access on or off, from the Networking tab.
+
+| Operation | Atlas request | Notes |
+| --- | --- | --- |
+| Attach | `PUT /virtual-machines/{id}/public-ipv{4,6}` with `{"public_ip": "auto"}` | Atlas picks an address from the region's pool. For IPv4, Central first turns on IPv4 internet access, because Atlas requires it. |
+| Detach | `DELETE /virtual-machines/{id}/public-ipv{4,6}` | The address goes back to the pool. The customer cannot get it back. |
+| IPv4 internet access | `PATCH /virtual-machines/{id}/network` with `ipv4_internet_access` | Stays on while the server has a public IPv4. |
+
+Atlas applies an attach or detach after it replies. Central waits up to 30 seconds for Atlas to report the change, then reads the server. A slower change appears on the next reconcile. Central does not use reserved addresses yet, so an address always belongs to one server.
+
+A public IPv4 is billed from the first read that reports it until a read no longer reports it, or the server is terminated. `VirtualMachine.sync_public_ipv4_billing` opens and closes one `Subscription` per server, linked by `public_ip_server`. The price is the Catalog Rate of the `IP` Resource Type for the team's currency, optionally per region. The starter rates are INR 170 and USD 2 per month. Central refuses to attach an IPv4, or to create a server with one, in a region without a rate. IPv6 is free.
+
+## Termination protection
+
+A member with `server:terminate` can turn termination protection on or off with the lock button in the server header. Central sends `PATCH /virtual-machines/{id}/termination-protection` and stores the `is_termination_protected` value that Atlas returns on the Virtual Machine. Atlas does not report this value in a VM read, so the stored value changes only through this request. Central refuses a terminate request for a protected server before it queues a Resource Action, and Atlas also refuses to delete a protected VM.
 
 ## Server operation contract
 
@@ -93,7 +147,7 @@ Central stores each authorized operation in Resource Action before dispatch. Atl
 
 Scoped regional reads confirm VM state and repair interrupted local finalization. A failed read does not prove deletion. A scoped not-found response can confirm deletion and trigger local credential and billing cleanup.
 
-Central builds the automatic management address itself. The regional proxy decodes a VM's mesh address from its hostname label, so Central encodes the same label from the observed mesh address and the region's proxy domain. The tenant API does not publish the regional zone, so an operator sets `proxy_domain` on [Region](../central/infrastructure/doctype/region/SPEC.md). A management address alone does not prove Pilot readiness. Pilot creation also receives credential-bound `pilot-central` metadata and `pilot-common-config` metadata with the telemetry settings when the region has a telemetry host. When Central Settings has a **Common Site Config**, every server also gets it as `pilot-common-site-config`, which Pilot merges into `sites/common_site_config.json` at bootstrap, such as an app's relay URL. The customer can read it, so it never holds a secret. When the region links an enabled **FrappeMail Service**, Central takes a ready mailbox from that service's pool, records it as a **User Mail Account** for the creation, and adds its SMTP settings to `pilot-common-site-config`: the SMTP server on port 587 with STARTTLS, the mailbox as login and sender, and `always_use_account_email_id_as_sender`. Pilot and every site then send mail through it. The password belongs to that one server. An empty pool fails the creation. A job every 5 minutes fills the pool to the service's minimum with send-only mailboxes, named `notifications-<hash>@<domain>`, through the Suite site's admin API. It adds at most 50 in one run. Central removes a server's mailbox from the Suite site when the server is terminated. Atlas refuses guest metadata with more than 16 entries or more than 48 KiB as compact JSON, and the region's host refuses a key longer than 128 bytes. `AtlasClient.create_vm` refuses the same metadata before it calls Atlas, because Atlas saves a draft machine before the host rejects a key.
+Central builds the automatic management address itself. The regional proxy decodes a VM's mesh address from its hostname label, so Central encodes the same label from the observed mesh address and the region's proxy domain. The tenant API does not publish the regional zone, so an operator sets `proxy_domain` on [Region](../central/infrastructure/doctype/region/SPEC.md). A management address alone does not prove Pilot readiness. Pilot creation also receives credential-bound `pilot-central` metadata and `pilot-common-config` metadata with the telemetry settings when the region has a telemetry host. When Central Settings has a **Common Site Config**, every server also gets it as `pilot-common-site-config`, which Pilot merges into `sites/common_site_config.json` at bootstrap, such as an app's relay URL. The customer can read it, so it never holds a secret. Every Pilot server's `pilot-common-site-config` also holds `fc_team`, the server's Team, so Frappe's Pulse telemetry on each site files its events under that Team. When the region links an enabled **FrappeMail Service**, Central takes a ready mailbox from that service's pool, records it as a **User Mail Account** for the creation, and adds its SMTP settings to `pilot-common-site-config`: the SMTP server on port 587 with STARTTLS, the mailbox as login and sender, and `always_use_account_email_id_as_sender`. Pilot and every site then send mail through it. The password belongs to that one server. An empty pool fails the creation. A job every 5 minutes fills the pool to the service's minimum with send-only mailboxes, named `notifications-<hash>@<domain>`, through the Suite site's admin API. It adds at most 50 in one run. Central removes a server's mailbox from the Suite site when the server is terminated. Atlas refuses guest metadata with more than 16 entries or more than 48 KiB as compact JSON, and the region's host refuses a key longer than 128 bytes. `AtlasClient.create_vm` refuses the same metadata before it calls Atlas, because Atlas saves a draft machine before the host rejects a key.
 
 See [Resource Action](../central/infrastructure/doctype/resource_action/SPEC.md) for states, authorization, recovery, accepted quotes, and customer responses.
 
@@ -113,6 +167,24 @@ An app on a site, such as Raven, asks Central for a token through Pilot's Centra
 | `hosts` | The hostnames of the team's sites on the Pilot's server: each site's own address and its active Site Domain records. Empty when the credential has no server. |
 
 The service gets Central's public keys from `central.api.jwks.get_jwks` and verifies the signature, `iss`, `aud`, `exp` and `scope`. Then the service decides what access the team gets, for example a team account and its API keys. The Pilot credential names the team and its server, so a site cannot get a token for another team or for a hostname that the team does not serve. A service uses `hosts` to accept a site's hostname as the team's. A Pilot refuses a `team-identity` token as a login token.
+
+## How does a Pilot read private GitHub repositories?
+
+Central owns the GitHub App, set on the GitHub tab of Central Settings. The App private key and secrets stay in Central. A Pilot gets only a token for one repository, with `contents: read`, that expires in about an hour.
+
+```text
+Pilot ── start_connection ──> Central ── authorize, install ──> GitHub
+  ^                             │ user with server:console picks repositories
+  └──── repository_token ───────┘ GitHub Connection (grant)
+```
+
+1. Pilot calls `central.api.integrations.github.start_connection(return_url)` with its credential and gets a link to `/dashboard/github/connect/<attempt>`. The attempt lives in Redis for 1 hour after the last activity. The `return_url` lives 24 hours, so an expired link still leads back to the server.
+2. The first user who opens the link must hold `server:console` on the Pilot's server. The attempt binds to that user. The OAuth `state` and a PKCE verifier bind the GitHub callback to the attempt and the user's session.
+3. The user authorizes or installs the App, then selects repositories in one or more accounts. The user must be a GitHub admin of each one. `complete_connection` saves one `GitHub Connection` per Pilot credential and installation. An account sent with no repositories loses its grant.
+4. Pilot calls `status`, `repositories` and `repository_token(repository)` with its credential. Each grant change increases the connection `version`. Central refuses a token when the grant changed while GitHub minted it.
+5. The signed GitHub webhook disables a connection when its installation is deleted or suspended, removes repositories the installation lost, and updates the name of a renamed repository. The App must subscribe to the `repository` event for renames. `disconnect` disables the Pilot's grants. Issued tokens stay valid until they expire.
+
+The App needs one callback URL, on Central's issuer URL (`central_url()`). "Create GitHub App" in Central Settings creates the App from a manifest and fills the GitHub tab. A new App ID disables every grant, so each Pilot must connect GitHub again.
 
 ## How does the trial flow work?
 
@@ -162,7 +234,15 @@ A restart completes when the region accepts it and Central then reads the server
 
 Opening Pilot uses a short-lived audience-bound token and the automatic admin name. Deny another Team's access.
 
-Pilot links back to its server in the console with `/dashboard/servers?pilot=<jwks_audience_id>&action=<action>`. The action is `overview` or `resize`; any other value opens the overview. A resize link opens the dialog only when the server can take a change and the user may resize it. The server list returns each server's active audience as `pilot_audience`, and the console matches the link against it. When the active Team does not hold that server, the console shows the server list and a message.
+A System Manager has three more actions on the Virtual Machine form in Desk. Central records the first two as a Comment on the server.
+
+| Action | Effect |
+| --- | --- |
+| **Open Bench as Administrator** | Opens the bench with the same one-click token, for a Running server with a gateway. |
+| **Revoke Pilot Access** | Revokes every Pilot Credential of the server, so its Pilot can no longer reach Central. |
+| **Retry Admin Domain** | Asks Pilot again for the admin hostname, when the server shows an admin domain error. |
+
+Pilot links back to its server in the console with `/dashboard/servers?pilot=<jwks_audience_id>&action=<action>`. The action is `overview` or `resize`; any other value opens the overview. A resize link opens the dialog only when the server can take a change and the user may resize it. The server list returns each server's active audience as `pilot_audience`, and the console matches the link against it. When the active Team does not hold that server, the console shows the server list and a message. On a fresh page, the link waits for the first server list load before it looks for the server.
 
 Display supported network and SSH information for a plain Ubuntu server. Do not imply that a private mesh address is publicly reachable.
 
@@ -172,7 +252,7 @@ Delete only after the customer confirms the action. Confirm remote absence, revo
 
 The current creation flow requires the Atlas VM API and automatic management hostname. Staging also needs current schema, key trust, a healthy host, available images, and wildcard DNS.
 
-Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size. When no host in the region can fit the new size, Atlas keeps the old size. Central then starts the server again if it was running, and fails the resize with `REGION_AT_CAPACITY`.
+Central receives signed state reports at `central.api.state_delivery.receive`. See [Inbound webhooks](WEBHOOKS.md) for the contract. State reports supplement repair reads. They do not replace durable intent, and a callback is never the only recovery path. Resize uses the Atlas resize API, which moves a VM to another host when its host cannot fit the new size. When no host in the region can fit the new size, Atlas keeps the old size. Central then starts the server again if it was running, and fails the resize with `REGION_AT_CAPACITY`. Atlas does not stop a sleeping VM, so a CPU or memory resize starts a sleeping server first.
 
 Central verifies domain ownership and owns the proxy route through [Site Domain](../central/infrastructure/doctype/site_domain/SPEC.md). The regional proxy terminates TLS for a regional name. For a custom domain, the proxy passes TLS to the VM, and Pilot holds the certificate. Central does not issue or store certificates.
 

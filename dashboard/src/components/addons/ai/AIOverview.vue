@@ -102,7 +102,7 @@ const shownModels = computed(() =>
 			</div>
 
 			<template v-else>
-				<h2 class="text-base font-semibold text-ink-gray-8">This month</h2>
+				<h2 class="text-base-semibold text-ink-gray-8">This month</h2>
 
 				<p class="mt-0.5 text-p-sm text-ink-gray-5">
 					Across every key of the team, as of
@@ -164,7 +164,7 @@ const shownModels = computed(() =>
 					>
 						<template #actions>
 							<Tooltip
-								text="Prompt and completion tokens together, across every model and key."
+								text="Total tokens processed across the team's API keys, including input and output. Tokens measure model usage."
 							>
 								<lucide-circle-help
 									class="size-4 text-ink-gray-5"
@@ -178,7 +178,7 @@ const shownModels = computed(() =>
 				<div class="mt-8 border-t border-outline-gray-2 pt-8">
 					<div class="flex items-center justify-between gap-4">
 						<div class="min-w-0">
-							<h2 class="text-base font-semibold text-ink-gray-8">
+							<h2 class="text-base-semibold text-ink-gray-8">
 								Available models
 							</h2>
 							<p class="mt-0.5 text-p-sm text-ink-gray-5">
@@ -224,18 +224,12 @@ const shownModels = computed(() =>
 						<tr
 							class="border-b border-outline-gray-2 text-p-xs text-ink-gray-5"
 						>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">
-								Provider
-							</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">Model</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">
-								Model key
-							</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">Input</th>
-							<th scope="col" class="py-2 pr-3 text-left font-normal">
-								Output
-							</th>
-							<th scope="col" class="py-2 text-right font-normal">API</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Provider</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Model</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Model key</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Input</th>
+							<th scope="col" class="py-2 pr-3 text-left text-xs">Output</th>
+							<th scope="col" class="py-2 text-right text-xs">API</th>
 						</tr>
 					</thead>
 
@@ -247,9 +241,7 @@ const shownModels = computed(() =>
 							<td class="py-3 pr-3 text-sm text-ink-gray-6">
 								{{ model.model_id }}
 							</td>
-							<td
-								class="py-3 pr-3 font-mono text-sm font-medium text-ink-gray-9"
-							>
+							<td class="py-3 pr-3 font-mono text-sm-medium text-ink-gray-9">
 								{{ model.name }}
 							</td>
 

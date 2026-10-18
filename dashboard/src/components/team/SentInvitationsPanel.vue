@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Badge, Button } from 'frappe-ui'
-import { computed, h, ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
 	createListViewQuery,
 	ListView,
@@ -40,47 +40,21 @@ const filters: ListViewFilter[] = [
 ]
 
 const columns = computed<ListViewColumn<InvitationRow>[]>(() => [
+	{ key: 'email', label: 'Email', sortable: true },
 	{
-		accessorKey: 'email',
-		header: 'Email',
-		meta: { cellClass: 'truncate font-medium' },
+		key: 'role',
+		label: 'Role',
+		value: (invitation) => roleLabel(invitation.role),
+		sortable: true,
 	},
+	{ key: 'status', label: 'Status' },
 	{
-		id: 'role',
-		header: 'Role',
-		accessorFn: (i) => roleLabel(i.role),
-		meta: { cellClass: 'truncate' },
+		key: 'expires',
+		label: 'Expires',
+		value: (invitation) => formatDate(invitation.expires_on) || '-',
+		sortable: true,
 	},
-	{
-		accessorKey: 'status',
-		header: 'Status',
-		enableSorting: false,
-		cell: ({ row }) =>
-			h(Badge, {
-				theme: invitationStatusTheme(row.original.status),
-				label: row.original.status,
-			}),
-	},
-	{
-		id: 'expires',
-		header: 'Expires',
-		accessorFn: (i) => formatDate(i.expires_on) || '-',
-	},
-	{
-		id: 'actions',
-		header: '',
-		enableSorting: false,
-		size: 1,
-		meta: { align: 'end' },
-		cell: ({ row }) =>
-			h(InvitationRowActions, {
-				invitation: row.original,
-				canManage: canManageMembers.value,
-				busy: busy.value === row.original.name,
-				onResend: resend,
-				onRevoke: revoke,
-			}),
-	},
+	{ key: 'actions', label: '', width: '2.5rem', align: 'end' },
 ])
 
 function getInvitationKey(invitation: InvitationRow): string {
@@ -110,6 +84,24 @@ function getInvitationKey(invitation: InvitationRow): string {
 				label="Invite"
 				icon-left="lucide-user-plus"
 				@click="inviteOpen = true"
+			/>
+		</template>
+
+		<template #email="{ row }">
+			<span class="truncate text-sm-medium">{{ row.email }}</span>
+		</template>
+
+		<template #status="{ row }">
+			<Badge :theme="invitationStatusTheme(row.status)" :label="row.status" />
+		</template>
+
+		<template #actions="{ row }">
+			<InvitationRowActions
+				:invitation="row"
+				:can-manage="canManageMembers"
+				:busy="busy === row.name"
+				@resend="resend"
+				@revoke="revoke"
 			/>
 		</template>
 	</ListView>

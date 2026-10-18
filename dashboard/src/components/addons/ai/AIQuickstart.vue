@@ -111,7 +111,7 @@ const example = computed(() => examples.value[dialect.value][language.value])
 		<TabButtons v-model="dialect" :options="dialects" />
 
 		<div>
-			<label class="mb-1 block text-p-sm font-medium text-ink-gray-7">
+			<label class="mb-1 block text-p-sm-medium text-ink-gray-7">
 				Base URL
 			</label>
 			<CopyableValue :value="baseUrl" label="Base URL" block />
@@ -119,9 +119,7 @@ const example = computed(() => examples.value[dialect.value][language.value])
 
 		<div>
 			<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-				<label class="text-p-sm font-medium text-ink-gray-7"
-					>Example request</label
-				>
+				<label class="text-p-sm-medium text-ink-gray-7">Example request</label>
 				<div class="flex items-center gap-2">
 					<Select
 						v-if="chatModels.length"
@@ -136,7 +134,7 @@ const example = computed(() => examples.value[dialect.value][language.value])
 				:value="example"
 				label="Example"
 				block
-				class="whitespace-pre-wrap text-xs leading-relaxed"
+				class="whitespace-pre-wrap text-p-xs"
 			/>
 			<p v-if="!apiKey" class="mt-1 text-xs text-ink-gray-5">
 				Put one of your API keys in place of

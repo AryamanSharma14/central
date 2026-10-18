@@ -152,6 +152,7 @@ export interface ProvisionablePlans {
 	current_spend: number
 	/** Remaining headroom in the team's currency: a plan is offered only if it fits. */
 	available: number
+	spend_limit_enforced: boolean
 	plans: Record<string, Plan[]>
 	/** Per-resource component rates for "design your own" (#79). Empty when a
 	 *  component isn't priced for the team's currency — composed configs not offered. */
