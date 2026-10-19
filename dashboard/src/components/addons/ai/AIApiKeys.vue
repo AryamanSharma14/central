@@ -28,7 +28,7 @@ interface Props {
 	canManage: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const {
 	ai,
@@ -67,6 +67,9 @@ const atKeyLimit = computed(
 		!!spend.value &&
 		spend.value.max_keys > 0 &&
 		activeKeys.value.length >= spend.value.max_keys,
+)
+const canSetCaps = computed(
+	() => prepaid.value && props.canManage && activeKeys.value.length > 0,
 )
 const keyCountLabel = computed(() => {
 	const live = activeKeys.value.length
@@ -348,38 +351,45 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				title="Keys are paused"
 				description="An invoice is unpaid. Every key is refused until it is settled."
 			/>
-			<div v-if="prepaid" class="mt-4 flex items-center justify-between gap-4">
-				<p class="text-p-xs text-ink-gray-5" aria-live="polite">
-					Caps and this month's spend take up
-					{{ usd(spend?.committed ?? 0) }}
-					of your plan's
-					{{ usd(spend?.spend_limit ?? 0) }}
-					a month, as of {{ asOf }} · {{ keyCountLabel }}.
-				</p>
+			<div
+				v-if="searchable || canSetCaps"
+				class="mt-4 flex items-center justify-between gap-4"
+			>
+				<TextInput
+					v-if="searchable"
+					v-model="query"
+					class="w-64"
+					size="md"
+					placeholder="Search keys by name"
+					aria-label="Search keys by name"
+				>
+					<template #prefix>
+						<span
+							class="lucide-search size-4 text-ink-gray-5"
+							aria-hidden="true"
+						/>
+					</template>
+				</TextInput>
 				<Button
-					v-if="canManage && activeKeys.length"
-					class="shrink-0"
+					v-if="canSetCaps"
+					class="ml-auto shrink-0"
 					label="Set monthly caps"
 					icon-left="lucide-wallet"
 					@click="openCaps"
 				/>
 			</div>
 
-			<TextInput
-				v-if="searchable"
-				v-model="query"
-				class="mt-4"
-				size="md"
-				placeholder="Search keys by name"
-				aria-label="Search keys by name"
+			<p
+				v-if="prepaid"
+				class="mt-3 text-p-xs text-ink-gray-5"
+				aria-live="polite"
 			>
-				<template #prefix>
-					<span
-						class="lucide-search size-4 text-ink-gray-5"
-						aria-hidden="true"
-					/>
-				</template>
-			</TextInput>
+				Caps and this month's spend take up
+				{{ usd(spend?.committed ?? 0) }}
+				of your plan's
+				{{ usd(spend?.spend_limit ?? 0) }}
+				a month, as of {{ asOf }} · {{ keyCountLabel }}.
+			</p>
 
 			<div
 				v-if="apiKeysLoading && !apiKeys.length"
