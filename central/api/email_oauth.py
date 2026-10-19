@@ -52,11 +52,13 @@ def callback(
 	# a logged-out browser signs in to Central once, then comes back here with the same code (D3)
 	if code and not error and frappe.session.user == "Guest" and not note.get("login_sent"):
 		mark_login_sent(state, note)
-		back = add_query(CALLBACK_PATH, state=state, code=code)
-		redirect(add_query(LOGIN_PATH, **{"redirect-to": back}))
+		back = add_query_params(CALLBACK_PATH, state=state, code=code)
+		redirect(add_query_params(LOGIN_PATH, **{"redirect-to": back}))
 		return
 	forget_sign_in(state)
-	redirect(add_query(note["return_url"], state=state, **site_params(note, code, error, error_description)))
+	redirect(
+		add_query_params(note["return_url"], state=state, **site_params(note, code, error, error_description))
+	)
 
 
 def site_params(note: dict, code: str | None, error: str | None, error_description: str | None) -> dict:
@@ -73,7 +75,7 @@ def redirect(location: str) -> None:
 	frappe.local.response.location = location
 
 
-def add_query(url: str, **params: str | None) -> str:
+def add_query_params(url: str, **params: str | None) -> str:
 	return f"{url}{'&' if '?' in url else '?'}{urlencode({k: v for k, v in params.items() if v})}"
 
 
