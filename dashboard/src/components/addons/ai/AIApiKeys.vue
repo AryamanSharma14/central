@@ -561,7 +561,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					:options="geographyOptions"
 					description="Where the key's requests are served. It cannot be changed later: create another key for another geography."
 				/>
-				<div v-if="prepaid" class="space-y-2">
+				<template v-if="prepaid">
 					<TextInput
 						v-model="newCap"
 						type="number"
@@ -569,7 +569,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 						step="1"
 						label="Cap (USD)"
 						placeholder="0"
-						description="What this key may spend each month, in whole dollars. Leave it at 0 to set it later: the key is refused until it has a cap."
+						description="What this key may spend each month. Leave it at 0 to set it later: the key is refused until it has a cap."
 						@keyup.enter="create"
 					/>
 					<p class="text-p-xs text-ink-gray-5">
@@ -579,7 +579,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 						{{ usd(spend?.spend_limit ?? 0) }}
 						a month, as of {{ asOf }}.
 					</p>
-				</div>
+				</template>
 			</div>
 			<p v-if="createError" class="mt-2 text-p-sm text-ink-red-6">
 				{{ createError }}
