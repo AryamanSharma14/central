@@ -360,8 +360,8 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 					v-model="query"
 					class="w-64"
 					size="md"
-					placeholder="Search keys by name"
-					aria-label="Search keys by name"
+					placeholder="Search keys by title"
+					aria-label="Search keys by title"
 				>
 					<template #prefix>
 						<span
