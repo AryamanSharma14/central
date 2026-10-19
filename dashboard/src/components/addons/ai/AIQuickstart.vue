@@ -57,7 +57,7 @@ const key = computed(() => props.apiKey ?? '$API_KEY')
 // What each SDK takes as its base URL.
 const baseUrl = computed(() =>
 	dialect.value === 'openai'
-		? `${props.gatewayUrl}/v1`
+		? `${props.gatewayUrl}/openai/v1`
 		: `${props.gatewayUrl}/anthropic`,
 )
 

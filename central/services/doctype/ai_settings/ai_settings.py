@@ -22,7 +22,7 @@ TEAM_TIER_WEBHOOK = {
 	"request_method": "POST",
 	"timeout": 30,
 	# About 48 hours on Frappe's retry schedule, then Exhausted in the Webhook Request Log.
-	"max_retries": 8,
+	"max_retries": 5,
 }
 
 
