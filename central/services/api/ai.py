@@ -19,7 +19,6 @@ KEY_FIELDS = (
 	"geography",
 	"gateway_url",
 	"cap",
-	"spent",
 	"month_spent",
 	"limits",
 )
@@ -53,7 +52,7 @@ def enable_ai(team: str | None = None) -> dict:
 @require_capability("service:view", VIEW_DENIED)
 def list_api_keys(team: str | None = None) -> list[dict]:
 	"""The team's keys, newest first, masked, each with its geography and the gateway it
-	calls, its monthly cap, its spend this month and in all, and its rate limits."""
+	calls, its monthly cap, its spend this month, and its rate limits."""
 	require_ai(team)
 	keys = GroveClient.from_settings().get_figures(team)["keys"]
 	return [{field: row.get(field) for field in KEY_FIELDS} for row in keys]

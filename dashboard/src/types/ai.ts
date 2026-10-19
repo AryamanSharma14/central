@@ -27,7 +27,6 @@ export interface AIRateLimit {
 // whichever is more, plus what revoked keys spent. Grove checks a raise against `committed`.
 // Credit and invoices are Central's wallet and invoicing, not Grove's.
 export interface AISpend {
-	spent: number
 	month_spent: number
 	capped: number
 	committed: number
@@ -113,10 +112,9 @@ export interface AIApiKey {
 	geography: string
 	// The base URL for both API surfaces, of the key's own geography.
 	gateway_url: string
-	// USD: what the key may spend a month, what it spent this month and in all.
+	// USD: what the key may spend a month and what it spent this month.
 	cap: number
 	month_spent: number
-	spent: number
 	limits: AIRateLimit[]
 }
 

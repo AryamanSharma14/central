@@ -34,7 +34,6 @@ LISTED = {
 	"geography": "eu",
 	"gateway_url": "https://eu.llm.frappe.cloud",
 	"cap": 5.0,
-	"spent": 1.25,
 	"limits": LIMITS,
 }
 MODELS = [{"name": "acme/m", "provider": "acme", "model_id": "m", "dialects": ["openai"]}]
@@ -307,7 +306,6 @@ class TestAI(IntegrationTestCase):
 	def test_the_overview_carries_spend_this_months_usage_and_the_geographies(self):
 		self.enabled()
 		spend = {
-			"spent": 7.5,
 			"month_spent": 7.5,
 			"capped": 20.0,
 			"committed": 27.5,
@@ -378,8 +376,8 @@ class TestAI(IntegrationTestCase):
 			[listed] = api.list_api_keys(self.team)
 		self.assertNotIn("key_hash", listed)
 		self.assertEqual(
-			(listed["masked"], listed["geography"], listed["cap"], listed["spent"], listed["limits"]),
-			(LISTED["masked"], "eu", 5.0, 1.25, LIMITS),
+			(listed["masked"], listed["geography"], listed["cap"], listed["limits"]),
+			(LISTED["masked"], "eu", 5.0, LIMITS),
 		)
 		# So the console can hold Revoke back instead of asking Grove and being refused.
 		self.assertEqual(listed["revocable_at"], LISTED["revocable_at"])
