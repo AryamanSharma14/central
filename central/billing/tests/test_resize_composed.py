@@ -349,6 +349,18 @@ class TestResizeComposed(IntegrationTestCase):
 			{"Compute": 4, "Memory": 16, "Disk": 40, "Transfer": 400},
 		)
 
+	def test_resize_config_rounds_a_fractional_disk_up(self):
+		"""Atlas reports MiB, so a 12800 MiB disk mirrors as 12.5 GB. The resize API takes
+		whole GB, so the console must receive a disk it can send back."""
+		from central.billing.api.dashboard.catalog import get_composed_config
+
+		plan = make_plan("resize-fractional-disk", rates=[{"cluster": "", "currency": "INR", "rate": 1500}])
+		sub = subscriptions.create_subscription(TEAM, CLUSTER, plan=plan).name
+		server = self._ready(sub)
+		frappe.db.set_value("Virtual Machine", server, "disk_gigabytes", 12.5)
+
+		self.assertEqual(get_composed_config(server, team=TEAM)["disk_gb"], 13)
+
 	def test_begin_resize_onto_a_smaller_preset_keeps_the_larger_disk(self):
 		"""CPU and memory only: a plan with less disk than the server still fits, because
 		the server keeps its own disk."""
