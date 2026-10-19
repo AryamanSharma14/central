@@ -108,11 +108,11 @@ class GroveClient:
 	def get_figures(self, team: str) -> dict:
 		"""What the console shows, as one entry Grove keeps until something moves it (a record lands,
 		a correction, a key or the team saved, its tier edited) and 30 minutes at most, so every
-		page shows one moment. `spend` in USD: `spent`, `month_spent`, `capped` (Σ live caps) and
+		page shows one moment. `spend` in USD: `month_spent`, `capped` (Σ live caps) and
 		`committed` (each live key's cap or its month's spend, whichever is more, plus revoked keys'
 		spend: what a raise is checked against) against `spend_limit`; `max_keys`; `suspended`.
-		`keys`: the team's keys, newest first, masked, each with its cap, spend and effective rate
-		limits. `usage`: this month across every key, as `get_usage` answers it."""
+		`keys`: the team's keys, newest first, masked, each with its cap, this month's spend and effective
+		rate limits. `usage`: this month across every key, as `get_usage` answers it."""
 		return self.call("grove.api.usage.figures", team=team)
 
 	def pull_usage(self, team: str) -> dict:
