@@ -106,7 +106,7 @@ def subdomain_availability(subdomain: str) -> dict:
 		reason = _("Use lowercase letters, numbers and hyphens, starting and ending with one.")
 	elif subdomain in RESERVED_SUBDOMAINS:
 		reason = _("That name is reserved. Please choose another.")
-	elif frappe.db.exists("Site", {"subdomain": subdomain}) or is_domain_taken(subdomain):
+	elif is_subdomain_taken(subdomain):
 		reason = _("That name is taken. Please choose another.")
 	else:
 		return {**answer, "available": True, "reason": None}
@@ -114,12 +114,20 @@ def subdomain_availability(subdomain: str) -> dict:
 	return {**answer, "available": False, "reason": reason}
 
 
-def is_domain_taken(subdomain: str) -> bool:
+def is_subdomain_taken(subdomain: str) -> bool:
+	"""Taken while a live server holds it: as a site's chosen name, which exists before the
+	rename routes it, or as a route Pilot registered in any trial zone."""
+	live = {"server.status": ["!=", "Terminated"]}
 	domains = [
 		f"{subdomain}.{frappe.get_cached_value('Region', region, 'proxy_domain')}"
 		for region in trial_regions()
 	]
-	return bool(domains) and bool(frappe.db.exists("Site Domain", {"name": ["in", domains]}))
+	if frappe.get_all("Site", filters={"subdomain": subdomain, **live}, limit=1):
+		return True
+
+	return bool(domains) and bool(
+		frappe.get_all("Site Domain", filters={"name": ["in", domains], **live}, limit=1)
+	)
 
 
 def trial_zone(team: str, signup_app: str | None = None) -> str:

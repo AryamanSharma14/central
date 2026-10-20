@@ -921,6 +921,35 @@ class TestSubdomainAvailability(SiteOnAMachine):
 		self.assertFalse(subdomain_availability("acme")["available"])
 		self.assertTrue(subdomain_availability("acme-two")["available"])
 
+	def test_a_name_of_a_terminated_server_is_free_again(self):
+		self.enroll()
+		observe_server(self.server)
+		self.site().db_set("subdomain", "acme")
+		self.server.db_set("status", "Terminated")
+
+		self.assertTrue(subdomain_availability("acme")["available"])
+
+	def test_a_route_is_taken_only_while_its_server_lives(self):
+		self.enroll()
+		observe_server(self.server)
+		frappe.db.set_single_value("Central Settings", "wildcard_domain", "example.test")
+		zone = f"{self.region.name}.example.test"
+		self.region.db_set("proxy_domain", zone)
+		frappe.get_doc(
+			{
+				"doctype": "Site Domain",
+				"domain": f"acme.{zone}",
+				"team": self.team.name,
+				"region": self.region.name,
+				"server": self.server.name,
+			}
+		).insert()
+
+		self.assertFalse(subdomain_availability("acme")["available"])
+
+		self.server.db_set("status", "Terminated")
+		self.assertTrue(subdomain_availability("acme")["available"])
+
 	def test_a_malformed_or_reserved_name_is_refused(self):
 		for name in ("", "-acme", "acme.two", "proxy", "admin"):
 			with self.subTest(name=name):
