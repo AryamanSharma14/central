@@ -22,6 +22,7 @@ import { ref } from 'vue'
 import { API, method } from '@/api/methods'
 import { getErrorMessage, successToast } from '@/lib/feedback'
 import { capitalise } from '@/lib/format'
+import { stripeCardElementStyle } from '@/lib/gateway'
 
 interface CardSetupOrder {
 	client_secret?: string
@@ -87,7 +88,10 @@ export function useAddStripeCard({
 			.submit({ team })
 			.then(() => initiate.data)
 			.catch(() => null)
-		card = stripe.elements().create('card', { hidePostalCode: true })
+		card = stripe.elements().create('card', {
+			hidePostalCode: true,
+			style: stripeCardElementStyle(),
+		})
 		card.on('change', (e) => {
 			complete.value = !!e.complete
 			error.value = e.error?.message ?? ''
