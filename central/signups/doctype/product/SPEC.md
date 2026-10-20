@@ -17,6 +17,7 @@ System Managers and Product Operators create and edit products in Desk. Only a S
 | Enabled | A disabled product refuses new signups. Its existing sites keep running. |
 | Logo | Shown with rounded corners next to the heading on the signup, login, verification, site name and setup pages. |
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
+| Setup Messages | Optional. One line each, such as `Setting up channels…`. The waiting page shows them one at a time while the product starts, and it stops on the last line. Without them, the page shows general lines. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
 | Trial Days | Days a trial site of this product runs from when Central records its site. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
@@ -28,7 +29,7 @@ Example: Product Key `raven`, Title `Raven`, Signup App `raven`. The signup link
 
 ## Operation
 
-`GET central.api.signups.get_product(product)` returns the title, logo and subtitle of an enabled product, or nothing. Guests can call it, limited to 60 calls per minute for each IP address.
+`GET central.api.signups.get_product(product)` returns the title, logo, subtitle and setup messages of an enabled product, or nothing. Guests can call it, limited to 60 calls per minute for each IP address.
 
 The console keeps `?product=` through signup, sign-in, email verification and the onboarding pages. The site name page sends it to `central.api.sites.create_trial_site(subdomain, request_key, team, product)`. Central refuses an unknown or disabled product before it asks the region for an image. See [Trial sites](../../../infrastructure/doctype/site/SPEC.md#configuration) for how the image is chosen.
 
@@ -111,6 +112,8 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 | `trial_deleted` | The ended trial's server is terminated | `product` |
 
 A product app sends its own activation events from the trial site. Central puts `fc_team` in the site config of every Pilot server, so those events name the same Team and join this funnel. See [Integrations](../../../../spec/INTEGRATIONS.md).
+
+A signed-in `verify_code` answer also carries the new session's CSRF token. In a product signup, the console then goes on to the site name page without a page load.
 
 `signup_code_sent` and `signup_verified` happen before the customer has a Team, so Pulse files them under Central's own team. `send_code` and `verify_code` take an optional `product` only to label these events. An unknown product is dropped.
 
