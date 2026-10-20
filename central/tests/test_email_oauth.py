@@ -11,7 +11,7 @@ from frappe.utils import set_request
 from central.api.email_oauth import callback, relay_token, start
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
-from central.integrations.email_oauth.email_oauth import PROVIDER
+from central.integrations.email_oauth.email_oauth import PROVIDER, PROVIDER_UNAVAILABLE
 from central.integrations.email_oauth.setup import DEFAULT_PROVIDERS, ensure_email_oauth_providers
 from central.tests.test_iam import ensure_user
 from central.tests.utils import ensure_atlas_instance
@@ -120,7 +120,10 @@ class TestEmailOAuth(IntegrationTestCase):
 	def test_start_refuses_a_provider_without_an_app(self):
 		self.as_pilot("/api/method/central.api.email_oauth.start")
 		for provider in ("google", "evil"):
-			with self.subTest(provider=provider), self.assertRaises(frappe.ValidationError):
+			with (
+				self.subTest(provider=provider),
+				self.assertRaisesRegex(frappe.ValidationError, PROVIDER_UNAVAILABLE),
+			):
 				start(
 					provider=provider,
 					state="s",
@@ -131,7 +134,7 @@ class TestEmailOAuth(IntegrationTestCase):
 	def test_start_refuses_a_disabled_provider(self):
 		self.microsoft.reload().update({"enabled": 0}).save()
 
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaisesRegex(frappe.ValidationError, PROVIDER_UNAVAILABLE):
 			self.call_start(f"https://{self.site}{SITE_CALLBACK}")
 
 	# Email OAuth Provider

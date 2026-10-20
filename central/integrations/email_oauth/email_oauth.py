@@ -18,6 +18,8 @@ PROVIDER = "Email OAuth Provider"
 CALLBACK_PATH = "/api/method/central.api.email_oauth.callback"
 SITE_CALLBACK_PATH = "/api/method/frappe.integrations.frappe_providers.email_oauth.callback"
 NOTE_TTL = 10 * 60
+# Pilot keeps only an error's text; the site matches this to fall back to its normal mailbox form
+PROVIDER_UNAVAILABLE = "provider_unavailable"
 
 
 def start_sign_in(
@@ -106,5 +108,5 @@ def get_provider(provider: str) -> "EmailOAuthProvider":
 	"""The enabled record for `provider`; an enabled one always has a client ID and secret."""
 	config = frappe.db.exists(PROVIDER, provider) and frappe.get_cached_doc(PROVIDER, provider)
 	if not (config and config.enabled):
-		frappe.throw(_("Sign in with {0} isn't available right now").format(provider))
+		frappe.throw(PROVIDER_UNAVAILABLE)
 	return config
