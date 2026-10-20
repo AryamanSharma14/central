@@ -8,6 +8,7 @@ import type { SetupJourney } from '@/types/api'
 interface SetupJourneyProps {
 	journey: SetupJourney | null
 	stage: SetupStage
+	isDelayed: boolean
 	/** The product's name. A signup without a product says "site". */
 	appTitle?: string
 	secondsLeft: number | null
@@ -15,42 +16,48 @@ interface SetupJourneyProps {
 
 const props = defineProps<SetupJourneyProps>()
 
-// Where each milestone sits on the track. The plane starts each phase at its milestone.
+// Each milestone sits in the middle of its quarter, so every label has the same room.
+// The plane starts each phase at the milestone before it.
 const PHASE_START: Record<SetupStage, number> = {
 	booking: 0,
-	server: 0.25,
-	app: 0.5,
-	delayed: 0.5,
-	signing: 0.75,
+	server: 0.125,
+	app: 0.375,
+	signing: 0.625,
 	arrived: 1,
-	failed: 0.25,
+	failed: 0.125,
 }
 const MAP_SPAN = { width: 150, height: 64 }
 
-const milestones = computed(() => [
-	{ at: 0.25, label: 'Booked' },
-	{ at: 0.5, label: 'Server on' },
-	{ at: 0.75, label: `${props.appTitle ?? 'Site'} live` },
-	{ at: 1, label: 'Signed in' },
-])
+const MILESTONES = [
+	{ at: 0.125, label: 'Queued' },
+	{ at: 0.375, label: 'Provisioning' },
+	{ at: 0.625, label: 'Starting' },
+	{ at: 0.875, label: 'Arrived' },
+]
+
+// The plane flies towards the first milestone past its phase. After arrival there is none.
+const current = computed(() =>
+	MILESTONES.find((milestone) => milestone.at > PHASE_START[props.stage]),
+)
 
 const statusLine = computed(() => {
 	const region = props.journey?.region.title
 	const lines: Record<SetupStage, string> = {
-		booking: region ? `Booking a server in ${region}` : 'Booking a server',
+		booking: region
+			? `Requesting a server in ${region}`
+			: 'Requesting a server',
 		server: 'Starting your server',
 		app: `Starting ${props.appTitle ?? 'your site'}`,
-		delayed: `Still starting ${props.appTitle ?? 'your site'}`,
 		signing: 'Signing you in',
-		arrived: 'Arrived',
-		failed: 'Stopped',
+		arrived: 'Ready',
+		failed: 'Setup stopped',
 	}
 	return lines[props.stage]
 })
 
 const etaLine = computed(() => {
 	if (['arrived', 'failed'].includes(props.stage)) return ''
-	if (props.stage === 'delayed') return 'Almost ready'
+	if (props.isDelayed) return 'Taking longer'
 	if (props.secondsLeft === null) return ''
 	return props.secondsLeft > 3
 		? `Ready in about ${props.secondsLeft} s`
@@ -59,10 +66,13 @@ const etaLine = computed(() => {
 
 const TONES: Partial<Record<SetupStage, string>> = {
 	arrived: 'text-ink-green-6',
-	delayed: 'text-ink-amber-6',
 	failed: 'text-ink-red-6',
 }
-const tone = computed(() => TONES[props.stage] ?? 'text-ink-blue-6')
+const tone = computed(
+	() =>
+		TONES[props.stage] ??
+		(props.isDelayed ? 'text-ink-amber-6' : 'text-ink-blue-6'),
+)
 
 const pin = computed(() => {
 	const region = props.journey?.region
@@ -133,7 +143,7 @@ function percent(value: number): string {
 			</span>
 		</div>
 
-		<div class="px-5 pb-4 pt-4">
+		<div class="px-4 pb-4 pt-4">
 			<!-- Flex drops the whitespace between the two parts of the address. -->
 			<p v-if="journey?.subdomain" class="flex min-w-0 text-lg-semibold">
 				<span class="text-ink-gray-9">{{ journey.subdomain }}</span>
@@ -153,7 +163,7 @@ function percent(value: number): string {
 					style="left: 0"
 				/>
 				<span
-					v-for="milestone in milestones"
+					v-for="milestone in MILESTONES"
 					:key="milestone.at"
 					class="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"
 					:class="
@@ -163,21 +173,30 @@ function percent(value: number): string {
 					"
 					:style="{ left: percent(milestone.at) }"
 				/>
-				<span
+				<!-- Lucide "plane" (ISC licence), filled: the icon class only draws its outline. -->
+				<svg
 					v-if="stage !== 'arrived'"
-					class="lucide-plane absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rotate-45 transition-[left] ease-out motion-reduce:transition-none"
+					viewBox="0 0 24 24"
+					class="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rotate-45 fill-current transition-[left] ease-out motion-reduce:transition-none"
 					:style="{ left: percent(position), transitionDuration: glide }"
-				/>
+				>
+					<path
+						d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"
+					/>
+				</svg>
 			</div>
 			<ol class="relative mt-2 h-4 text-xs text-ink-gray-4">
 				<li
-					v-for="(milestone, index) in milestones"
+					v-for="milestone in MILESTONES"
 					:key="milestone.at"
-					class="absolute whitespace-nowrap"
-					:class="[
-						index === milestones.length - 1 ? '-translate-x-full' : '-translate-x-1/2',
-						position >= milestone.at ? 'text-ink-gray-7' : '',
-					]"
+					class="absolute -translate-x-1/2 whitespace-nowrap"
+					:class="
+						milestone === current
+							? 'text-ink-gray-9'
+							: position >= milestone.at
+								? 'text-ink-gray-7'
+								: ''
+					"
 					:style="{ left: percent(milestone.at) }"
 				>
 					{{ milestone.label }}

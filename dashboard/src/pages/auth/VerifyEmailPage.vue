@@ -7,30 +7,22 @@ import ProductLogo from '@/components/auth/ProductLogo.vue'
 import TermsNotice from '@/components/auth/TermsNotice.vue'
 import ValidatedFormControl from '@/components/common/formComponents/ValidatedFormControl.vue'
 import OtpInput from '@/components/common/OtpInput.vue'
-import { useAuth } from '@/composables/useAuth'
 import { useEmailSignIn } from '@/composables/useEmailSignIn'
 import { useProduct } from '@/composables/useProduct'
-import { useSession } from '@/composables/useSession'
 import {
 	frappeErrorMessage,
 	nameFromEmail,
 	queryString,
 	requiredError,
 } from '@/lib/auth'
-import {
-	carriedQuery,
-	productOnboarding,
-	signInDestination,
-} from '@/lib/authRedirect'
+import { carriedQuery } from '@/lib/authRedirect'
 
 const RESEND_WAIT_SECONDS = 30
 
 const route = useRoute()
 const router = useRouter()
-const { sendCode, verifyCode } = useEmailSignIn()
-const { enterSession } = useAuth()
+const { sendCode, verifyCode, enterConsole } = useEmailSignIn()
 const { productKey } = useProduct()
-const { reload: reloadTeams } = useSession()
 
 const email = queryString(route.query.email)
 const code = ref('')
@@ -74,7 +66,7 @@ async function verify() {
 			return
 		}
 		redirecting.value = true
-		await enterConsole(response)
+		await enterConsole(response, route.query)
 	} catch (exception) {
 		redirecting.value = false
 		error.value = frappeErrorMessage(exception, 'That code did not work.')
@@ -82,22 +74,6 @@ async function verify() {
 	} finally {
 		if (!redirecting.value) loading.value = false
 		if (!needsName.value) nextTick(() => otpInput.value?.focus())
-	}
-}
-
-// The product funnel goes on in place, so the step changes without a blank page. Anywhere
-// else, or if the in-place start fails, a full load boots the console with the new session.
-async function enterConsole(signedIn: { user: string; csrf_token: string }) {
-	const destination = signInDestination(route.query)
-	const onboarding = productOnboarding(route.query)
-	if (!onboarding) return window.location.replace(destination)
-
-	enterSession(signedIn.user, signedIn.csrf_token)
-	try {
-		await reloadTeams()
-		await router.replace(onboarding)
-	} catch {
-		window.location.replace(destination)
 	}
 }
 

@@ -62,8 +62,7 @@ const teamsCall = useCall<Team[]>({
 	},
 })
 
-/** Select a team the caller has just created. Unlike a switch it needs no reload: no page
- *  has read anything for another team yet. */
+/** Select a team the caller just created. No page has read another team's data yet. */
 async function adoptNewTeam(name: string): Promise<void> {
 	selectTeam(name)
 	await teamsCall.reload()

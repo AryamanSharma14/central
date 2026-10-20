@@ -44,10 +44,8 @@ def send_code(email: str, full_name: str | None = None, product: str | None = No
 	methods="POST",
 )
 def verify_code(email: str, code: str, full_name: str | None = None, product: str | None = None) -> dict:
-	"""Sign in with an emailed code. Returns `needs_name` when a new account has no name yet.
-
-	A signed-in answer carries the new session's CSRF token, so the console goes on without a
-	page reload."""
+	"""Sign in with an emailed code. Returns `needs_name` when a new account has no name yet, and
+	the new session's CSRF token once signed in."""
 	email = _validated_email(email)
 	if len(code) != 6 or not code.isascii() or not code.isdigit():
 		frappe.throw(_("Enter the 6-digit code from your email."), frappe.ValidationError)

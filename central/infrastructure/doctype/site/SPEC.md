@@ -85,7 +85,7 @@ Nothing is provisioned during signup, so readiness is not a build finishing. A s
 | `eta_seconds` | The median time from request to a site that answers, over the latest 50 trials in the region. It is null with fewer than 3 trials, and it is cached for 10 minutes. |
 | `reference` | The creation's Resource Action name. The page shows it on a failure, so support can find the request. |
 
-The page shows four milestones: Booked, Server on, the product name and live, then Signed in. It shows `Delayed` after twice the estimate, and it leaves for the site about 1 second after the sign-in link arrives.
+The page shows four milestones: Queued (until the region takes the request), Provisioning (until the server runs), Starting (until the site answers) and Arrived (the customer is signed in). The current milestone is highlighted, and a status line under them says what happens now. It shows `Delayed` after twice the estimate, and it leaves for the site about 1 second after the sign-in link arrives.
 
 ## Sign-in
 

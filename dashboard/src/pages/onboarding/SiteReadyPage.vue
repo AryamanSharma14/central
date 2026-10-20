@@ -13,8 +13,16 @@ import { carriedQuery } from '@/lib/authRedirect'
 const route = useRoute()
 const router = useRouter()
 const { product } = useProduct()
-const { site, journey, stage, secondsLeft, failure, error, openSite } =
-	useSiteSetup()
+const {
+	site,
+	journey,
+	stage,
+	isDelayed,
+	secondsLeft,
+	failure,
+	error,
+	openSite,
+} = useSiteSetup()
 
 const title = computed(() => product.value?.title)
 const signInFailed = computed(() => Boolean(error.value && site.value?.ready))
@@ -70,12 +78,13 @@ function tryAgain() {
 				class="mt-7"
 				:journey="journey"
 				:stage="stage"
+				:is-delayed="isDelayed"
 				:app-title="title"
 				:seconds-left="secondsLeft"
 			/>
 
 			<Alert
-				v-if="stage === 'delayed'"
+				v-if="isDelayed"
 				class="mt-4"
 				theme="amber"
 				title="This is taking longer than usual. You can keep this page open."

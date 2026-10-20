@@ -16,8 +16,7 @@ export function useAuth() {
 	}
 }
 
-/** Take on a session that a sign-in call just opened, without a page load. Writes need the
- *  new session's CSRF token, which frappe-ui reads from `window` on every request. */
+/** Take on a session a sign-in call just opened. frappe-ui reads the CSRF token from `window`. */
 function enterSession(user: string, csrfToken: string): void {
 	window.csrf_token = csrfToken
 	window.user = user

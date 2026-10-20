@@ -9,8 +9,8 @@ import type {
 	TrialSiteState,
 } from '@/types/api'
 
-/** What the waiting page shows: Central's phase, or the two states only the page knows. */
-export type SetupStage = SetupPhase | 'arrived' | 'delayed'
+/** Central's phase, or arrival, which only the page knows. */
+export type SetupStage = SetupPhase | 'arrived'
 
 const POLL_MS = 1000
 // A new Pilot accepts Central seconds after it finishes its bootstrap, so the
@@ -53,12 +53,13 @@ export function useSiteSetup() {
 	const stage = computed<SetupStage>(() => {
 		if (loginUrl.value) return 'arrived'
 		if (isFailed.value) return 'failed'
-		const phase = journey.value?.phase ?? 'booking'
+		return journey.value?.phase ?? 'booking'
+	})
+	// Past twice the usual wait the page says so. The progress keeps the real phase.
+	const isDelayed = computed(() => {
 		const eta = journey.value?.eta_seconds
-		// Past twice the usual wait, the page says so instead of counting below zero.
-		if (phase !== 'signing' && eta && secondsWaited.value > eta * 2)
-			return 'delayed'
-		return phase
+		const waiting = ['booking', 'server', 'app'].includes(stage.value)
+		return Boolean(eta && waiting && secondsWaited.value > eta * 2)
 	})
 
 	async function poll() {
@@ -129,6 +130,7 @@ export function useSiteSetup() {
 		site,
 		journey,
 		stage,
+		isDelayed,
 		secondsLeft,
 		failure,
 		error,
