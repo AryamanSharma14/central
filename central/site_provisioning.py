@@ -115,19 +115,18 @@ def subdomain_availability(subdomain: str) -> dict:
 
 
 def is_subdomain_taken(subdomain: str) -> bool:
-	"""Taken while a live server holds it: as a site's chosen name, which exists before the
-	rename routes it, or as a route Pilot registered in any trial zone."""
-	live = {"server.status": ["!=", "Terminated"]}
+	"""Taken as the chosen name of a site on a live server, which exists before the rename
+	routes it, or as a route in any trial zone. A route holds its name until its removal
+	succeeds, even for a terminated server, because registration refuses a name in use."""
 	domains = [
 		f"{subdomain}.{frappe.get_cached_value('Region', region, 'proxy_domain')}"
 		for region in trial_regions()
 	]
-	if frappe.get_all("Site", filters={"subdomain": subdomain, **live}, limit=1):
+	site_filters = {"subdomain": subdomain, "server.status": ["!=", "Terminated"]}
+	if frappe.get_all("Site", filters=site_filters, limit=1):
 		return True
 
-	return bool(domains) and bool(
-		frappe.get_all("Site Domain", filters={"name": ["in", domains], **live}, limit=1)
-	)
+	return bool(domains) and bool(frappe.db.exists("Site Domain", {"name": ["in", domains]}))
 
 
 def trial_zone(team: str, signup_app: str | None = None) -> str:

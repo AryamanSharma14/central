@@ -929,7 +929,7 @@ class TestSubdomainAvailability(SiteOnAMachine):
 
 		self.assertTrue(subdomain_availability("acme")["available"])
 
-	def test_a_route_is_taken_only_while_its_server_lives(self):
+	def test_a_route_holds_its_name_until_it_is_removed(self):
 		self.enroll()
 		observe_server(self.server)
 		frappe.db.set_single_value("Central Settings", "wildcard_domain", "example.test")
@@ -945,10 +945,8 @@ class TestSubdomainAvailability(SiteOnAMachine):
 			}
 		).insert()
 
-		self.assertFalse(subdomain_availability("acme")["available"])
-
 		self.server.db_set("status", "Terminated")
-		self.assertTrue(subdomain_availability("acme")["available"])
+		self.assertFalse(subdomain_availability("acme")["available"])
 
 	def test_a_malformed_or_reserved_name_is_refused(self):
 		for name in ("", "-acme", "acme.two", "proxy", "admin"):
