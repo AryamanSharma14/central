@@ -29,16 +29,47 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
-	<p class="relative h-6" aria-live="polite">
-		<Transition
-			enter-active-class="transition duration-300 ease-out"
-			enter-from-class="translate-y-1.5 opacity-0 blur-[2px]"
-			leave-active-class="absolute inset-x-0 transition duration-200 ease-in"
-			leave-to-class="-translate-y-1.5 opacity-0 blur-[2px]"
-		>
+	<p class="relative h-6 overflow-hidden" aria-live="polite">
+		<Transition name="line">
 			<span v-if="lines.length" :key="lines[index]" class="block truncate">
 				{{ lines[index] }}
 			</span>
 		</Transition>
 	</p>
 </template>
+
+<style scoped>
+/* The old line leaves fast and the new one settles slowly, so they read as one roll. */
+.line-enter-active,
+.line-leave-active {
+	transition-property: transform, opacity, filter;
+	transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+.line-enter-active {
+	transition-duration: 420ms;
+	transition-delay: 60ms;
+}
+.line-leave-active {
+	position: absolute;
+	inset-inline: 0;
+	transition-duration: 260ms;
+}
+.line-enter-from {
+	opacity: 0;
+	transform: translateY(55%);
+	filter: blur(3px);
+}
+.line-leave-to {
+	opacity: 0;
+	transform: translateY(-55%);
+	filter: blur(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.line-enter-from,
+	.line-leave-to {
+		transform: none;
+		filter: none;
+	}
+}
+</style>
