@@ -172,6 +172,11 @@ const ROUTE_TRANSITIONS: Record<string, string> = {
 	'Server>Servers': 'server-open-back',
 	'Servers>NewServer': 'server-create',
 	'NewServer>Servers': 'server-create-back',
+	'Login>VerifyEmail': 'auth-step',
+	'Signup>VerifyEmail': 'auth-step',
+	'VerifyEmail>OnboardingSite': 'auth-step',
+	'OnboardingSite>OnboardingProvisioning': 'auth-step',
+	'VerifyEmail>Login': 'auth-step-back',
 }
 
 router.beforeResolve((to, from) => {
@@ -198,8 +203,8 @@ router.beforeResolve((to, from) => {
 })
 
 // Session state is seeded synchronously from boot data (window.user), so the
-// guard can decide without awaiting. Auth transitions (login/logout) do a full
-// page reload, which re-boots the SPA with a fresh session — no client revalidation needed.
+// guard can decide without awaiting. Sign-in and logout reload the page, except a
+// product signup, which enters its new session in place (useAuth.enterSession).
 router.beforeEach((to) => {
 	const { isGuest } = useAuth()
 	// Seeded with `window.user` (central/www/dashboard.py). A brand-new user has no

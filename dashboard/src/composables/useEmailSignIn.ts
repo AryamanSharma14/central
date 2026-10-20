@@ -3,7 +3,9 @@ import { useProduct } from '@/composables/useProduct'
 import { methodUrl, postFrappe } from '@/lib/auth'
 
 /** A new email has no account until a name arrives with its code. */
-export type VerifyCodeResponse = { user: string } | { needs_name: true }
+export type VerifyCodeResponse =
+	| { user: string; csrf_token: string }
+	| { needs_name: true }
 
 // One door for sign-in and signup: every email gets a code, and a new email
 // becomes an account when its code is verified. The product only labels the

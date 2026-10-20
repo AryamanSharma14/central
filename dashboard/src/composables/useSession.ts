@@ -62,6 +62,13 @@ const teamsCall = useCall<Team[]>({
 	},
 })
 
+/** Select a team the caller has just created. Unlike a switch it needs no reload: no page
+ *  has read anything for another team yet. */
+async function adoptNewTeam(name: string): Promise<void> {
+	selectTeam(name)
+	await teamsCall.reload()
+}
+
 // Resolves once my_teams has settled the active team. Router + team-scoped reads
 // await this so atlas/iam calls never fire with a missing team (multi-team users
 // get "Specify a team." from central.iam.resolve_team).
@@ -86,6 +93,7 @@ export function useSession() {
 				null,
 		),
 		setActiveTeam: switchTeam,
+		adoptNewTeam,
 		reload: () => teamsCall.reload(),
 	}
 }

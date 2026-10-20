@@ -7,20 +7,30 @@ import ProductLogo from '@/components/auth/ProductLogo.vue'
 import TermsNotice from '@/components/auth/TermsNotice.vue'
 import ValidatedFormControl from '@/components/common/formComponents/ValidatedFormControl.vue'
 import OtpInput from '@/components/common/OtpInput.vue'
+import { useAuth } from '@/composables/useAuth'
 import { useEmailSignIn } from '@/composables/useEmailSignIn'
+import { useProduct } from '@/composables/useProduct'
+import { useSession } from '@/composables/useSession'
 import {
 	frappeErrorMessage,
 	nameFromEmail,
 	queryString,
 	requiredError,
 } from '@/lib/auth'
-import { carriedQuery, signInDestination } from '@/lib/authRedirect'
+import {
+	carriedQuery,
+	productOnboarding,
+	signInDestination,
+} from '@/lib/authRedirect'
 
 const RESEND_WAIT_SECONDS = 30
 
 const route = useRoute()
 const router = useRouter()
 const { sendCode, verifyCode } = useEmailSignIn()
+const { enterSession } = useAuth()
+const { productKey } = useProduct()
+const { reload: reloadTeams } = useSession()
 
 const email = queryString(route.query.email)
 const code = ref('')
@@ -63,15 +73,31 @@ async function verify() {
 			needsName.value = true
 			return
 		}
-		// A full load, so the console boots with the new session.
 		redirecting.value = true
-		window.location.replace(signInDestination(route.query))
+		await enterConsole(response)
 	} catch (exception) {
+		redirecting.value = false
 		error.value = frappeErrorMessage(exception, 'That code did not work.')
 		if (!needsName.value) code.value = ''
 	} finally {
 		if (!redirecting.value) loading.value = false
 		if (!needsName.value) nextTick(() => otpInput.value?.focus())
+	}
+}
+
+// The product funnel goes on in place, so the step changes without a blank page. Anywhere
+// else, or if the in-place start fails, a full load boots the console with the new session.
+async function enterConsole(signedIn: { user: string; csrf_token: string }) {
+	const destination = signInDestination(route.query)
+	const onboarding = productOnboarding(route.query)
+	if (!onboarding) return window.location.replace(destination)
+
+	enterSession(signedIn.user, signedIn.csrf_token)
+	try {
+		await reloadTeams()
+		await router.replace(onboarding)
+	} catch {
+		window.location.replace(destination)
 	}
 }
 
@@ -94,7 +120,7 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 </script>
 
 <template>
-	<AuthShell>
+	<AuthShell :show-progress="Boolean(productKey)" :step="2">
 		<template v-if="needsName">
 			<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 				<ProductLogo />
