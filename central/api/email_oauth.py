@@ -10,7 +10,7 @@ from frappe import _
 
 from central.api.pilot import pilot_credential_auth
 from central.iam import can
-from central.integrations.email_oauth import (
+from central.integrations.email_oauth.email_oauth import (
 	CALLBACK_PATH,
 	exchange_token,
 	forget_sign_in,

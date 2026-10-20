@@ -7,12 +7,12 @@ from urllib.parse import parse_qs, urlsplit
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import set_request
-from frappe.utils.password import set_encrypted_password
 
 from central.api.email_oauth import callback, relay_token, start
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
-from central.integrations.email_oauth import PROVIDERS
+from central.integrations.email_oauth.email_oauth import PROVIDER
+from central.integrations.email_oauth.setup import DEFAULT_PROVIDERS, ensure_email_oauth_providers
 from central.tests.test_iam import ensure_user
 from central.tests.utils import ensure_atlas_instance
 
@@ -25,10 +25,16 @@ class TestEmailOAuth(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.enterContext(patch.object(VirtualMachine, "ensure_subscription_enabled"))
 		frappe.db.set_single_value("Central Settings", "wildcard_domain", "example.test")
-		frappe.db.set_single_value("Email OAuth Settings", "microsoft_client_id", "ms-client-id")
-		set_encrypted_password(
-			"Email OAuth Settings", "Email OAuth Settings", "ms-secret", "microsoft_client_secret"
-		)
+		ensure_email_oauth_providers()
+		self.microsoft = frappe.get_doc(PROVIDER, "microsoft")
+		self.microsoft.update(
+			{
+				"client_id": "ms-client-id",
+				"client_secret": "ms-secret",
+				"enabled": 1,
+				"scopes": [{"scope": scope} for scope in DEFAULT_PROVIDERS["microsoft"]["scopes"]],
+			}
+		).save()
 
 		# fixtures roll back only after the whole class, so each test gets its own names
 		suffix = frappe.generate_hash(length=6)
@@ -94,9 +100,10 @@ class TestEmailOAuth(IntegrationTestCase):
 
 		query = parse_qs(urlsplit(result["authorize_url"]).query)
 		self.assertEqual(result["client_id"], "ms-client-id")
-		self.assertEqual(result["scopes"], PROVIDERS["microsoft"]["scopes"])
+		self.assertEqual(result["scopes"], DEFAULT_PROVIDERS["microsoft"]["scopes"])
 		self.assertEqual(query["state"], ["state-1"])
 		self.assertEqual(query["code_challenge"], ["challenge-1"])
+		self.assertEqual(query["prompt"], ["select_account"])
 		self.assertTrue(query["redirect_uri"][0].endswith("/api/method/central.api.email_oauth.callback"))
 		note = frappe.cache.get_value("email_oauth:state-1")
 		self.assertEqual((note["team"], note["server"]), (self.team, self.server))
@@ -120,6 +127,29 @@ class TestEmailOAuth(IntegrationTestCase):
 					code_challenge="c",
 					return_url=f"https://{self.site}{SITE_CALLBACK}",
 				)
+
+	def test_start_refuses_a_disabled_provider(self):
+		self.microsoft.reload().update({"enabled": 0}).save()
+
+		with self.assertRaises(frappe.ValidationError):
+			self.call_start(f"https://{self.site}{SITE_CALLBACK}")
+
+	# Email OAuth Provider
+
+	def test_provider_cannot_be_enabled_without_credentials(self):
+		doc = frappe.get_doc(PROVIDER, "microsoft").update({"client_id": ""})
+
+		with self.assertRaises(frappe.ValidationError):
+			doc.save()
+
+	def test_seeding_leaves_an_edited_provider_alone(self):
+		self.microsoft.reload().update({"scopes": [{"scope": "openid"}]}).save()
+
+		ensure_email_oauth_providers()
+
+		doc = frappe.get_doc(PROVIDER, "microsoft")
+		self.assertEqual(doc.get_scopes(), ["openid"])
+		self.assertEqual(doc.client_id, "ms-client-id")
 
 	# both Pilot endpoints
 
@@ -211,7 +241,7 @@ class TestEmailOAuth(IntegrationTestCase):
 	# relay_token
 
 	def call_relay_token(self, microsoft_status: int, microsoft_body: dict, **params):
-		post = self.enterContext(patch("central.integrations.email_oauth.requests.post"))
+		post = self.enterContext(patch("central.integrations.email_oauth.email_oauth.requests.post"))
 		post.return_value = Mock(ok=microsoft_status < 400, json=Mock(return_value=microsoft_body))
 		self.as_pilot("/api/method/central.api.email_oauth.relay_token")
 		return relay_token(provider="microsoft", **params), post

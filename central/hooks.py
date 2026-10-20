@@ -128,6 +128,7 @@ after_install = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.settings.ensure_welcome_credit_amounts",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 ]
 
@@ -255,6 +256,7 @@ after_migrate = [
 	"central.billing.settings.ensure_snapshot_settings",
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 ]
 
@@ -269,6 +271,7 @@ before_tests = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.settings.ensure_welcome_credit_amounts",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 ]
 
