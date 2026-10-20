@@ -17,7 +17,7 @@ System Managers and Product Operators create and edit products in Desk. Only a S
 | Enabled | A disabled product refuses new signups. Its existing sites keep running. |
 | Logo | Shown with rounded corners next to the heading on the signup, login, verification, site name and setup pages. |
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
-| Setup Messages | Optional. One line each, such as `Setting up channels…`. The waiting page shows them one at a time while the product starts, and it stops on the last line. Without them, the page shows general lines. |
+| Setup Messages | Optional. One line each, such as `Setting up channels…`. The waiting page shows them one at a time, in a loop, while the product starts. Without them, the page shows general lines. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
 | Trial Days | Days a trial site of this product runs from when Central records its site. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
@@ -72,7 +72,7 @@ Central sends the signup code and the [trial lifecycle emails](../../SPEC.md#ope
 
 **Branding.** With **Use Product Branding in Emails** on, the email header shows the product's Logo and Title instead of Frappe Cloud's. The code email also names the product, such as "123456 is your Raven signup code". The lifecycle emails of the product's sites use the same header. The logo must be a public file, because an email client loads it without a session. The footer still says that the person is a member of a Frappe Cloud team.
 
-**Getting started.** With a **Getting Started URL**, the `site_ready` and `trial_unopened` emails show a **Get started** button to that page, above the **View site** button. Use the product's own guide or docs page, so the product team can change it without a change in Central. The address must start with `https://`. The `site_ready` subject also names the product, such as "Your Raven site is ready".
+**Getting started.** With a **Getting Started URL**, the `site_ready` and `trial_unopened` emails show a **Get started** button that opens the site, and a **View docs** button to that page. Use the product's own guide or docs page, so the product team can change it without a change in Central. The address must start with `https://`. The `site_ready` subject also names the product, such as "Your Raven site is ready".
 
 **Action links.** Email actions use the destinations below. Email previews use a sample site URL. In-app actions use the console routes.
 

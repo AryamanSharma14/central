@@ -10,7 +10,6 @@ const props = withDefaults(defineProps<RotatingTextProps>(), {
 	intervalMs: 2600,
 })
 
-// Holds on the last line instead of looping, so the text never seems to start over.
 const index = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -19,9 +18,9 @@ watch(
 	() => {
 		clearInterval(timer)
 		index.value = 0
+		if (props.lines.length < 2) return
 		timer = setInterval(() => {
-			if (index.value < props.lines.length - 1) index.value += 1
-			else clearInterval(timer)
+			index.value = (index.value + 1) % props.lines.length
 		}, props.intervalMs)
 	},
 	{ immediate: true },
