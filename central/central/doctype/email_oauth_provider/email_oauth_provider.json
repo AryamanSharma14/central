@@ -34,6 +34,7 @@
    "default": "0",
    "fieldname": "enabled",
    "fieldtype": "Check",
+   "in_list_view": 1,
    "label": "Enabled"
   },
   {
@@ -92,7 +93,7 @@
  ],
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-10-20 14:59:37.239477",
+ "modified": "2026-10-21 00:44:49.250559",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Email OAuth Provider",

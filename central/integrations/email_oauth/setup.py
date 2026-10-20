@@ -46,6 +46,7 @@ def ensure_email_oauth_providers() -> None:
 	for provider, config in DEFAULT_PROVIDERS.items():
 		if frappe.db.exists(PROVIDER, provider):
 			continue
+		# Runs from the install, migrate and test hooks, which have no signed-in user
 		frappe.get_doc(
 			{
 				"doctype": PROVIDER,
