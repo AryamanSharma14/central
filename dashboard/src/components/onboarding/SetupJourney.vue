@@ -41,11 +41,8 @@ const current = computed(() =>
 )
 
 const statusLine = computed(() => {
-	const region = props.journey?.region.title
 	const lines: Record<SetupStage, string> = {
-		booking: region
-			? `Requesting a server in ${region}`
-			: 'Requesting a server',
+		booking: 'Reserving a server',
 		server: 'Starting your server',
 		app: `Starting ${props.appTitle ?? 'your site'}`,
 		signing: 'Signing you in',
@@ -60,7 +57,7 @@ const etaLine = computed(() => {
 	if (props.isDelayed) return 'Taking longer'
 	if (props.secondsLeft === null) return ''
 	return props.secondsLeft > 3
-		? `Ready in about ${props.secondsLeft} s`
+		? `About ${props.secondsLeft} s left`
 		: 'Almost ready'
 })
 
@@ -207,11 +204,16 @@ function percent(value: number): string {
 		<div
 			class="flex items-center justify-between gap-3 border-t border-outline-gray-2 bg-surface-gray-1 px-4 py-2.5 text-sm"
 		>
-			<span class="flex items-center gap-2 text-ink-gray-9" role="status">
-				<span class="size-1.5 rounded-full bg-current" :class="tone" />
-				{{ statusLine }}
+			<span
+				class="flex min-w-0 items-center gap-2 text-ink-gray-9"
+				role="status"
+			>
+				<span class="size-1.5 shrink-0 rounded-full bg-current" :class="tone" />
+				<span class="truncate">{{ statusLine }}</span>
 			</span>
-			<span class="tabular-nums text-ink-gray-5">{{ etaLine }}</span>
+			<span class="shrink-0 whitespace-nowrap tabular-nums text-ink-gray-5">
+				{{ etaLine }}
+			</span>
 		</div>
 	</section>
 </template>
