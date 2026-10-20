@@ -357,6 +357,31 @@ class ResourceAction(Document):
 
 		self.enqueue()
 
+	@frappe.whitelist(methods=["GET"])
+	def get_setup_timeline(self) -> list[dict]:
+		"""Each step a new site takes, with when it happened, so an operator sees where a signup
+		stopped. The page a customer waits on reads the same records."""
+		self.check_permission("read")
+		site = frappe._dict()
+		if self.server:
+			fields = ["creation", "ready_at", "claimed_at", "renamed_at", "rename_error"]
+			site = frappe.db.get_value("Site", {"server": self.server}, fields, as_dict=True) or site
+		failed = self.status in ("Failed", "Timed Out")
+
+		return [
+			{"label": _("Requested"), "at": self.creation},
+			{"label": _("Sent to region"), "at": self.dispatched_at},
+			{
+				"label": _("Server created"),
+				"at": self.completed_at if self.status == "Succeeded" else None,
+				"error": (self.error_message or self.status) if failed else None,
+			},
+			{"label": _("Site addressable"), "at": site.creation},
+			{"label": _("Site answered"), "at": site.ready_at},
+			{"label": _("Signed in"), "at": site.claimed_at},
+			{"label": _("Name applied"), "at": site.renamed_at, "error": site.rename_error},
+		]
+
 	@frappe.whitelist(methods=["POST"])
 	def retry(self) -> ActionStatus:
 		"""Send this creation again on the same record, with the same request key, configuration

@@ -72,6 +72,21 @@ Nothing is provisioned during signup, so readiness is not a build finishing. A s
 
 `central.api.sites.onboarding_status(team, product)` first finds the selected product's non-terminated Site that the caller can view in the Team. If none exists, it follows the latest matching Site creation requested by the caller. A plain signup follows only creations without a product. It does not adopt a normal server creation or another team member's pending request. The response reports whether the site was claimed, so a returning customer can find it in the resource list. A Running state report schedules a full server refresh, so the Site record does not wait for the periodic reconciliation job.
 
+### Setup journey
+
+`onboarding_status` also returns `journey`, which the waiting page shows. `central.signups.journey.SetupJourney` builds it from the records that own each step, so the page never moves ahead of Central.
+
+| Field | Value |
+| --- | --- |
+| `phase` | The milestone the site works towards: `booking` while the creation is Queued or Dispatching, `server` until the server is Running, `app` until the site answers, then `signing`. `failed` when the creation fails or times out, or the server fails. |
+| `subdomain`, `domain` | The name the customer chose and the zone of the region. |
+| `region` | The region's display name, country code and map coordinates. |
+| `started_at` | When the creation was requested. |
+| `eta_seconds` | The median time from request to a site that answers, over the latest 50 trials in the region. It is null with fewer than 3 trials, and it is cached for 10 minutes. |
+| `reference` | The creation's Resource Action name. The page shows it on a failure, so support can find the request. |
+
+The page shows four milestones: Queued (until the region takes the request), Provisioning (until the server runs), Starting (until the site answers) and Arrived (the customer is signed in). The current milestone is highlighted, and a status line under them says what happens now. It shows `Delayed` after twice the estimate, and it leaves for the site about 1 second after the sign-in link arrives.
+
 ## Sign-in
 
 Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The first sign-in on the customer hostname sets `renamed_at`. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
@@ -94,6 +109,8 @@ A site's users have no Central account. When a plan change from the site stops t
 `PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
 
 ## Operator actions
+
+The Resource Action of a site creation shows a **Site Setup** timeline with the time of each step: requested, sent to the region, server created, site addressable, site answered, signed in, and name applied. The first step with no time is where the signup stopped. A failed creation or a failed rename shows its error on that step.
 
 A System Manager has two actions on the Site form in Desk:
 

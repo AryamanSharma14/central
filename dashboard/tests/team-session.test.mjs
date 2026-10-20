@@ -17,6 +17,7 @@ const storageKey = 'central.console.activeTeam'
 
 function startSession(pathname, storage, storageBlocked = false) {
 	const navigations = []
+	const rosterReads = []
 	const exports = {}
 	const roster = [
 		{ name: 'team-a', label: 'Acme' },
@@ -36,7 +37,11 @@ function startSession(pathname, storage, storageBlocked = false) {
 		'frappe-ui': {
 			useCall(options) {
 				options.onSuccess(roster)
-				return { data: roster, promise: Promise.resolve(), reload() {} }
+				return {
+					data: roster,
+					promise: Promise.resolve(),
+					reload: async () => rosterReads.push('my_teams'),
+				}
 			},
 		},
 	}
@@ -52,7 +57,7 @@ function startSession(pathname, storage, storageBlocked = false) {
 			},
 		},
 	})
-	return { session: exports.useSession(), navigations }
+	return { session: exports.useSession(), navigations, rosterReads }
 }
 
 test('switching preserves a section and boots with the new team before reads start', () => {
@@ -97,5 +102,20 @@ test('a storage failure keeps the existing team and prevents navigation', () => 
 	)
 	assert.equal(session.activeTeam.value, 'team-a')
 	assert.equal(storage.get(storageKey), 'team-a')
+	assert.deepEqual(navigations, [])
+})
+
+test('a team the caller just created is selected without leaving the page', async () => {
+	const storage = new Map()
+	const { session, navigations, rosterReads } = startSession(
+		'/dashboard/onboarding/site',
+		storage,
+	)
+
+	await session.adoptNewTeam('team-b')
+
+	assert.equal(session.activeTeam.value, 'team-b')
+	assert.equal(storage.get(storageKey), 'team-b')
+	assert.deepEqual(rosterReads, ['my_teams'])
 	assert.deepEqual(navigations, [])
 })

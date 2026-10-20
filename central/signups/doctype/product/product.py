@@ -44,6 +44,7 @@ class Product(Document):
 		landing_route: DF.Data | None
 		logo: DF.AttachImage | None
 		product_key: DF.Data
+		setup_messages: DF.SmallText | None
 		signup_app: DF.Data
 		subtitle: DF.SmallText | None
 		title: DF.Data
