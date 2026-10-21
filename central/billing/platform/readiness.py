@@ -1,13 +1,5 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
-"""Readiness checks: what would go wrong on the next billing run, found before it runs.
-
-The money invariants in `invariants.py` ask whether numbers already booked still agree.
-These ask whether the data the next run bills from is right: a team billed in the wrong
-currency, over its trust tier, with no way to pay, or not set up in the accounting
-system. They run hourly with the operator alerts and on demand in the Billing Invariant
-Violations report, so a problem is fixed weeks before the 1st, not found on it.
-"""
 
 import frappe
 from frappe.query_builder.functions import Count

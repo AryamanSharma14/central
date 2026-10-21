@@ -33,9 +33,7 @@ def record_storage_usage(today: datetime.date | str | None = None) -> dict:
 
 
 def record_subscription_usage(subscription: str, buckets: list, today: datetime.date) -> str | None:
-	"""Add the GB the buckets hold, as a share of the month, for each day not yet billed up to today.
-
-	A day with no reading is billed at the next reading's level, so a missed run loses no usage."""
+	"""Bill each day since the last reading at today's GB, so a missed day loses no usage."""
 	sub = frappe.db.get_value(
 		"Subscription", subscription, ["team", "cluster", "service_subject", "start_date"], as_dict=True
 	)
