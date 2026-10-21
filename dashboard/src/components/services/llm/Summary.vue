@@ -162,10 +162,16 @@ const refresh = async (): Promise<void> => {
 	>
 		<div
 			v-if="hasTraffic"
-			class="flex flex-col gap-3 px-4 py-3.5 md:px-5 md:py-4.5 lg:col-span-2"
+			class="flex flex-col justify-between gap-3 px-4 py-3.5 md:px-5 md:py-4.5 lg:col-span-2"
 		>
 			<div class="flex items-center justify-between gap-3">
-				<h2 class="text-sm-medium text-ink-gray-6">{{ monthLabel }}</h2>
+				<h2 class="flex items-center gap-1.5 text-sm-medium text-ink-gray-6">
+					<span
+						class="lucide-calendar size-4 text-ink-gray-4"
+						aria-hidden="true"
+					/>
+					{{ monthLabel }}
+				</h2>
 
 				<div class="flex items-center gap-1">
 					<Tooltip
@@ -178,7 +184,9 @@ const refresh = async (): Promise<void> => {
 					</Tooltip>
 					<Tooltip text="Refresh usage">
 						<Button
+							class="-my-1"
 							variant="ghost"
+							size="xs"
 							label="Refresh usage"
 							icon="lucide-refresh-cw"
 							:loading="refreshing"
