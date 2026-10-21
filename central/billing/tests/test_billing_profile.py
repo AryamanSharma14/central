@@ -83,7 +83,7 @@ class TestBillingProfile(IntegrationTestCase):
 
 	def test_non_india_skips_state_and_gstin_checks(self):
 		# A free-text state and no GSTIN is fine outside India.
-		doc = _profile(country="Germany", state="Hesse", gstin="")
+		doc = _profile(country="Germany", currency="USD", state="Hesse", gstin="")
 		self.assertEqual(doc.state, "Hesse")
 
 	def test_partial_profile_without_gstin_or_state_saves(self):
@@ -98,16 +98,40 @@ class TestBillingProfile(IntegrationTestCase):
 		self.assertEqual(doc.currency, "USD")
 
 	def test_currency_locked_once_team_is_invoiced(self):
-		_profile(country="India", currency="INR")
-		_invoice()
+		_profile(country="Germany", currency="USD", state="Hesse", gstin="")
+		_invoice(currency="USD")
 		with self.assertRaises(frappe.ValidationError):
-			_profile(currency="USD")
+			_profile(currency="EUR")
 
 	def test_country_locked_once_team_is_invoiced(self):
-		_profile(country="India", currency="INR")
-		_invoice()
+		_profile(country="Germany", currency="USD", state="Hesse", gstin="")
+		_invoice(currency="USD")
 		with self.assertRaises(frappe.ValidationError):
-			_profile(country="Germany", state="Hesse", gstin="")
+			_profile(country="France", state="Paris")
+
+	def test_india_is_billed_only_in_inr(self):
+		with self.assertRaises(frappe.ValidationError):
+			_profile(country="India", currency="USD")
+
+	def test_only_india_is_billed_in_inr(self):
+		with self.assertRaises(frappe.ValidationError):
+			_profile(country="Germany", currency="INR", state="Hesse", gstin="")
+
+	def test_currency_change_refused_while_a_mandate_holds_the_old_one(self):
+		_profile(country="India", currency="INR")
+		frappe.get_doc(
+			{
+				"doctype": "Payment Method",
+				"team": TEAM,
+				"gateway": "Stripe",
+				"method_type": "Card",
+				"status": "Pending Validation",
+				"mandate_currency": "INR",
+				"mandate_max_amount": 15000,
+			}
+		).insert(ignore_permissions=True)
+		with self.assertRaises(frappe.ValidationError):
+			_profile(country="Germany", currency="USD", state="Hesse", gstin="")
 
 	def test_other_fields_still_editable_after_invoicing(self):
 		# Legal name / address / GSTIN can change post-invoice — only the two

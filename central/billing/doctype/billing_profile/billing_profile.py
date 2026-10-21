@@ -127,6 +127,8 @@ class BillingProfile(Document):
 		self.validate_gstin()
 		self.validate_india_state()
 		self.lock_country_and_currency_after_invoicing()
+		self.validate_currency_matches_country()
+		self.keep_mandates_in_the_billing_currency()
 		self.pin_tier_set_by_hand()
 		self.sync_tier_fields()
 
@@ -135,6 +137,42 @@ class BillingProfile(Document):
 		self.refresh_gst_status_on_change()
 		self.enqueue_profile_sync()
 		self.apply_tier_change()
+
+	def validate_currency_matches_country(self):
+		"""India is billed only in INR, and only India is billed in INR."""
+		if not self.country or not self.currency:
+			return
+		if (self.country.strip() == INDIA) == (self.currency == "INR"):
+			return
+		frappe.throw(
+			_("A team in India is billed in INR.")
+			if self.country.strip() == INDIA
+			else _(
+				"Only a team in India is billed in INR. Contact support to move a team billed in INR abroad."
+			),
+			frappe.ValidationError,
+		)
+
+	def keep_mandates_in_the_billing_currency(self):
+		"""Refuse a currency change that would strand a payment method set up in the old one."""
+		if self.is_new() or not self.has_value_changed("currency"):
+			return
+		stranded = frappe.get_all(
+			"Payment Method",
+			filters={
+				"team": self.team,
+				"status": ["!=", "Cancelled"],
+				"mandate_currency": ["not in", ("", self.currency)],
+			},
+			pluck="display_label",
+		)
+		if stranded:
+			frappe.throw(
+				_("Remove the payment methods set up in the old currency before changing it: {0}.").format(
+					", ".join(label or _("unnamed method") for label in stranded)
+				),
+				frappe.ValidationError,
+			)
 
 	def pin_tier_set_by_hand(self):
 		"""Pin a tier or cap an operator sets, and require the reason for it."""
@@ -163,7 +201,9 @@ class BillingProfile(Document):
 	def apply_tier_change(self):
 		"""Re-check mandate ceilings against the new cap and log who moved the tier."""
 		before = self.get_doc_before_save()
-		if not before or not any(self.has_value_changed(field) for field in (*_TIER_FIELDS, "manual_override")):
+		if not before or not any(
+			self.has_value_changed(field) for field in (*_TIER_FIELDS, "manual_override")
+		):
 			return
 
 		from central.billing.payments import mandates

@@ -462,8 +462,9 @@ class TestBillingCurrency(CustomerDataBase):
 		with self.assertRaises(frappe.ValidationError):
 			dashboard.save_billing_profile(TEAM, currency="USD")
 		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "INR")
-		# A locked INR team editing its (foreign) address does NOT get re-derived to USD.
-		dashboard.save_billing_profile(TEAM, country="Germany", legal_name="Acme")
+		# A team locked to INR cannot move its billing address out of India.
+		with self.assertRaises(frappe.ValidationError):
+			dashboard.save_billing_profile(TEAM, country="Germany", legal_name="Acme")
 		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "INR")
 
 
