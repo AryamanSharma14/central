@@ -409,7 +409,7 @@ class TestResourceActions(IntegrationTestCase):
 
 	def test_the_trial_cap_follows_central_settings(self):
 		with (
-			patch("central.billing.revenue.credits.get_balance", return_value={"balance": 10}),
+			patch("central.billing.revenue.credits.lock_team_wallet", return_value=10),
 			patch("central.resource_actions.server_count", return_value=1),
 			central_limit("trial_servers_per_team", 1),
 			self.assertRaisesRegex(frappe.ValidationError, "at most 1 active or pending servers"),
