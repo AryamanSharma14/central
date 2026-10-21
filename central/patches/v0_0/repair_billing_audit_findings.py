@@ -18,6 +18,7 @@ def mark_staging_teams_internal():
 	"""On a site that does not create staging trials, a staging-trial team is one of ours."""
 	from central.billing import settings
 	from central.billing.payments.provisioning import ensure_tax_profile
+	from central.billing.revenue.invoicing.lifecycle import waive_for_internal_team
 
 	if settings.provision_teams_as_trial():
 		return
@@ -29,6 +30,8 @@ def mark_staging_teams_internal():
 			{"is_internal": 1, "internal_reason": f"Staging-trial team, marked by the {AUDIT}."},
 		)
 		frappe.db.set_value("Team", team, "is_staging_trial", 0)
+		# set_value skips the Tax Profile hook that waives, so waive here, before any billing run.
+		waive_for_internal_team(team)
 
 
 def match_currency_to_country():
