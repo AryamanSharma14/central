@@ -73,3 +73,33 @@ class TestRepairBillingAuditFindings(IntegrationTestCase):
 		credits.grant_promotional_credits(TEAM, 10, "USD")
 		repair.match_currency_to_country()
 		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "USD")
+
+	def test_team_with_a_method_in_another_currency_is_left_alone(self):
+		frappe.db.set_value("Billing Profile", TEAM, "currency", "USD")
+		frappe.get_doc(
+			{
+				"doctype": "Payment Method",
+				"team": TEAM,
+				"gateway": "Stripe",
+				"method_type": "Card",
+				"status": "Active",
+				"mandate_currency": "USD",
+			}
+		).insert(ignore_permissions=True)
+		repair.match_currency_to_country()
+		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "USD")
+
+	def test_team_whose_method_is_already_in_inr_is_moved_to_inr(self):
+		frappe.db.set_value("Billing Profile", TEAM, "currency", "USD")
+		frappe.get_doc(
+			{
+				"doctype": "Payment Method",
+				"team": TEAM,
+				"gateway": "Stripe",
+				"method_type": "Card",
+				"status": "Pending Validation",
+				"mandate_currency": "INR",
+			}
+		).insert(ignore_permissions=True)
+		repair.match_currency_to_country()
+		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "INR")
