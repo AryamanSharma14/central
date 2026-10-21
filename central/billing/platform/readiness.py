@@ -319,6 +319,46 @@ def check_terminated_servers_stop_billing() -> list[Violation]:
 	]
 
 
+def check_storage_usage_is_recorded() -> list[Violation]:
+	"""Every storage subscription's usage was read in the last day, so the month bills in full."""
+	from central.services.doctype.team_service.team_service import STORAGE_SERVICE
+
+	today = frappe.utils.getdate()
+	if today.day == 1:
+		return []
+	billed = set(
+		frappe.get_all(
+			"Team Service",
+			filters={"add_on_service": STORAGE_SERVICE, "status": "Active", "subscription": ["is", "set"]},
+			pluck="subscription",
+		)
+	)
+	subjects = frappe.get_all(
+		"Subscription", filters={"name": ["in", list(billed)]}, fields=["name", "team", "service_subject"]
+	)
+	read_through = dict(
+		frappe.get_all(
+			"Usage Rollup",
+			filters={"resource_type": "Storage", "period_start": [">=", today.replace(day=1)]},
+			fields=["resource_id", "sequence"],
+			as_list=True,
+		)
+	)
+	return [
+		Violation(
+			check="M1",
+			team=s.team,
+			subject_doctype="Subscription",
+			subject=s.name,
+			expected=today.day - 1,
+			actual=frappe.utils.cint(read_through.get(s.service_subject)),
+			detail="Storage usage has not been read for a day or more, so those days bill nothing.",
+		)
+		for s in subjects
+		if frappe.utils.cint(read_through.get(s.service_subject)) < today.day - 1
+	]
+
+
 # --- collection -------------------------------------------------------------------
 
 
@@ -407,6 +447,7 @@ CHECKS = {
 	"S1": ("Running subscriptions are priced", check_subscriptions_are_priced),
 	"S2": ("Running servers are billed", check_running_servers_are_billed),
 	"S3": ("Terminated servers stop billing", check_terminated_servers_stop_billing),
+	"M1": ("Storage usage is read daily", check_storage_usage_is_recorded),
 	"W1": ("Billed teams can pay", check_billed_teams_can_pay),
 	"W2": ("Promotional credit expires", check_promotional_credit_expires),
 	"X1": ("No staging trials outside staging", check_no_staging_trials_outside_staging),
