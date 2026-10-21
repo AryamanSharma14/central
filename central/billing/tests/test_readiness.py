@@ -109,6 +109,9 @@ class TestReadiness(IntegrationTestCase):
 
 	def test_servers_over_the_tier_limit_are_found(self):
 		self.assertEqual(_found("T2"), [])
+		limit = frappe.db.get_value("Trust Tier Level", "t1", "max_resource_count")
+		# The test sweep commits, so put the shared level back by hand.
+		self.addCleanup(frappe.db.set_value, "Trust Tier Level", "t1", "max_resource_count", limit)
 		frappe.db.set_value("Trust Tier Level", "t1", "max_resource_count", 0)
 		[violation] = _found("T2")
 		self.assertEqual((violation.expected, violation.actual), (0, 1))
