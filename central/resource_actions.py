@@ -426,9 +426,9 @@ def reserved_rate(team: str) -> float:
 
 
 def validate_trial(team: str) -> None:
-	from central.billing.revenue.credits import get_balance
+	from central.billing.revenue.credits import lock_team_wallet
 
-	if get_balance(team).get("balance", 0) <= 0:
+	if lock_team_wallet(team) <= 0:
 		frappe.throw(_("Your trial credits are used up. Add a payment method to continue."))
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
 	if server_count(team) >= limit:

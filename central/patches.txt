@@ -42,3 +42,5 @@ central.patches.v0_0.start_unready_trials
 # A site creation stores whether it started a free trial; older ones are marked from their site.
 central.patches.v0_0.set_free_trial_on_creations
 central.patches.v0_0.select_full_ubuntu_image
+# A credit wallet now records the ledger entry that set its balance.
+central.patches.v0_0.point_wallets_at_last_ledger_entry
