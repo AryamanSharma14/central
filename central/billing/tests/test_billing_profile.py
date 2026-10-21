@@ -5,7 +5,7 @@
 import frappe
 
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
-from central.billing.tests.utils import ensure_team
+from central.billing.tests.utils import ensure_team, ensure_trust_tier_level
 
 TEAM = "team-billing-profile"
 
@@ -116,3 +116,46 @@ class TestBillingProfile(IntegrationTestCase):
 		_invoice()
 		doc = _profile(legal_name="Renamed Ltd", address_line1="9 New Road", gstin="27AAPFU0939F1ZV")
 		self.assertEqual(doc.legal_name, "Renamed Ltd")
+
+
+class TestTierSetByHand(IntegrationTestCase):
+	def setUp(self):
+		ensure_team(TEAM)
+		frappe.db.delete("Billing Profile", {"team": TEAM})
+		frappe.db.delete("Billing Event", {"team": TEAM})
+		self.entry = ensure_trust_tier_level("t1")
+		self.higher = ensure_trust_tier_level("t2")
+		_profile(trust_tier_level=self.entry)
+
+	def test_tier_change_needs_a_reason(self):
+		with self.assertRaises(frappe.ValidationError):
+			_profile(trust_tier_level=self.higher)
+
+	def test_tier_change_by_hand_is_pinned_and_logged(self):
+		doc = _profile(trust_tier_level=self.higher, promotion_basis="Strategic account")
+
+		self.assertTrue(doc.manual_override)
+		self.assertEqual(doc.trust_tier, "t2")
+		self.assertIsNotNone(doc.promoted_at)
+		event = frappe.get_all(
+			"Billing Event",
+			filters={"team": TEAM, "event_type": "Trust Tier Changed"},
+			fields=["from_state", "to_state", "reason"],
+		)
+		self.assertEqual(event[0].to_state, self.higher)
+		self.assertEqual(event[0].reason, "Strategic account")
+
+	def test_unpinning_drops_the_bespoke_cap(self):
+		_profile(override_max_spend=50000, promotion_basis="Approved by finance")
+		doc = _profile(manual_override=0)
+
+		self.assertEqual(doc.override_max_spend, 0)
+
+	def test_system_tier_change_is_not_pinned(self):
+		doc = frappe.get_doc("Billing Profile", TEAM)
+		doc.trust_tier_level = self.higher
+		doc.flags.tier_set_by_system = True
+		doc.save(ignore_permissions=True)
+
+		self.assertFalse(doc.manual_override)
+		self.assertEqual(doc.trust_tier, "t2")

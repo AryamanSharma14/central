@@ -235,6 +235,11 @@ def _append_event(doc, from_state, to_state, reason, actor, correlation, amount,
 	).insert(ignore_permissions=True)
 
 
+def record_event(doc, event_type: str, from_state=None, to_state=None, reason=None, amount=None) -> None:
+	"""Log a billing change that is not a status move, such as a tier change."""
+	_append_event(doc, from_state, to_state, reason, None, None, amount, event_type)
+
+
 def _default_actor() -> str:
 	"""Who is making the move when a caller does not say — the session user, or the
 	scheduler/worker running headless."""
