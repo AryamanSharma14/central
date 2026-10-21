@@ -152,6 +152,7 @@ export function useAI() {
 
 		// What a key in one geography starts with: the published models of its default group.
 		models: computed<AIModel[]>(() => modelsCall.data ?? []),
+		modelsGeography: computed(() => modelsParams.value.geography),
 		modelsLoading: computed(() => modelsCall.loading),
 		modelsError: computed(() => modelsCall.error),
 		loadModels(geography: string): Promise<unknown> {

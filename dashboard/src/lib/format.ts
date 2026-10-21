@@ -26,6 +26,16 @@ export function money(
 	return `${currencySymbol(currency)}${major}`
 }
 
+export function usd(amount: number | null | undefined): string {
+	const value = Number(amount ?? 0)
+	return value.toLocaleString(undefined, {
+		style: 'currency',
+		currency: 'USD',
+		minimumFractionDigits: 2,
+		maximumFractionDigits: value > 0 && value < 1 ? 4 : 2,
+	})
+}
+
 /** Signed amount for ledgers: "+ ₹5,000.00" / "− ₹5,003.20". */
 export function signedMoney(
 	amount: number | null | undefined,
