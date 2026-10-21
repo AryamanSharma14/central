@@ -6,26 +6,26 @@ import {
 	Dialog,
 	type DropdownOptions,
 	dayjs,
+	LoadingText,
 	Select,
 	Spinner,
 	TextInput,
 	Tooltip,
 } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
-
-import AIQuickstart from '@/components/addons/ai/AIQuickstart.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import ListViewPagination from '@/components/common/list-view/ListViewPagination.vue'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
+import Quickstart from '@/components/services/llm/Quickstart.vue'
 import { useAI } from '@/composables/useAI'
-import { formatDateTime } from '@/lib/datetime'
+import { formatDateTime, timeAgo } from '@/lib/datetime'
 import { getErrorMessage, reportError } from '@/lib/feedback'
 import { compactNumber } from '@/lib/format'
 import type { AIApiKey, AIRateLimit } from '@/types/ai'
 
 interface Props {
 	canManage: boolean
+	active: boolean
 }
 
 defineProps<Props>()
@@ -42,17 +42,15 @@ const {
 	capsSaving,
 	models,
 	modelsLoading,
+	modelsGeography,
 	loadModels,
 	revokeApiKey,
 } = useAI()
 
 loadApiKeys()
 
-// Every team is prepaid at Grove: the caps show once its spend has loaded.
 const prepaid = computed(() => !!ai.value?.spend)
 const spend = computed(() => ai.value?.spend)
-// When the spend and each key's month figure are from: Grove's last pull. A cap change is
-// checked against the live figure at Grove, which refuses and says so if it no longer fits.
 const asOf = computed(() =>
 	ai.value?.usage?.as_of
 		? formatDateTime(ai.value.usage.as_of)
@@ -61,25 +59,28 @@ const asOf = computed(() =>
 const activeKeys = computed(() =>
 	apiKeys.value.filter((key) => key.status === 'active'),
 )
-// A plan with max_keys 0 sets no limit.
 const atKeyLimit = computed(
 	() =>
 		!!spend.value &&
 		spend.value.max_keys > 0 &&
 		activeKeys.value.length >= spend.value.max_keys,
 )
-const keyCountLabel = computed(() => {
-	const live = activeKeys.value.length
+const keyCountTitle = computed(() => {
 	const max = spend.value?.max_keys ?? 0
-	if (max > 0) return `${live} of ${max} keys`
-	return `${live} ${live === 1 ? 'key' : 'keys'}`
+	return max > 0
+		? `${activeKeys.value.length} of ${max}`
+		: activeKeys.value.length
 })
-// All keys come in one call; page them on the client past ten.
 const PAGE_SIZE = 10
 const page = ref(1)
 const pageCount = computed(() => Math.ceil(apiKeys.value.length / PAGE_SIZE))
+const sortedKeys = computed(() =>
+	[...apiKeys.value].sort(
+		(a, b) => Number(a.status === 'revoked') - Number(b.status === 'revoked'),
+	),
+)
 const pagedKeys = computed(() =>
-	apiKeys.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+	sortedKeys.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
 )
 watch(pageCount, (count) => {
 	page.value = Math.min(page.value, Math.max(count, 1))
@@ -88,7 +89,6 @@ const isCapReached = (key: AIApiKey): boolean =>
 	key.cap > 0 && key.month_spent >= key.cap
 const capPercent = (key: AIApiKey): number =>
 	Math.min(100, (key.month_spent / key.cap) * 100)
-// Gray while there is room, amber from 80%, red once the gateway refuses it.
 const capBarClass = (key: AIApiKey): string =>
 	isCapReached(key)
 		? 'bg-surface-red-5'
@@ -96,13 +96,10 @@ const capBarClass = (key: AIApiKey): string =>
 			? 'bg-surface-amber-7'
 			: 'bg-surface-gray-10'
 const geographies = computed(() => ai.value?.geographies ?? [])
-// Only a geography with a gateway can mint a key or be called; one without keeps its label for
-// the keys already listed under it.
 const mintable = computed(() => geographies.value.filter((g) => g.endpoint))
 const geographyLabel = (name: string): string =>
 	geographies.value.find((g) => g.name === name)?.label ?? name
 
-// Grove refuses to revoke a key before `revocable_at`; the dialog says so and asks nothing.
 const isRevocable = (key: AIApiKey): boolean =>
 	new Date(key.revocable_at) <= new Date()
 const revocableFrom = (key: AIApiKey): string =>
@@ -117,7 +114,6 @@ const rowActions = (key: AIApiKey): DropdownOptions => [
 	},
 ]
 
-// Grove's limits as the abbreviations a 429 uses: 20 RPM, 100K TPM, 1M TPD.
 const METRIC_LETTERS: Record<string, string> = {
 	requests: 'R',
 	total_tokens: 'T',
@@ -145,6 +141,14 @@ const limitChips = (limits: AIRateLimit[]) =>
 		text: `${limit.value.toLocaleString()} ${METRIC_WORDS[limit.metric] ?? limit.metric} ${WINDOW_WORDS[limit.window] ?? limit.window}`,
 	}))
 
+const sharedLimits = computed(() => {
+	const [first, ...rest] = activeKeys.value.map((key) =>
+		JSON.stringify(key.limits),
+	)
+	if (!first || rest.some((limits) => limits !== first)) return null
+	return limitChips(activeKeys.value[0].limits)
+})
+
 const usd = (value: number): string =>
 	value.toLocaleString(undefined, {
 		style: 'currency',
@@ -152,7 +156,6 @@ const usd = (value: number): string =>
 		maximumFractionDigits: 2,
 	})
 
-// ── Create ──
 const createOpen = ref(false)
 const newLabel = ref('')
 const newGeography = ref('')
@@ -197,12 +200,9 @@ const create = async (): Promise<void> => {
 	}
 }
 
-// ── Caps: every live key's in one dialog, saved in one call ──
 const capsOpen = ref(false)
 const capValues = ref<Record<string, string>>({})
 const capsError = ref('')
-// What the month would have spoken for with these caps, as Grove checks it: each live key's
-// cap or what it spent this month, whichever is more, plus what revoked keys spent.
 const committedTotal = computed(() =>
 	apiKeys.value.reduce(
 		(sum, key) =>
@@ -213,13 +213,11 @@ const committedTotal = computed(() =>
 		0,
 	),
 )
-// Grove checks only a raise, so a team past a lowered limit may still save lowers.
 const capsOverLimit = computed(
 	() =>
 		committedTotal.value > (spend.value?.spend_limit ?? 0) &&
 		committedTotal.value > (spend.value?.committed ?? 0),
 )
-// A cap is whole US dollars, 0 included; Central refuses anything else.
 const isWholeCap = (value: string): boolean =>
 	Number.isInteger(Number(value)) && Number(value) >= 0
 const capsInvalid = computed(() =>
@@ -249,9 +247,11 @@ const saveCaps = async (): Promise<void> => {
 	}
 }
 
-// ── How to call: a geography's gateway and what a key there starts with ──
 const helpOpen = ref(false)
-const helpGeography = ref('')
+const helpGeography = computed({
+	get: () => modelsGeography.value,
+	set: (name: string) => loadModels(name).catch(reportError),
+})
 const helpGatewayUrl = computed(
 	() =>
 		geographies.value.find((g) => g.name === helpGeography.value)?.endpoint ??
@@ -259,23 +259,16 @@ const helpGatewayUrl = computed(
 )
 
 const openHelp = (): void => {
-	helpGeography.value ||=
-		mintable.value.find((g) => g.is_default)?.name ??
-		mintable.value[0]?.name ??
-		''
+	if (!mintable.value.some((g) => g.name === helpGeography.value))
+		helpGeography.value =
+			mintable.value.find((g) => g.is_default)?.name ??
+			mintable.value[0]?.name ??
+			''
 	helpOpen.value = true
 }
 
-watch(helpGeography, async (name) => {
-	if (!name) return
-	try {
-		await loadModels(name)
-	} catch (e) {
-		reportError(e)
-	}
-})
+defineExpose({ openCreate, openHelp, atKeyLimit })
 
-// ── Revoke ──
 const revokeTarget = ref<AIApiKey | null>(null)
 const revokeError = ref('')
 
@@ -292,217 +285,226 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 </script>
 
 <template>
-	<div class="min-h-0 flex-1 overflow-y-auto">
-		<div class="mx-auto w-full max-w-3xl px-6 pb-8 pt-5">
-			<div class="flex items-start justify-between gap-4">
-				<p class="max-w-prose text-p-sm text-ink-gray-5">
-					Keys for use in your own apps. A key's secret is shown once, when it
-					is created. Each key works in one geography and has its own rate
-					limits<template v-if="prepaid">
-						and monthly cap: what it may spend each month, refused once reached
-						until the next</template
-					>.
-				</p>
-
-				<div class="flex shrink-0 items-center gap-2">
-					<Button
-						label="How to call"
-						icon-left="lucide-circle-help"
-						@click="openHelp"
-					/>
-					<Tooltip
-						v-if="canManage"
-						:text="
-							atKeyLimit
-								? `Your plan allows ${spend?.max_keys} live keys. Revoke one to create another.`
-								: ''
-						"
-					>
-						<Button
-							class="shrink-0"
-							label="Create key"
-							icon-left="lucide-plus"
-							:disabled="atKeyLimit"
-							@click="openCreate"
-						/>
-					</Tooltip>
-				</div>
-			</div>
-			<Alert
-				v-if="spend?.suspended"
-				class="mt-4"
-				theme="red"
-				title="Keys are paused"
-				description="An invoice is unpaid. Every key is refused until it is settled."
-			/>
-			<div v-if="prepaid" class="mt-4 flex items-center justify-between gap-4">
-				<p class="text-p-xs text-ink-gray-5" aria-live="polite">
-					Caps and this month's spend take up
-					{{ usd(spend?.committed ?? 0) }}
-					of your plan's
-					{{ usd(spend?.spend_limit ?? 0) }}
-					a month, as of {{ asOf }} · {{ keyCountLabel }}.
-				</p>
+	<section>
+		<Teleport v-if="active" defer to="#ai-tab-controls">
+			<div class="flex items-center gap-3">
+				<span v-if="apiKeys.length" class="text-sm text-ink-gray-5">
+					{{ keyCountTitle }}
+					live keys
+				</span>
 				<Button
-					v-if="canManage && activeKeys.length"
-					class="shrink-0"
-					label="Set monthly caps"
+					v-if="prepaid && canManage && activeKeys.length"
+					label="Set caps"
 					icon-left="lucide-wallet"
 					@click="openCaps"
 				/>
 			</div>
+		</Teleport>
 
-			<div
-				v-if="apiKeysLoading && !apiKeys.length"
-				class="mt-3 flex justify-center py-16"
-			>
-				<span class="text-p-sm text-ink-gray-5">Loading…</span>
-			</div>
+		<Alert
+			v-if="spend?.suspended"
+			class="mb-4"
+			theme="red"
+			title="Keys are paused"
+			description="An invoice is unpaid. Every key is refused until it is settled."
+		/>
 
-			<EmptyState
-				v-else-if="apiKeysError && !apiKeys.length"
-				class="mt-3"
-				icon="lucide-cloud-off"
-				title="Keys couldn't load"
-				:description="getErrorMessage(apiKeysError, 'Try again in a moment.')"
-			>
-				<template #action>
-					<Button label="Retry" @click="loadApiKeys" />
-				</template>
-			</EmptyState>
+		<LoadingText v-if="apiKeysLoading && !apiKeys.length" :lines="3" />
 
-			<div
-				v-else-if="apiKeys.length"
-				class="mt-3 divide-y divide-outline-gray-1 border-t border-outline-gray-1"
-			>
-				<div
-					v-for="key in pagedKeys"
-					:key="key.name"
-					class="flex items-center gap-3 py-2.5"
-				>
-					<span
-						class="grid size-8 shrink-0 place-items-center rounded-6 bg-surface-gray-2 text-ink-gray-6"
-					>
-						<lucide-key-round class="size-4" />
-					</span>
+		<div
+			v-else-if="apiKeysError && !apiKeys.length"
+			class="flex items-center justify-between gap-3 rounded-5 border border-outline-gray-1 px-4 py-3"
+		>
+			<p class="text-p-sm text-ink-gray-6">
+				{{ getErrorMessage(apiKeysError, "Couldn't load your keys.") }}
+			</p>
+			<Button label="Retry" @click="loadApiKeys" />
+		</div>
 
-					<div class="min-w-0 flex-1">
-						<div class="flex flex-wrap items-center gap-2">
-							<span class="truncate text-sm-medium text-ink-gray-9">
-								{{ key.title }}
-							</span>
-							<Badge
-								:theme="key.status === 'active' ? 'green' : 'gray'"
-								size="sm"
-								:label="key.status === 'active' ? 'Active' : 'Revoked'"
-							/>
-							<Tooltip :text="key.gateway_url">
-								<Badge
-									size="sm"
-									theme="blue"
-									:label="geographyLabel(key.geography)"
-								/>
-							</Tooltip>
-						</div>
-						<div
-							class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-p-sm text-ink-gray-5"
-						>
-							<span>{{ key.masked }}</span>
-							<template v-if="key.status === 'active'">
-								<template
-									v-for="chip in limitChips(key.limits)"
-									:key="chip.key"
-								>
-									<span aria-hidden="true">·</span>
-									<Tooltip :text="chip.text">
-										<span class="tabular-nums">{{ chip.label }}</span>
-									</Tooltip>
-								</template>
-							</template>
-						</div>
-					</div>
-
-					<template v-if="prepaid && key.status === 'active'">
-						<Tooltip
-							v-if="!key.cap"
-							text="Refused until it gets a monthly cap."
-						>
-							<Badge theme="orange" label="No cap yet" />
-						</Tooltip>
-						<Tooltip
-							v-else
-							:text="
-								isCapReached(key)
-									? 'Cap reached: refused until the month ends or the cap is raised.'
-									: `Spent this month of its ${usd(key.cap)} monthly cap.`
-							"
-						>
-							<div class="w-32 shrink-0 text-right">
-								<div class="text-xs tabular-nums text-ink-gray-7">
-									<span class="font-medium text-ink-gray-9"
-										>{{ usd(key.month_spent) }}</span
-									>
-									/ {{ usd(key.cap) }}
-								</div>
-								<div
-									class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-gray-2"
-									role="meter"
-									:aria-valuenow="key.month_spent"
-									:aria-valuemax="key.cap"
-									:aria-label="`${key.title}: spent this month of its cap`"
-								>
-									<span
-										class="block h-full rounded-full"
-										:class="capBarClass(key)"
-										:style="{ width: `${capPercent(key)}%` }"
-									/>
-								</div>
-							</div>
-						</Tooltip>
-					</template>
-
-					<RowActionsMenu
-						v-if="canManage && key.status === 'active'"
-						:options="rowActions(key)"
-						label="API key actions"
-						:busy="busyKey === key.name"
-					/>
-					<span v-else class="w-6 shrink-0" />
-				</div>
-			</div>
-
-			<EmptyState
-				v-else
-				class="mt-3"
-				icon="lucide-key-round"
-				title="No API keys yet"
-				description="Create a key to call our models from your own apps."
-			>
-				<template v-if="canManage" #action>
-					<Button
-						label="Create key"
-						icon-left="lucide-plus"
-						@click="openCreate"
-					/>
-				</template>
-			</EmptyState>
-
-			<ListViewPagination
-				v-if="pageCount > 1"
-				:page="page"
-				:page-count="pageCount"
-				:page-size="PAGE_SIZE"
-				:can-previous="page > 1"
-				:can-next="page < pageCount"
-				:show-page-size="false"
-				:count-text="`${apiKeys.length} keys`"
-				@first="page = 1"
-				@previous="page--"
-				@next="page++"
-				@last="page = pageCount"
+		<div
+			v-else-if="!apiKeys.length"
+			class="flex flex-wrap items-center justify-between gap-3 rounded-5 border border-dashed border-outline-gray-2 px-4 py-3"
+		>
+			<p class="text-p-sm text-ink-gray-6">
+				No keys yet. Create one to call the models from your own apps.
+			</p>
+			<Button
+				v-if="canManage"
+				label="Create key"
+				icon-left="lucide-plus"
+				@click="openCreate"
 			/>
 		</div>
-	</div>
+
+		<table v-else class="w-full border-separate border-spacing-0 text-left">
+			<thead>
+				<tr class="text-sm text-ink-gray-5">
+					<th scope="col" class="pb-2 font-normal">Name</th>
+					<th
+						v-if="!sharedLimits"
+						scope="col"
+						class="hidden pb-2 font-normal lg:table-cell"
+					>
+						Rate limits
+					</th>
+					<th scope="col" class="hidden pb-2 font-normal md:table-cell">
+						Created
+					</th>
+					<th v-if="prepaid" scope="col" class="w-36 pb-2 font-normal">
+						This month
+					</th>
+					<th scope="col" class="w-10 pb-2">
+						<span class="sr-only">Actions</span>
+					</th>
+				</tr>
+			</thead>
+
+			<tbody>
+				<tr
+					v-for="key in pagedKeys"
+					:key="key.name"
+					:class="key.status === 'revoked' && 'text-ink-gray-5'"
+				>
+					<td class="border-t border-outline-gray-1 py-2.5 pr-3">
+						<span class="flex min-w-0 items-center gap-2">
+							<span
+								class="truncate text-base-medium"
+								:class="key.status === 'active' && 'text-ink-gray-9'"
+							>
+								{{ key.title }}
+							</span>
+							<Badge v-if="key.status === 'revoked'" label="Revoked" />
+						</span>
+						<span
+							class="mt-0.5 flex items-center gap-1.5 font-mono text-xs text-ink-gray-5"
+						>
+							{{ key.masked }}
+							<template v-if="mintable.length > 1">
+								<span aria-hidden="true">·</span>
+								<Tooltip :text="key.gateway_url">
+									<span class="font-sans"
+										>{{ geographyLabel(key.geography) }}</span
+									>
+								</Tooltip>
+							</template>
+						</span>
+					</td>
+
+					<td
+						v-if="!sharedLimits"
+						class="hidden border-t border-outline-gray-1 py-2.5 pr-3 text-sm lg:table-cell"
+					>
+						<span
+							v-if="key.status === 'active'"
+							class="flex flex-wrap items-center gap-x-2 text-ink-gray-6"
+						>
+							<template
+								v-for="(chip, index) in limitChips(key.limits)"
+								:key="chip.key"
+							>
+								<span v-if="index" aria-hidden="true">·</span>
+								<Tooltip :text="chip.text">
+									<span class="tabular-nums">{{ chip.label }}</span>
+								</Tooltip>
+							</template>
+						</span>
+					</td>
+
+					<td
+						class="hidden border-t border-outline-gray-1 py-2.5 pr-3 text-sm md:table-cell"
+						:class="key.status === 'active' && 'text-ink-gray-6'"
+					>
+						<Tooltip :text="formatDateTime(key.creation)">
+							<span>{{ timeAgo(key.creation) }}</span>
+						</Tooltip>
+					</td>
+
+					<td v-if="prepaid" class="border-t border-outline-gray-1 py-2.5 pr-3">
+						<template v-if="key.status === 'active'">
+							<Tooltip
+								v-if="!key.cap"
+								text="Refused until it gets a monthly cap."
+							>
+								<Badge theme="orange" label="No cap yet" />
+							</Tooltip>
+							<Tooltip
+								v-else
+								:text="
+									isCapReached(key)
+										? 'Cap reached: refused until the month ends or the cap is raised.'
+										: `Spent this month of its ${usd(key.cap)} monthly cap.`
+								"
+							>
+								<div>
+									<div class="text-sm tabular-nums text-ink-gray-5">
+										<span class="text-ink-gray-9"
+											>{{ usd(key.month_spent) }}</span
+										>
+										/ {{ usd(key.cap) }}
+									</div>
+									<div
+										class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-gray-2"
+										role="meter"
+										:aria-valuenow="key.month_spent"
+										aria-valuemin="0"
+										:aria-valuemax="key.cap"
+										:aria-label="`${key.title}: spent this month of its cap`"
+									>
+										<span
+											class="block h-full rounded-full transition-[width] duration-300 ease-out"
+											:class="capBarClass(key)"
+											:style="{ width: `${capPercent(key)}%` }"
+										/>
+									</div>
+								</div>
+							</Tooltip>
+						</template>
+						<span v-else class="text-sm tabular-nums">
+							{{ usd(key.month_spent) }}
+						</span>
+					</td>
+
+					<td class="border-t border-outline-gray-1 py-2.5 text-right">
+						<RowActionsMenu
+							v-if="canManage && key.status === 'active'"
+							:options="rowActions(key)"
+							:label="`Actions for ${key.title}`"
+							:busy="busyKey === key.name"
+						/>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+
+		<p
+			v-if="sharedLimits && apiKeys.length"
+			class="mt-3 flex flex-wrap items-center gap-x-2 text-p-xs text-ink-gray-5"
+		>
+			Every key is limited to
+			<template v-for="(chip, index) in sharedLimits" :key="chip.key">
+				<span v-if="index" aria-hidden="true">·</span>
+				<Tooltip :text="chip.text">
+					<span class="tabular-nums text-ink-gray-7">{{ chip.label }}</span>
+				</Tooltip>
+			</template>
+		</p>
+
+		<ListViewPagination
+			v-if="pageCount > 1"
+			class="mt-3"
+			:page="page"
+			:page-count="pageCount"
+			:page-size="PAGE_SIZE"
+			:can-previous="page > 1"
+			:can-next="page < pageCount"
+			:show-page-size="false"
+			:count-text="`${apiKeys.length} keys`"
+			@first="page = 1"
+			@previous="page--"
+			@next="page++"
+			@last="page = pageCount"
+		/>
+	</section>
 
 	<Dialog v-model="helpOpen" title="How to call the models" size="2xl">
 		<template #default>
@@ -528,7 +530,7 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 				<div v-if="modelsLoading" class="flex justify-center py-8">
 					<Spinner class="size-5 text-ink-gray-5" />
 				</div>
-				<AIQuickstart v-else :gateway-url="helpGatewayUrl" :models="models" />
+				<Quickstart v-else :gateway-url="helpGatewayUrl" :models="models" />
 			</div>
 		</template>
 	</Dialog>

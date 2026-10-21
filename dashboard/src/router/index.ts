@@ -89,7 +89,7 @@ const routes = [
 			{
 				path: 'llm',
 				name: 'LLM',
-				component: () => import('@/pages/addons/AIInference.vue'),
+				component: () => import('@/pages/services/AIInference.vue'),
 				meta: { title: 'LLM', feature: ['addons', 'llm'] },
 			},
 			{
