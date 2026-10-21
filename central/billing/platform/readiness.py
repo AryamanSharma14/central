@@ -352,7 +352,7 @@ def check_storage_usage_is_recorded() -> list[Violation]:
 			subject=s.name,
 			expected=today.day - 1,
 			actual=frappe.utils.cint(read_through.get(s.service_subject)),
-			detail="Storage usage has not been read for a day or more, so those days bill nothing.",
+			detail="Storage usage has not been read for a day or more. The next reading bills the missed days at its level.",
 		)
 		for s in subjects
 		if frappe.utils.cint(read_through.get(s.service_subject)) < today.day - 1

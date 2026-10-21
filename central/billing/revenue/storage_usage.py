@@ -1,28 +1,22 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
-"""Object storage is billed by the GB-month, from a daily reading of each team's buckets.
-
-One storage subscription bills every bucket a team holds in a region. Each day adds
-that day's share of the month (GB held / days in the month) to the month's usage, keyed
-by the day so a second run the same day adds nothing. At month end the usage is the
-average GB held, which the invoice prices at the current per-GB rate. GB here is the
-GiB Cargo counts and caps in.
-"""
 
 import calendar
+import datetime
 from collections import defaultdict
 
 import frappe
 
 from central.billing.doctype.billing_profile.billing_profile import get_team_currency
-from central.billing.revenue.metering import ingest_rollup
+from central.billing.revenue.metering import ingest_rollup, live_rollup
 
+# Cargo counts and caps buckets in GiB; billing names the unit GB.
 BYTES_PER_GIB = 1024**3
 RESOURCE_TYPE = "Storage"
 
 
-def record_storage_usage(today=None) -> dict:
-	"""Daily: add today's share of the month to every storage subscription's usage."""
+def record_storage_usage(today: datetime.date | str | None = None) -> dict:
+	"""Daily: bill every storage subscription by the GB-day for the days since its last reading."""
 	today = frappe.utils.getdate(today)
 	recorded, failed = 0, 0
 	for subscription, buckets in _buckets_by_subscription().items():
@@ -31,37 +25,53 @@ def record_storage_usage(today=None) -> dict:
 			record_subscription_usage(subscription, buckets, today)
 			recorded += 1
 		except Exception:
-			# One unreachable region must not stop the others; the readiness audit flags the gap.
+			# One unreachable region must not stop the others; the next reading bills the missed days.
 			frappe.db.rollback(save_point="storage_usage")
 			frappe.log_error(title=f"Storage usage for {subscription} was not recorded")
 			failed += 1
 	return {"recorded": recorded, "failed": failed}
 
 
-def record_subscription_usage(subscription: str, buckets: list, today) -> str | None:
-	"""Read what the subscription's buckets hold and add today's share to its month."""
-	gib = sum(frappe.utils.flt(bucket.get_usage().get("used_bytes")) for bucket in buckets) / BYTES_PER_GIB
+def record_subscription_usage(subscription: str, buckets: list, today: datetime.date) -> str | None:
+	"""Add the GB the buckets hold, as a share of the month, for each day not yet billed up to today.
+
+	A day with no reading is billed at the next reading's level, so a missed run loses no usage."""
 	sub = frappe.db.get_value(
-		"Subscription", subscription, ["team", "cluster", "service_subject"], as_dict=True
+		"Subscription", subscription, ["team", "cluster", "service_subject", "start_date"], as_dict=True
 	)
-	days = calendar.monthrange(today.year, today.month)[1]
-	start = today.replace(day=1)
+	month_start = today.replace(day=1)
+	key = f"storage::{sub.service_subject}::{month_start:%Y-%m}"
+	new_days = today.day - _days_billed(key, sub.start_date, month_start)
+	if new_days <= 0:
+		return key
+
+	gib = sum(frappe.utils.flt(bucket.get_usage().get("used_bytes")) for bucket in buckets) / BYTES_PER_GIB
+	days_in_month = calendar.monthrange(today.year, today.month)[1]
 	return ingest_rollup(
 		{
-			"idempotency_key": f"storage::{sub.service_subject}::{start:%Y-%m}",
+			"idempotency_key": key,
 			"resource_id": sub.service_subject,
 			"resource_type": RESOURCE_TYPE,
 			"meter_type": "Gauge",
 			"team": sub.team,
 			"cluster": sub.cluster,
 			"currency": get_team_currency(sub.team),
-			"period_start": start,
-			"period_end": today.replace(day=days),
-			"quantity": gib / days,
+			"period_start": month_start,
+			"period_end": today.replace(day=days_in_month),
+			"quantity": gib * new_days / days_in_month,
 			"unit": "GB",
 			"sequence": today.day,
 		}
 	)
+
+
+def _days_billed(key: str, start_date, month_start: datetime.date) -> int:
+	"""The last day of the month already billed: the latest reading, or the day before the subscription began."""
+	rollup = frappe.db.get_value("Usage Rollup", {"idempotency_key": key}, "name")
+	if rollup:
+		return frappe.utils.cint(frappe.db.get_value("Usage Rollup", live_rollup(rollup), "sequence"))
+	started = frappe.utils.getdate(start_date) if start_date else month_start
+	return started.day - 1 if started >= month_start else 0
 
 
 def _buckets_by_subscription() -> dict[str, list]:

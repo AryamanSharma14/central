@@ -33,7 +33,9 @@ class TestStorageUsage(IntegrationTestCase):
 			includes=STORAGE_PLAN,
 			rates=[{"currency": "INR", "cluster": CLUSTER, "rate": 2}],
 		)
-		self.subscription = provision_service_subscription(TEAM, PLAN, cluster=CLUSTER)["subscription"]
+		self.subscription = provision_service_subscription(
+			TEAM, PLAN, cluster=CLUSTER, start_date="2026-06-01"
+		)["subscription"]
 		bucket = frappe.get_doc(
 			{
 				"doctype": "Team Service",
@@ -72,6 +74,16 @@ class TestStorageUsage(IntegrationTestCase):
 		self._read("2026-06-01", 30)
 		self._read("2026-06-01", 30)
 		self.assertAlmostEqual(self._rollup()[0].quantity, 1.0)
+
+	def test_a_missed_day_is_billed_at_the_next_reading(self):
+		self._read("2026-06-01", 30)
+		self._read("2026-06-03", 60)  # 2 June was never read
+		self.assertAlmostEqual(self._rollup()[0].quantity, 5.0)  # (30 + 60 + 60) / 30 days
+
+	def test_a_subscription_started_mid_month_bills_from_its_start(self):
+		frappe.db.set_value("Subscription", self.subscription, "start_date", "2026-06-16")
+		self._read("2026-06-16", 30)
+		self.assertAlmostEqual(self._rollup()[0].quantity, 1.0)  # one day, not sixteen
 
 	def test_the_invoice_bills_the_gb_month_at_the_current_rate(self):
 		for day in range(1, 31):
