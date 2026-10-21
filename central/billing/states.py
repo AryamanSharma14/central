@@ -48,7 +48,8 @@ INVOICE = StateMachine(
 	"Invoice",
 	"status",
 	{
-		"Draft": {"Open", "Paid", "Cancelled"},  # opened, or settled outright by credits
+		# Opened, settled outright by credits, or waived for an internal team.
+		"Draft": {"Open", "Paid", "Cancelled", "Waived"},
 		"Open": {"Paid", "Overdue", "Cancelled", "Waived"},
 		"Overdue": {"Paid", "Cancelled", "Waived"},
 		"Paid": {"Cancelled"},  # only by cancel-and-refund, which issues a credit note

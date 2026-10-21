@@ -15,6 +15,7 @@ from frappe import _
 from central.billing import settings
 from central.billing.revenue import credits
 from central.billing.revenue.invoicing.generate import generate_team_invoice
+from central.billing.revenue.tax import is_internal_team
 from central.billing.states import transition
 
 
@@ -49,6 +50,8 @@ def open_and_collect(invoice: str, collect: bool = True) -> dict:
 	# A billable draft waits until it can become a correct statutory invoice. Whatever
 	# clears the hold releases it; the monthly run picks up anything a release missed.
 	if doc.invoice_type == "Billable":
+		if is_internal_team(doc.team):
+			return _waive_internal(doc)
 		hold = _hold_reason(doc)
 		if hold:
 			_mark_held(doc, hold)
@@ -127,6 +130,16 @@ def open_and_collect(invoice: str, collect: bool = True) -> dict:
 		"status": "Open",
 		"charge": charge,
 	}
+
+
+def _waive_internal(doc) -> dict:
+	"""Waive an internal team's invoice in full: rated for the record, never collected."""
+	_retax(doc)
+	doc.credit_applied = 0
+	doc.expected_collection = 0
+	transition(doc, "Waived", reason="internal team", actor="scheduler", amount=doc.total)
+	doc.save(ignore_permissions=True)
+	return {"invoice": doc.name, "claimed": True, "status": "Waived", "waived": doc.total}
 
 
 # Hold Reason values, and the keys callers of `open_and_collect` see.
