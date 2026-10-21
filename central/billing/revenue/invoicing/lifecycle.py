@@ -315,6 +315,31 @@ def waive_for_internal_team(team: str) -> list[str]:
 	return waived
 
 
+def settle_internal_teams() -> list[str]:
+	"""Waive every internal team's unpaid invoices, so no collection run reaches them."""
+	internal = frappe.get_all("Tax Profile", filters={"is_internal": 1}, pluck="team")
+	if not internal:
+		return []
+	teams = frappe.get_all(
+		"Invoice",
+		filters={"team": ["in", internal], "status": ["in", ["Open", "Overdue"]]},
+		pluck="team",
+		distinct=True,
+	)
+	return [name for team in teams for name in _waive_unless_wallet_drifted(team)]
+
+
+def _waive_unless_wallet_drifted(team: str) -> list[str]:
+	"""A wallet short of its ledger refuses the credit back; leave that team to an operator."""
+	frappe.db.savepoint("waive_internal_team")
+	try:
+		return waive_for_internal_team(team)
+	except credits.WalletDrift:
+		frappe.db.rollback(save_point="waive_internal_team")
+		frappe.log_error(title=f"Unpaid invoices of internal team {team} were not waived")
+		return []
+
+
 def give_back_wallet(doc) -> None:
 	"""Return what the invoice drew from the wallet, each part as the credit it was."""
 	paid_in = frappe.utils.flt(doc.advance_applied)

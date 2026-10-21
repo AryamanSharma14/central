@@ -273,6 +273,9 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 
 def run_dunning(now=None) -> list[dict]:
 	"""Daily scheduler: dun every unpaid, due billable invoice. An internal team is never dunned."""
+	from central.billing.revenue.invoicing.lifecycle import settle_internal_teams
+
+	settle_internal_teams()
 	filters = [
 		["invoice_type", "=", "Billable"],
 		["status", "in", ["Open", "Overdue"]],

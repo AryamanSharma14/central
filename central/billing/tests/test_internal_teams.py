@@ -97,6 +97,17 @@ class TestInternalTeams(IntegrationTestCase):
 		self.assertNotIn(open_invoice, [r.get("invoice") for r in dunning.run_dunning()])
 		self.assertEqual(collection.collect_invoice(open_invoice)["reason"], "internal_team")
 
+	def test_dunning_settles_internal_teams_first(self):
+		from central.billing.revenue import dunning
+
+		open_invoice = self._open_invoice()
+		_mark_internal()
+		frappe.db.set_value("Invoice", open_invoice, "status", "Overdue")  # missed by the mark-time waive
+
+		dunning.run_dunning()
+
+		self.assertEqual(frappe.db.get_value("Invoice", open_invoice, "status"), "Waived")
+
 	def test_payment_claimed_before_the_lock_is_not_waived(self):
 		open_invoice = self._open_invoice()
 		get_doc, raced = frappe.get_doc, []

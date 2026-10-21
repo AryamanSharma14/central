@@ -19,7 +19,7 @@ def mark_staging_teams_internal():
 	"""On a site that does not create staging trials, a staging-trial team is one of ours."""
 	from central.billing import settings
 	from central.billing.payments.provisioning import ensure_tax_profile
-	from central.billing.revenue.invoicing.lifecycle import waive_for_internal_team
+	from central.billing.revenue.invoicing.lifecycle import settle_internal_teams
 
 	if settings.provision_teams_as_trial():
 		return
@@ -31,20 +31,8 @@ def mark_staging_teams_internal():
 			{"is_internal": 1, "internal_reason": f"Staging-trial team, marked by the {AUDIT}."},
 		)
 		frappe.db.set_value("Team", team, "is_staging_trial", 0)
-		# set_value skips the Tax Profile hook that waives, so waive here, before any billing run.
-		_waive_unless_wallet_drifted(team, waive_for_internal_team)
-
-
-def _waive_unless_wallet_drifted(team: str, waive) -> None:
-	"""A wallet holding less than its ledger refuses the credit back; leave that team to an operator."""
-	from central.billing.revenue.credits import WalletDrift
-
-	frappe.db.savepoint("waive_internal_team")
-	try:
-		waive(team)
-	except WalletDrift:
-		frappe.db.rollback(save_point="waive_internal_team")
-		frappe.log_error(title=f"Unpaid invoices of internal team {team} were not waived")
+	# set_value skips the Tax Profile hook that waives, so waive here, before any billing run.
+	settle_internal_teams()
 
 
 def match_currency_to_country():
