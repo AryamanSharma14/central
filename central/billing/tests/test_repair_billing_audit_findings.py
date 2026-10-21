@@ -67,3 +67,9 @@ class TestRepairBillingAuditFindings(IntegrationTestCase):
 
 		credits.apply_credit(TEAM, 50, "INR", reference_type="Invoice", reference_name="INV-1")
 		self.assertEqual(credits.get_balance(TEAM, "INR")["balance"], 2550)
+
+	def test_team_holding_credit_in_its_currency_is_left_alone(self):
+		frappe.db.set_value("Billing Profile", TEAM, "currency", "USD")
+		credits.grant_promotional_credits(TEAM, 10, "USD")
+		repair.match_currency_to_country()
+		self.assertEqual(frappe.db.get_value("Billing Profile", TEAM, "currency"), "USD")

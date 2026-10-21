@@ -32,15 +32,19 @@ def mark_staging_teams_internal():
 
 
 def match_currency_to_country():
-	"""Bill a never-invoiced team in its country's currency."""
+	"""Bill a team in its country's currency, if no invoice or credit is held in the current one."""
 	from central.billing.api.dashboard._shared import currency_for_country
 
 	invoiced = set(frappe.get_all("Invoice", pluck="team", distinct=True))
+	credited = set(
+		frappe.get_all("Credit Ledger Entry", fields=["team", "currency"], distinct=True, as_list=True)
+	)
 	for profile in frappe.get_all(
 		"Billing Profile", filters={"country": ["is", "set"]}, fields=["name", "team", "country", "currency"]
 	):
 		wanted = currency_for_country(profile.country)
-		if profile.currency != wanted and profile.team not in invoiced:
+		has_money = profile.team in invoiced or (profile.team, profile.currency) in credited
+		if profile.currency != wanted and not has_money:
 			frappe.db.set_value("Billing Profile", profile.name, "currency", wanted)
 
 
