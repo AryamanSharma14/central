@@ -312,3 +312,13 @@ class TestPromotionalCredit(SyncTestCase):
 		frappe.clear_document_cache("Billing Settings", "Billing Settings")
 		self.assertTrue(erpnext_sync.sync_invoice(inv)["retry_scheduled"])
 		self.assertEqual(self.remote.posts("Journal Entry"), [])
+
+	def test_an_invoice_promotional_credit_pays_in_full_is_not_synced(self):
+		billing_team(TEAM, gstin=GSTIN)
+		inv = self._invoice(subtotal=1000, tax=180, credit=1180)
+
+		out = erpnext_sync.sync_invoice(inv)
+
+		self.assertEqual(out, {"skipped": "free_credit"})
+		self.assertEqual(self.remote.posts("Sales Invoice"), [])
+		self.assertEqual(frappe.db.get_value("Invoice", inv, "erpnext_sync_status"), "Not Required")

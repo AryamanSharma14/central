@@ -46,6 +46,9 @@ def sync_invoice(invoice: str) -> dict:
 		return {"skipped": "not_billable"}  # cost_report is not a statutory sale
 	if inv.status != "Paid":
 		return {"skipped": "not_paid"}
+	if is_paid_by_free_credit(inv):
+		frappe.db.set_value("Invoice", invoice, "erpnext_sync_status", "Not Required")
+		return {"skipped": "free_credit"}
 	if inv.erpnext_invoice and _settled_there(inv):
 		return {"skipped": "already_synced"}
 
@@ -87,6 +90,12 @@ def _settled_there(inv) -> bool:
 	card_done = inv.payment_record_id or not _card_attempt(inv)
 	promotional_done = inv.promotional_record_id or not _promotional_part(inv)
 	return bool(card_done and promotional_done)
+
+
+def is_paid_by_free_credit(inv) -> bool:
+	"""Whether promotional credit paid the whole invoice, so nothing was sold to record."""
+	collectable = frappe.utils.flt(inv.total) - frappe.utils.flt(inv.tds_amount)
+	return collectable > 0 and not _card_attempt(inv) and _promotional_part(inv) >= collectable - 0.01
 
 
 def _promotional_part(inv) -> float:
