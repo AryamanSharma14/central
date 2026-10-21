@@ -81,7 +81,6 @@ def convert_to_paid(team: str, level: str | None = None):
 	target = frappe.get_doc("Trust Tier Level", level)
 	profile = entitlements._profile_for(team)
 	profile.trust_tier_level = target.name
-	profile.trust_tier = target.tier
 	profile.manual_override = 1
 	profile.promoted_at = frappe.utils.now_datetime()
 	profile.promotion_basis = "converted to paid"

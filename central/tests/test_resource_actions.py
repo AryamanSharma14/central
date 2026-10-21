@@ -15,7 +15,7 @@ from central.errors import AtlasConnectionError, AtlasRequestUncertain
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.resource_actions import SERVER_PAGE_SIZE, _process_locked
-from central.resource_actions import get_status, submit_request, trial_server_count, validate_trial
+from central.resource_actions import get_status, server_count, submit_request, validate_trial
 from central.server_models import SiteCreation
 from central.tests.test_sso_keys import reset_signing_key
 from central.tests.utils import central_limit
@@ -409,8 +409,8 @@ class TestResourceActions(IntegrationTestCase):
 
 	def test_the_trial_cap_follows_central_settings(self):
 		with (
-			patch("central.billing.revenue.credits.get_balance", return_value={"balance": 10}),
-			patch("central.resource_actions.trial_server_count", return_value=1),
+			patch("central.billing.revenue.credits.lock_team_wallet", return_value=10),
+			patch("central.resource_actions.server_count", return_value=1),
 			central_limit("trial_servers_per_team", 1),
 			self.assertRaisesRegex(frappe.ValidationError, "at most 1 active or pending servers"),
 		):
@@ -418,7 +418,7 @@ class TestResourceActions(IntegrationTestCase):
 
 	def test_the_trial_cap_counts_with_locking_reads(self):
 		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
-			trial_server_count(self.team.name)
+			server_count(self.team.name)
 
 		self.assertEqual(len(sql.call_args_list), 2)
 		for call in sql.call_args_list:

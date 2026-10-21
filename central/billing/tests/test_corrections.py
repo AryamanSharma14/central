@@ -350,6 +350,36 @@ class TestRefundPart(CorrectionsTestCase):
 		)
 		return inv
 
+	def test_a_wallet_refund_past_the_money_paid_comes_back_as_promotional_credit(self):
+		# 1,000 + 180 GST: 1,000 promotional credit, 180 by card.
+		inv = self._paid_invoice()
+		frappe.db.set_value(
+			"Invoice",
+			inv,
+			{
+				"subtotal": 1000,
+				"output_tax_amount": 180,
+				"total": 1180,
+				"credit_applied": 1000,
+				"advance_applied": 0,
+				"advance_tax_applied": 0,
+				"amount_paid": 180,
+			},
+		)
+		corrections.refund_part(inv, 500, "goodwill")
+		self._run_all(inv)
+
+		refund = self._refund(inv, "Wallet")
+		self.assertEqual(
+			(refund.net_amount, refund.tax_amount, refund.promotional_amount), (152.54, 27.46, 320)
+		)
+		note = next(p for p in self.remote.posts("Sales Invoice") if p.get("is_return"))
+		self.assertEqual([(i["qty"], i["rate"]) for i in note["items"]], [(-1, 152.54)])
+		promotional = frappe.get_doc(
+			"Credit Ledger Entry", {"reference_name": refund.name, "paid_in": 0, "entry_type": "Credit"}
+		)
+		self.assertEqual(promotional.amount, 320)
+
 	def test_a_part_goes_back_to_the_wallet_with_its_gst(self):
 		inv = self._wallet_paid()
 		corrections.refund_part(inv, 1180, "two days of downtime")

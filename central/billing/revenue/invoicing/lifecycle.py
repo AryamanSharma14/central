@@ -15,6 +15,7 @@ from frappe import _
 from central.billing import settings
 from central.billing.revenue import credits
 from central.billing.revenue.invoicing.generate import generate_team_invoice
+from central.billing.revenue.tax import is_internal_team
 from central.billing.states import transition
 
 
@@ -49,6 +50,8 @@ def open_and_collect(invoice: str, collect: bool = True) -> dict:
 	# A billable draft waits until it can become a correct statutory invoice. Whatever
 	# clears the hold releases it; the monthly run picks up anything a release missed.
 	if doc.invoice_type == "Billable":
+		if is_internal_team(doc.team):
+			return _waive_internal(doc)
 		hold = _hold_reason(doc)
 		if hold:
 			_mark_held(doc, hold)
@@ -127,6 +130,16 @@ def open_and_collect(invoice: str, collect: bool = True) -> dict:
 		"status": "Open",
 		"charge": charge,
 	}
+
+
+def _waive_internal(doc) -> dict:
+	"""Waive an internal team's invoice in full: rated for the record, never collected."""
+	_retax(doc)
+	doc.credit_applied = 0
+	doc.expected_collection = 0
+	transition(doc, "Waived", reason="internal team", actor="scheduler", amount=doc.total)
+	doc.save(ignore_permissions=True)
+	return {"invoice": doc.name, "claimed": True, "status": "Waived", "waived": doc.total}
 
 
 # Hold Reason values, and the keys callers of `open_and_collect` see.
@@ -279,6 +292,52 @@ def cancel_invoice(invoice: str, reason: str | None = None) -> str:
 	if reason:
 		doc.add_comment("Info", f"Cancelled: {reason}")
 	return invoice
+
+
+def waive_for_internal_team(team: str) -> list[str]:
+	"""Waive a team's unpaid invoices once it is internal, and give back what they drew from the wallet.
+
+	An invoice with a card or UPI payment under way or taken is left for an operator."""
+	waived = []
+	for name in frappe.get_all(
+		"Invoice", filters={"team": team, "status": ["in", ["Open", "Overdue"]]}, pluck="name"
+	):
+		# Collectors claim a payment under this lock, so check for one only once it is held.
+		doc = frappe.get_doc("Invoice", name, for_update=True)
+		if doc.status not in ("Open", "Overdue") or frappe.db.exists(
+			"Payment Attempt", {"invoice": name, "status": ["in", ["Initiated", "Authorised", "Captured"]]}
+		):
+			continue
+		transition(doc, "Waived", reason="team marked internal", actor=frappe.session.user, amount=doc.total)
+		doc.save(ignore_permissions=True)
+		give_back_wallet(doc)
+		waived.append(name)
+	return waived
+
+
+def settle_internal_teams() -> list[str]:
+	"""Waive every internal team's unpaid invoices, so no collection run reaches them."""
+	internal = frappe.get_all("Tax Profile", filters={"is_internal": 1}, pluck="team")
+	if not internal:
+		return []
+	teams = frappe.get_all(
+		"Invoice",
+		filters={"team": ["in", internal], "status": ["in", ["Open", "Overdue"]]},
+		pluck="team",
+		distinct=True,
+	)
+	return [name for team in teams for name in _waive_unless_wallet_drifted(team)]
+
+
+def _waive_unless_wallet_drifted(team: str) -> list[str]:
+	"""A wallet short of its ledger refuses the credit back; leave that team to an operator."""
+	frappe.db.savepoint("waive_internal_team")
+	try:
+		return waive_for_internal_team(team)
+	except credits.WalletDrift:
+		frappe.db.rollback(save_point="waive_internal_team")
+		frappe.log_error(title=f"Unpaid invoices of internal team {team} were not waived")
+		return []
 
 
 def give_back_wallet(doc) -> None:

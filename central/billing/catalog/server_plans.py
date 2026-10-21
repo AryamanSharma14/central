@@ -14,6 +14,7 @@ from central.billing.catalog.pricing import resolve_component_rate, resolve_rate
 from central.billing.catalog.rate_card import COMPONENT_UNITS
 from central.billing.catalog.trials import trial_plan_names
 from central.billing.doctype.billing_profile.billing_profile import get_team_currency
+from central.billing.revenue.tax import is_internal_team
 
 
 def _allowlist(value) -> set[str] | None:
@@ -60,6 +61,7 @@ def get_server_plans(
 	# provision a composed server without a full billing profile. Resize is the
 	# way off that plan, so it sees the same catalog as a paying team.
 	is_staging_trial = bool(frappe.db.get_value("Team", team, "is_staging_trial"))
+	is_capped = not is_internal_team(team)
 	resizing = bool(frappe.utils.cint(for_resize))
 	if is_staging_trial and not resizing:
 		trial_plans = trial_plan_names()
@@ -74,7 +76,7 @@ def get_server_plans(
 		"max_spend": spend_cap,
 		"current_spend": current_spend,
 		"available": available,
-		"spend_limit_enforced": not is_staging_trial,
+		"spend_limit_enforced": is_capped,
 		"capacity": {"gated": False, "available": True, "unmeasured": True, "largest_vm": None},
 	}
 	# A "design your own" config needs the same three things the slider does: the
@@ -124,8 +126,8 @@ def get_server_plans(
 		rate = resolve_rate(rates_by_plan.get(p.name, []), currency, cluster)
 		if rate is None:
 			continue  # not priced for this currency/cluster → not available here
-		# Trials aren't tier-gated — spend is bounded by credits + the server cap, not headroom.
-		if not is_staging_trial and frappe.utils.flt(rate) > available:
+		# Every team but an internal one is held to its trust-tier headroom, trials included.
+		if is_capped and frappe.utils.flt(rate) > available:
 			continue  # would push the team past its remaining trust-tier headroom
 		plans.append(_plan_row(p, currency, cluster, rate, includes_by_plan.get(p.name, [])))
 

@@ -48,7 +48,8 @@ INVOICE = StateMachine(
 	"Invoice",
 	"status",
 	{
-		"Draft": {"Open", "Paid", "Cancelled"},  # opened, or settled outright by credits
+		# Opened, settled outright by credits, or waived for an internal team.
+		"Draft": {"Open", "Paid", "Cancelled", "Waived"},
 		"Open": {"Paid", "Overdue", "Cancelled", "Waived"},
 		"Overdue": {"Paid", "Cancelled", "Waived"},
 		"Paid": {"Cancelled"},  # only by cancel-and-refund, which issues a credit note
@@ -233,6 +234,11 @@ def _append_event(doc, from_state, to_state, reason, actor, correlation, amount,
 			"correlation": correlation or doc.name,
 		}
 	).insert(ignore_permissions=True)
+
+
+def record_event(doc, event_type: str, from_state=None, to_state=None, reason=None, amount=None) -> None:
+	"""Log a billing change that is not a status move, such as a tier change."""
+	_append_event(doc, from_state, to_state, reason, None, None, amount, event_type)
 
 
 def _default_actor() -> str:

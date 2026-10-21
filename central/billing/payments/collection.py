@@ -88,7 +88,11 @@ def collect_invoice(invoice: str) -> dict:
 	prevent a double charge, and the per-invoice failed-set guarantees each method
 	is tried at most once.
 	"""
+	from central.billing.revenue.tax import is_internal_team
+
 	inv = frappe.get_doc("Invoice", invoice)
+	if is_internal_team(inv.team):
+		return {"collected": False, "reason": "internal_team"}
 
 	while True:
 		in_flight = frappe.get_all(

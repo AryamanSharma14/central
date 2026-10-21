@@ -18,6 +18,7 @@
   "partial",
   "net_amount",
   "tax_amount",
+  "promotional_amount",
   "section_break_result",
   "status",
   "attempts",
@@ -178,11 +179,19 @@
    "fieldname": "reason",
    "fieldtype": "Small Text",
    "label": "Reason"
+  },
+  {
+   "fieldname": "promotional_amount",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Promotional Part",
+   "read_only": 1,
+   "description": "Given back as promotional credit. It was never in the accounting system, so it has no credit note."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-10 10:27:25.616292",
+ "modified": "2026-10-21 15:59:02.225269",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Refund",
