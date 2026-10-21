@@ -278,14 +278,14 @@ def team_service_has_permission(doc, user: str | None = None, ptype: str | None 
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep -- same surface as frappe.realtime.has_permission
-def realtime_has_permission(doctype: str, name: str, ptype: str = "read") -> bool:
+def realtime_has_permission(doctype: str, name: str) -> bool:
 	"""1. A doctype room of a team-scoped DocType is for operators only: it carries every team's changes.
 	2. Everything else follows Frappe's own check."""
 	is_team_scoped = doctype in frappe.get_hooks("has_permission")
 	if not name and is_team_scoped and not user_has_operator_bypass(frappe.session.user):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
-	return has_realtime_permission(doctype, name, ptype)
+	return has_realtime_permission(doctype, name)
 
 
 def _operator_only_query_conditions(user: str | None = None) -> str:
