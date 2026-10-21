@@ -96,7 +96,7 @@ def refund_part(
 			frappe.ValidationError,
 		)
 
-	values = {"partial": 1, **_split(doc, amount)}
+	values = {"partial": 1}
 	if dispute:
 		attempt = frappe.db.get_value(
 			"Payment Attempt", {"gateway_transaction_id": dispute.get("payment_intent")}, "name"
@@ -112,6 +112,7 @@ def refund_part(
 		frappe.throw(
 			_("A refund goes to the wallet or to the card or UPI that paid."), frappe.ValidationError
 		)
+	values.update(_split_money_and_promotional(doc, amount, destination))
 
 	_book_refund(doc, destination, amount, reason, **values)
 	doc.add_comment("Info", f"Refunded {amount} to the {destination.lower()}: {reason}")
@@ -185,7 +186,12 @@ def _next_step(doc, accounting: bool):
 	if not (accounting and doc.erpnext_invoice):
 		return None  # nothing was issued in the accounting system
 	for refund in refunds:
-		if refund.partial and refund.status == "Completed" and not refund.credit_note_id:
+		if (
+			refund.partial
+			and refund.status == "Completed"
+			and not refund.credit_note_id
+			and frappe.utils.flt(refund.net_amount)
+		):
 			return lambda r=refund: _partial_credit_note(doc, r)
 	if any(not r.partial for r in refunds) and not doc.credit_note_id:
 		return lambda: _credit_note(doc)
@@ -213,17 +219,27 @@ def _settle(doc, refund) -> None:
 	if refund.destination == "Wallet" and refund.partial:
 		from central.billing.revenue import credits
 
-		# It comes back as paid-in credit, with its GST to pay the GST of what it buys.
-		credits.return_credit(
-			doc.team,
-			refund.net_amount,
-			doc.currency,
-			"Refund",
-			refund.name,
-			f"Refund on invoice {doc.name}",
-			paid_in=True,
-			tax_amount=refund.tax_amount,
-		)
+		# The money part comes back as paid-in credit, with its GST to pay the GST of what it buys.
+		if frappe.utils.flt(refund.net_amount):
+			credits.return_credit(
+				doc.team,
+				refund.net_amount,
+				doc.currency,
+				"Refund",
+				refund.name,
+				f"Refund on invoice {doc.name}",
+				paid_in=True,
+				tax_amount=refund.tax_amount,
+			)
+		if frappe.utils.flt(refund.promotional_amount):
+			credits.return_credit(
+				doc.team,
+				refund.promotional_amount,
+				doc.currency,
+				"Refund",
+				refund.name,
+				f"Promotional credit back from invoice {doc.name}",
+			)
 		_finish(refund, "Completed")
 	elif refund.destination == "Wallet":
 		from central.billing.revenue.invoicing.lifecycle import give_back_wallet
@@ -382,7 +398,9 @@ def _partial_credit_note(doc, refund) -> None:
 
 def _money_to_record(doc, refund) -> float:
 	"""What of this refund left, or re-entered, the accounting system's books."""
-	if refund.partial or refund.destination != "Wallet":
+	if refund.partial:
+		return frappe.utils.flt(frappe.utils.flt(refund.net_amount) + frappe.utils.flt(refund.tax_amount), 2)
+	if refund.destination != "Wallet":
 		return frappe.utils.flt(refund.amount)
 	# Promotional credit never reached the books, so only paid-in credit moves there.
 	return frappe.utils.flt(doc.advance_applied) + frappe.utils.flt(doc.advance_tax_applied)
@@ -546,6 +564,7 @@ def _refunds(invoice: str) -> list:
 			"amount",
 			"net_amount",
 			"tax_amount",
+			"promotional_amount",
 			"status",
 			"payment_attempt",
 			"attempts",
@@ -561,6 +580,28 @@ def _refunds(invoice: str) -> list:
 
 def _partly_refunded(invoice: str) -> bool:
 	return bool(frappe.db.exists("Refund", {"invoice": invoice, "partial": 1, "status": ["!=", "Failed"]}))
+
+
+def _split_money_and_promotional(doc, amount: float, destination: str) -> dict:
+	"""`amount` as its money part (net and GST) and its promotional part. A wallet refund gives back money first."""
+	promotional = 0.0
+	if destination == "Wallet" and not doc.promotional_record_id:
+		promotional = max(0.0, frappe.utils.flt(amount - _money_left(doc), 2))
+	return {**_split(doc, amount - promotional), "promotional_amount": promotional}
+
+
+def _money_left(doc) -> float:
+	"""What of the invoice was paid with money and has not been refunded yet."""
+	from central.billing.ingester.erpnext_sync import _promotional_part
+
+	given = frappe.get_all(
+		"Refund",
+		filters={"invoice": doc.name, "partial": 1, "status": ["!=", "Failed"]},
+		fields=["net_amount", "tax_amount"],
+	)
+	paid = frappe.utils.flt(doc.total) - _promotional_part(doc)
+	refunded = sum(frappe.utils.flt(r.net_amount) + frappe.utils.flt(r.tax_amount) for r in given)
+	return max(0.0, frappe.utils.flt(paid - refunded, 2))
 
 
 def _split(doc, amount: float) -> dict:
