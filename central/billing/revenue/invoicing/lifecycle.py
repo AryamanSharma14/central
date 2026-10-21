@@ -294,6 +294,26 @@ def cancel_invoice(invoice: str, reason: str | None = None) -> str:
 	return invoice
 
 
+def waive_for_internal_team(team: str) -> list[str]:
+	"""Waive a team's unpaid invoices once it is internal, and give back what they drew from the wallet.
+
+	An invoice with a card or UPI payment under way or taken is left for an operator."""
+	waived = []
+	for name in frappe.get_all(
+		"Invoice", filters={"team": team, "status": ["in", ["Open", "Overdue"]]}, pluck="name"
+	):
+		if frappe.db.exists(
+			"Payment Attempt", {"invoice": name, "status": ["in", ["Initiated", "Authorised", "Captured"]]}
+		):
+			continue
+		doc = frappe.get_doc("Invoice", name, for_update=True)
+		transition(doc, "Waived", reason="team marked internal", actor=frappe.session.user, amount=doc.total)
+		doc.save(ignore_permissions=True)
+		give_back_wallet(doc)
+		waived.append(name)
+	return waived
+
+
 def give_back_wallet(doc) -> None:
 	"""Return what the invoice drew from the wallet, each part as the credit it was."""
 	paid_in = frappe.utils.flt(doc.advance_applied)

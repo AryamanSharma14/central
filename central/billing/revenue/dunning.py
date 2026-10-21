@@ -272,14 +272,14 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 
 
 def run_dunning(now=None) -> list[dict]:
-	"""Daily scheduler: dun every unpaid, due billable invoice."""
-	invoices = frappe.get_all(
-		"Invoice",
-		filters=[
-			["invoice_type", "=", "Billable"],
-			["status", "in", ["Open", "Overdue"]],
-			["expected_collection", ">", 0],
-		],
-		pluck="name",
-	)
+	"""Daily scheduler: dun every unpaid, due billable invoice. An internal team is never dunned."""
+	filters = [
+		["invoice_type", "=", "Billable"],
+		["status", "in", ["Open", "Overdue"]],
+		["expected_collection", ">", 0],
+	]
+	internal = frappe.get_all("Tax Profile", filters={"is_internal": 1}, pluck="team")
+	if internal:
+		filters.append(["team", "not in", internal])
+	invoices = frappe.get_all("Invoice", filters=filters, pluck="name")
 	return [process_invoice_dunning(name, now=now) for name in invoices]

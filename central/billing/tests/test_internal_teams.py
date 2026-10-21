@@ -73,3 +73,54 @@ class TestInternalTeams(IntegrationTestCase):
 		_, rows, _ = report.execute({"team": TEAM})
 
 		self.assertEqual([(r["invoice"], r["waived"]) for r in rows], [(self.invoice, 1000)])
+
+	def test_marking_internal_waives_unpaid_invoices_only(self):
+		credits.grant_promotional_credits(TEAM, 2000, "INR", note="Welcome credits")
+		invoicing.open_and_collect(self.invoice, collect=False)  # credits pay it in full
+		open_invoice = self._open_invoice()
+
+		_mark_internal()
+
+		self.assertEqual(frappe.db.get_value("Invoice", open_invoice, "status"), "Waived")
+		self.assertEqual(frappe.db.get_value("Invoice", self.invoice, "status"), "Paid")
+
+	def test_an_internal_team_is_not_dunned_or_charged(self):
+		from central.billing.payments import collection
+		from central.billing.revenue import dunning
+
+		open_invoice = self._open_invoice()
+		frappe.get_doc(
+			{
+				"doctype": "Payment Attempt",
+				"invoice": open_invoice,
+				"team": TEAM,
+				"gateway": "Stripe",
+				"amount": 100,
+				"currency": "INR",
+				"status": "Initiated",
+			}
+		).insert(ignore_permissions=True)
+		_mark_internal()  # the invoice with a payment under way stays Open
+
+		self.assertNotIn(open_invoice, [r.get("invoice") for r in dunning.run_dunning()])
+		self.assertEqual(collection.collect_invoice(open_invoice)["reason"], "internal_team")
+
+	def _open_invoice(self):
+		return (
+			frappe.get_doc(
+				{
+					"doctype": "Invoice",
+					"team": TEAM,
+					"invoice_type": "Billable",
+					"status": "Open",
+					"period_start": "2026-07-01",
+					"period_end": "2026-07-31",
+					"currency": "INR",
+					"subtotal": 100,
+					"total": 100,
+					"expected_collection": 100,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)

@@ -42,6 +42,7 @@ class TaxProfile(Document):
 		if bool(self.is_internal) == bool(before and before.is_internal):
 			return
 
+		from central.billing.revenue.invoicing.lifecycle import waive_for_internal_team
 		from central.billing.states import record_event
 
 		record_event(
@@ -49,3 +50,5 @@ class TaxProfile(Document):
 			"Internal Team Marked" if self.is_internal else "Internal Team Cleared",
 			reason=self.internal_reason,
 		)
+		if self.is_internal:
+			waive_for_internal_team(self.team)
