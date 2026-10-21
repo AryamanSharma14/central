@@ -8,19 +8,21 @@ import TermsNotice from '@/components/auth/TermsNotice.vue'
 import ValidatedFormControl from '@/components/common/formComponents/ValidatedFormControl.vue'
 import OtpInput from '@/components/common/OtpInput.vue'
 import { useEmailSignIn } from '@/composables/useEmailSignIn'
+import { useProduct } from '@/composables/useProduct'
 import {
 	frappeErrorMessage,
 	nameFromEmail,
 	queryString,
 	requiredError,
 } from '@/lib/auth'
-import { carriedQuery, signInDestination } from '@/lib/authRedirect'
+import { carriedQuery } from '@/lib/authRedirect'
 
 const RESEND_WAIT_SECONDS = 30
 
 const route = useRoute()
 const router = useRouter()
-const { sendCode, verifyCode } = useEmailSignIn()
+const { sendCode, verifyCode, enterConsole } = useEmailSignIn()
+const { productKey } = useProduct()
 
 const email = queryString(route.query.email)
 const code = ref('')
@@ -63,10 +65,10 @@ async function verify() {
 			needsName.value = true
 			return
 		}
-		// A full load, so the console boots with the new session.
 		redirecting.value = true
-		window.location.replace(signInDestination(route.query))
+		await enterConsole(response, route.query)
 	} catch (exception) {
+		redirecting.value = false
 		error.value = frappeErrorMessage(exception, 'That code did not work.')
 		if (!needsName.value) code.value = ''
 	} finally {
@@ -94,7 +96,7 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 </script>
 
 <template>
-	<AuthShell>
+	<AuthShell :show-progress="Boolean(productKey)" :step="2">
 		<template v-if="needsName">
 			<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 				<ProductLogo />

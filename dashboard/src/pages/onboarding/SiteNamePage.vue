@@ -51,6 +51,7 @@ onMounted(async () => {
 		error.value = frappeErrorMessage(exception, 'Could not set up your team.')
 		return
 	}
+	void loadDomain()
 	try {
 		const status = await readStatus()
 		if (status.site?.claimed)
@@ -72,8 +73,10 @@ onMounted(async () => {
 	} catch (exception) {
 		error.value = frappeErrorMessage(exception, 'Could not find your trial.')
 		requestKey.value = ''
-		return
 	}
+})
+
+async function loadDomain() {
 	try {
 		const result = await getFrappe<{ domain: string }>(
 			methodUrl(API.siteDomain),
@@ -83,7 +86,7 @@ onMounted(async () => {
 	} catch {
 		// Non-fatal: the suffix is cosmetic, and creating the site reports the same refusal.
 	}
-})
+}
 
 watch(subdomain, (value) => {
 	availability.value = null

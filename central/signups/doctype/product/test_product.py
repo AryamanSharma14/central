@@ -244,6 +244,15 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 		self.assertIn("https://raven.example.test/start", html)
 		self.assertNotIn("https://raven.example.test/start", expiring)
 
+	def test_get_started_opens_the_site_and_the_docs_are_the_second_button(self):
+		product = self.product(landing_route="/raven", getting_started_url="https://raven.example.test/start")
+
+		html = self.email_for(product)
+
+		self.assertIn(f'fc-btn-primary" href="{self.site().url}/raven"', html)
+		self.assertIn('fc-btn-secondary" href="https://raven.example.test/start"', html)
+		self.assertLess(html.index("Get started"), html.index("View docs"))
+
 	def test_welcome_emails_link_the_created_site_and_product_landing_route(self):
 		product = self.product(landing_route="/raven")
 		for event_type in ("site_ready", "trial_unopened"):

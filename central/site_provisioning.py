@@ -106,7 +106,7 @@ def subdomain_availability(subdomain: str) -> dict:
 		reason = _("Use lowercase letters, numbers and hyphens, starting and ending with one.")
 	elif subdomain in RESERVED_SUBDOMAINS:
 		reason = _("That name is reserved. Please choose another.")
-	elif frappe.db.exists("Site", {"subdomain": subdomain}) or is_domain_taken(subdomain):
+	elif is_subdomain_taken(subdomain):
 		reason = _("That name is taken. Please choose another.")
 	else:
 		return {**answer, "available": True, "reason": None}
@@ -114,11 +114,18 @@ def subdomain_availability(subdomain: str) -> dict:
 	return {**answer, "available": False, "reason": reason}
 
 
-def is_domain_taken(subdomain: str) -> bool:
+def is_subdomain_taken(subdomain: str) -> bool:
+	"""Taken as the chosen name of a site on a live server, which exists before the rename
+	routes it, or as a route in any trial zone. A route holds its name until its removal
+	succeeds, even for a terminated server, because registration refuses a name in use."""
 	domains = [
 		f"{subdomain}.{frappe.get_cached_value('Region', region, 'proxy_domain')}"
 		for region in trial_regions()
 	]
+	site_filters = {"subdomain": subdomain, "server.status": ["!=", "Terminated"]}
+	if frappe.get_all("Site", filters=site_filters, limit=1):
+		return True
+
 	return bool(domains) and bool(frappe.db.exists("Site Domain", {"name": ["in", domains]}))
 
 

@@ -153,7 +153,9 @@ def get_composed_config(server: str, team: str | None = None) -> dict:
 		"plan": sub.plan,  # the current preset, so the picker can pre-select it
 		"vcpus": vcpus,
 		"memory_gb": memory_gb,
-		"disk_gb": disk_gb,
+		# Atlas reports MiB, so a disk can be fractional GB. Resize takes whole GB, and
+		# rounding up keeps the current disk without asking for a shrink.
+		"disk_gb": frappe.utils.ceil(disk_gb),
 		"available": max(0.0, cap - team_run_rate(team, exclude=sub.name)),
 		# What the resize would cost this server in price terms, so the picker can
 		# say it before the customer commits rather than after.

@@ -219,6 +219,27 @@ export interface TrialSiteState {
 	login_pending: boolean
 }
 
+/** The milestone a new site is working towards, as Central reads it. */
+export type SetupPhase = 'booking' | 'server' | 'app' | 'signing' | 'failed'
+
+export interface SetupJourney {
+	phase: SetupPhase
+	subdomain: string | null
+	domain: string | null
+	region: {
+		title: string | null
+		country_code: string | null
+		/** Read with `hasMapCoords`: a region without coordinates reports 0/0. */
+		latitude?: number
+		longitude?: number
+	}
+	started_at: string | null
+	/** The median wait of recent trials in the region, or null with too few of them. */
+	eta_seconds: number | null
+	/** The creation request's name, which support can look up. */
+	reference: string | null
+}
+
 export interface TrialOnboardingStatus {
 	site: TrialSiteState | null
 	creation: {
@@ -227,4 +248,5 @@ export interface TrialOnboardingStatus {
 		title: string
 		error: { message: string } | null
 	} | null
+	journey: SetupJourney | null
 }

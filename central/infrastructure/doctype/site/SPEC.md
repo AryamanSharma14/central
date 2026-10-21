@@ -72,6 +72,21 @@ Nothing is provisioned during signup, so readiness is not a build finishing. A s
 
 `central.api.sites.onboarding_status(team, product)` first finds the selected product's non-terminated Site that the caller can view in the Team. If none exists, it follows the latest matching Site creation requested by the caller. A plain signup follows only creations without a product. It does not adopt a normal server creation or another team member's pending request. The response reports whether the site was claimed, so a returning customer can find it in the resource list. A Running state report schedules a full server refresh, so the Site record does not wait for the periodic reconciliation job.
 
+### Setup journey
+
+`onboarding_status` also returns `journey`, which the waiting page shows. `central.signups.journey.SetupJourney` builds it from the records that own each step, so the page never moves ahead of Central.
+
+| Field | Value |
+| --- | --- |
+| `phase` | The milestone the site works towards: `booking` while the creation is Queued or Dispatching, `server` until the server is Running, `app` until the site answers, then `signing`. `failed` when the creation fails or times out, or the server fails. |
+| `subdomain`, `domain` | The name the customer chose and the zone of the region. |
+| `region` | The region's display name, country code and map coordinates. |
+| `started_at` | When the creation was requested. |
+| `eta_seconds` | The median time from request to a site that answers, over the latest 50 trials in the region. It is null with fewer than 3 trials, and it is cached for 10 minutes. |
+| `reference` | The creation's Resource Action name. The page shows it on a failure, so support can find the request. |
+
+The page shows four milestones: Queued (until the region takes the request), Provisioning (until the server runs), Starting (until the site answers) and Arrived (the customer is signed in). The current milestone is highlighted, and a status line under them says what happens now. It shows `Delayed` after twice the estimate, and it leaves for the site about 1 second after the sign-in link arrives.
+
 ## Sign-in
 
 Central uses the customer hostname after its route answers and Pilot accepts the renamed site. Until then, sign-in uses the automatic `Site.url` and the image name `site.local`. The first sign-in on the customer hostname sets `renamed_at`. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. The initial signup handoff uses the automatic URL and starts the rename after the claim.
@@ -94,6 +109,8 @@ A site's users have no Central account. When a plan change from the site stops t
 `PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
 
 ## Operator actions
+
+The Resource Action of a site creation shows a **Site Setup** timeline with the time of each step: requested, sent to the region, server created, site addressable, site answered, signed in, and name applied. The first step with no time is where the signup stopped. A failed creation or a failed rename shows its error on that step.
 
 A System Manager has two actions on the Site form in Desk:
 
@@ -123,6 +140,6 @@ Cargo must bake the image site as `site.local`, or Pilot does not recognise the 
 
 Central asks the region for the offering tags and the signup tags together, and takes the newest image that comes back. A region without a matching image is skipped, so the next region can serve the trial. Change `SIGNUP_IMAGE_TAGS` to move signups to another Frappe version. The region matches a tag exactly, so an image without the tag never qualifies. A product signup also asks for `app=<signup app>`. A plain signup drops every image tagged `app`, because the region cannot filter on a missing tag.
 
-The site name page shows the zone of that same region: `central.api.sites.site_domain(team, product)` makes the region choice that creation makes. `central.api.sites.check_subdomain` checks a name in every trial zone, because the region is chosen only when the site is created.
+The site name page shows the zone of that same region: `central.api.sites.site_domain(team, product)` makes the region choice that creation makes. `central.api.sites.check_subdomain` checks a name in every trial zone, because the region is chosen only when the site is created. A name is taken while a Site on a server that is not Terminated holds it, or while a Site Domain holds it. A terminated server's Site stays as history and does not hold the name. Its Site Domain holds the name until the route removal succeeds, because registration refuses a name that another server's route holds.
 
 Give the trial plan the shape the image was baked at. A region restores a warm image from memory only when the vCPU count, memory and disk all match, and a trial that misses the shape cold-boots instead. `BUILD_SPEC` in Cargo's `cargo/image_builder/doctype/pilot_image/builder.py` holds that shape.

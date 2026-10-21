@@ -21,6 +21,8 @@ export interface Product {
 	logo?: string
 	/**	Subtitle : Small Text - Shown under the heading on the signup and login pages. Leave empty to show no subtitle.	*/
 	subtitle?: string
+	/**	Setup Messages : Small Text - Shown one at a time while a new site starts, one line per message. For example: Setting up channels. Leave empty to show general messages.	*/
+	setup_messages?: string
 	/**	Signup App : Data - The app Cargo installs on this product's image, such as raven. A trial starts the newest signup image whose app tag has this value.	*/
 	signup_app: string
 	/**	Landing Route : Data - Where the owner lands after signing in to a trial site, such as /raven, so the app can run its own setup. Leave empty to open Desk.	*/
