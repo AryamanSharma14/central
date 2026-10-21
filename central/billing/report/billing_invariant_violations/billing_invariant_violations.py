@@ -1,23 +1,5 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
-"""Billing Invariant Violations — the money facts that no longer add up.
-
-Every row is a place where two independent derivations of the same number disagree:
-a wallet whose balance is not its ledger, an invoice whose subtotal is not its lines,
-a payment we believe we captured with no attempt behind it.
-
-**An empty report is the success case.** This is the one report you want blank.
-
-It also lists the readiness checks (`platform.readiness`): data the next billing run
-would bill wrongly or not at all. The Summary view shows one row per check.
-
-It recomputes live with the same functions the daily audit and hourly alerts run, so
-what the jobs assert and what a human reads can never drift apart. Nothing is stored,
-so there is no snapshot to go stale.
-
-Amounts are split per currency: INR and USD never share a column or a total
-(report/_currency.split_currency_columns).
-"""
 
 import frappe
 from frappe import _
@@ -28,34 +10,39 @@ from central.billing.report._currency import split_currency_columns
 KINDS = {"Money": invariants.CHECKS, "Readiness": readiness.CHECKS}
 
 
-def _registries(kind: str | None) -> dict:
-	return {k: v for k, v in KINDS.items() if not kind or k == kind}
+def _selected_checks(filters: dict) -> dict:
+	"""The checks the filters ask for, as {code: (kind, title)}."""
+	only = filters.get("check") or None
+	return {
+		code: (kind, title)
+		for kind, registry in KINDS.items()
+		if not filters.get("kind") or kind == filters["kind"]
+		for code, (title, _fn) in registry.items()
+		if not only or code == only
+	}
 
 
 def _title(check: str) -> str:
 	return next(registry[check][0] for registry in KINDS.values() if check in registry)
 
 
-def _kind(check: str) -> str:
-	return next(name for name, registry in KINDS.items() if check in registry)
-
-
-def _violations(filters: dict) -> list:
-	only = filters.get("check") or None
+def _violations(filters: dict, selected: dict) -> list:
 	found = []
-	for registry in _registries(filters.get("kind")).values():
-		if not only or only in registry:
-			found.extend(invariants.audit(only=only, checks=registry))
+	for registry in KINDS.values():
+		for code in registry:
+			if code in selected:
+				found.extend(invariants.audit(only=code, checks=registry))
 	if filters.get("team"):
 		found = [v for v in found if v.team == filters["team"]]
-	return found
+	return sorted(found, key=lambda v: abs(v.drift), reverse=True)
 
 
 def execute(filters: dict | None = None):
 	filters = filters or {}
-	violations = _violations(filters)
+	selected = _selected_checks(filters)
+	violations = _violations(filters, selected)
 	if filters.get("view") == "Summary":
-		return _summary(violations)
+		return _summary(violations, selected)
 
 	rows = [
 		{
@@ -79,22 +66,21 @@ def execute(filters: dict | None = None):
 	return columns, rows, _message(rows), _chart(violations)
 
 
-def _summary(violations: list):
-	"""One row per check: how many violations, across how many teams."""
+def _summary(violations: list, selected: dict):
+	"""One row per check that ran: how many violations, across how many teams."""
 	rows = []
-	for registry in KINDS.values():
-		for check, (title, _fn) in registry.items():
-			hits = [v for v in violations if v.check == check]
-			rows.append(
-				{
-					"check": check,
-					"kind": _kind(check),
-					"title": title,
-					"violations": len(hits),
-					"teams": len({v.team for v in hits if v.team}),
-					"example": hits[0].detail if hits else "",
-				}
-			)
+	for check, (kind, title) in selected.items():
+		hits = [v for v in violations if v.check == check]
+		rows.append(
+			{
+				"check": check,
+				"kind": kind,
+				"title": title,
+				"violations": len(hits),
+				"teams": len({v.team for v in hits if v.team}),
+				"example": hits[0].detail if hits else "",
+			}
+		)
 	rows.sort(key=lambda row: (-row["violations"], row["check"]))
 	columns = [
 		{"label": _("Check"), "fieldname": "check", "fieldtype": "Data", "width": 70},
