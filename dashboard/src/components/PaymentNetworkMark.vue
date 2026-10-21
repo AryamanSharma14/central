@@ -9,7 +9,11 @@ import rupay from '@/assets/payments/rupay.svg?raw'
 import upi from '@/assets/payments/upi.svg?raw'
 import visa from '@/assets/payments/visa.svg?raw'
 
-defineProps<{ network: PaymentNetwork }>()
+interface Props {
+	network: PaymentNetwork
+}
+
+defineProps<Props>()
 
 // Inlined, not an img: the wordmarks use dark:fill, and an image cannot see
 // data-theme. Diners stays filled as drawn, because its mark is a white disc.
@@ -23,17 +27,15 @@ const marks: Record<
 		label: 'Mastercard',
 		height: '[&>svg]:h-[18px]',
 	},
-	// The y descender and the circle both hang below the label's body, so the
-	// marks sit a pixel or two above the line the row centers.
 	rupay: {
 		svg: rupay,
 		label: 'RuPay',
-		height: '[&>svg]:h-[13px] -translate-y-px',
+		height: '[&>svg]:h-[13px] [&>svg]:translate-y-px',
 	},
 	diners: {
 		svg: diners,
 		label: 'Diners Club',
-		height: '[&>svg]:h-4 -translate-y-[2px]',
+		height: '[&>svg]:h-4',
 	},
 	upi: { svg: upi, label: 'UPI', height: '[&>svg]:h-[13px]' },
 }
@@ -41,7 +43,7 @@ const marks: Record<
 
 <template>
 	<span
-		class="inline-flex shrink-0 items-center [&>svg]:w-auto"
+		class="inline-flex h-5 shrink-0 items-center justify-center [&>svg]:block [&>svg]:w-auto"
 		:class="marks[network].height"
 		role="img"
 		:aria-label="marks[network].label"
