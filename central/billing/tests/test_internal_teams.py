@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 """An internal team's invoices are rated for the record and waived, never collected."""
 
+from unittest.mock import patch
+
 import frappe
 
 from central.billing.ingester import customer
@@ -89,10 +91,32 @@ class TestInternalTeams(IntegrationTestCase):
 		from central.billing.revenue import dunning
 
 		open_invoice = self._open_invoice()
-		frappe.get_doc(
+		self._payment_attempt(open_invoice)
+		_mark_internal()  # the invoice with a payment under way stays Open
+
+		self.assertNotIn(open_invoice, [r.get("invoice") for r in dunning.run_dunning()])
+		self.assertEqual(collection.collect_invoice(open_invoice)["reason"], "internal_team")
+
+	def test_payment_claimed_before_the_lock_is_not_waived(self):
+		open_invoice = self._open_invoice()
+		get_doc, raced = frappe.get_doc, []
+
+		def collector_wins_the_race(*args, **kwargs):
+			# A collector claims an attempt after the invoice was listed, before it was locked.
+			if args[:2] == ("Invoice", open_invoice) and kwargs.get("for_update") and not raced:
+				raced.append(self._payment_attempt(open_invoice))
+			return get_doc(*args, **kwargs)
+
+		with patch.object(frappe, "get_doc", side_effect=collector_wins_the_race):
+			_mark_internal()
+
+		self.assertEqual(frappe.db.get_value("Invoice", open_invoice, "status"), "Open")
+
+	def _payment_attempt(self, invoice):
+		return frappe.get_doc(
 			{
 				"doctype": "Payment Attempt",
-				"invoice": open_invoice,
+				"invoice": invoice,
 				"team": TEAM,
 				"gateway": "Stripe",
 				"amount": 100,
@@ -100,10 +124,6 @@ class TestInternalTeams(IntegrationTestCase):
 				"status": "Initiated",
 			}
 		).insert(ignore_permissions=True)
-		_mark_internal()  # the invoice with a payment under way stays Open
-
-		self.assertNotIn(open_invoice, [r.get("invoice") for r in dunning.run_dunning()])
-		self.assertEqual(collection.collect_invoice(open_invoice)["reason"], "internal_team")
 
 	def _open_invoice(self):
 		return (

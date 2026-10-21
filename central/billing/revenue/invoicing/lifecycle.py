@@ -302,11 +302,12 @@ def waive_for_internal_team(team: str) -> list[str]:
 	for name in frappe.get_all(
 		"Invoice", filters={"team": team, "status": ["in", ["Open", "Overdue"]]}, pluck="name"
 	):
-		if frappe.db.exists(
+		# Collectors claim a payment under this lock, so check for one only once it is held.
+		doc = frappe.get_doc("Invoice", name, for_update=True)
+		if doc.status not in ("Open", "Overdue") or frappe.db.exists(
 			"Payment Attempt", {"invoice": name, "status": ["in", ["Initiated", "Authorised", "Captured"]]}
 		):
 			continue
-		doc = frappe.get_doc("Invoice", name, for_update=True)
 		transition(doc, "Waived", reason="team marked internal", actor=frappe.session.user, amount=doc.total)
 		doc.save(ignore_permissions=True)
 		give_back_wallet(doc)
