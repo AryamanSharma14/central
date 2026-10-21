@@ -1,3 +1,5 @@
+import type { StripeElementStyle } from '@stripe/stripe-js'
+
 // Hand a started order to the gateway's hosted element, resolve when the customer
 // finishes. Raw card/UPI data never touches our form — the gateway collects it.
 // Ported from the legacy dashboard's utils/gateway.js.
@@ -184,4 +186,35 @@ export async function mountPayPalButtons(
 			onError: (e: unknown) => onError?.(e),
 		})
 		.render(el)
+}
+
+// Stripe draws the card field in its own iframe, so a class on our mount node
+// never reaches the typed number or the placeholder. Pass the same tokens a
+// text input uses, resolved to rgb() for the current theme.
+export function stripeCardElementStyle(): StripeElementStyle {
+	const text = tokenColor('--ink-gray-8')
+	const placeholder = tokenColor('--ink-gray-4')
+	const invalid = tokenColor('--ink-red-5')
+	return {
+		base: {
+			color: text,
+			iconColor: text,
+			fontFamily: getComputedStyle(document.body).fontFamily,
+			fontSize: '14px',
+			'::placeholder': { color: placeholder },
+		},
+		invalid: {
+			color: invalid,
+			iconColor: invalid,
+		},
+	}
+}
+
+function tokenColor(variable: string): string {
+	const probe = document.createElement('span')
+	probe.style.color = `var(${variable})`
+	document.body.appendChild(probe)
+	const color = getComputedStyle(probe).color
+	probe.remove()
+	return color
 }
