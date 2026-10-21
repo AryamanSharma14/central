@@ -8,10 +8,11 @@ AUDIT = "billing audit of 21 Oct 2026"
 
 def execute():
 	"""Repair the billing data the readiness checks now guard against."""
+	# Book missing wallet credit first: waiving gives credit back, which a drifted wallet refuses.
+	book_wallet_balances_missing_from_the_ledger()
 	mark_staging_teams_internal()
 	match_currency_to_country()
 	pin_tiers_set_by_hand()
-	book_wallet_balances_missing_from_the_ledger()
 
 
 def mark_staging_teams_internal():
@@ -31,7 +32,19 @@ def mark_staging_teams_internal():
 		)
 		frappe.db.set_value("Team", team, "is_staging_trial", 0)
 		# set_value skips the Tax Profile hook that waives, so waive here, before any billing run.
-		waive_for_internal_team(team)
+		_waive_unless_wallet_drifted(team, waive_for_internal_team)
+
+
+def _waive_unless_wallet_drifted(team: str, waive) -> None:
+	"""A wallet holding less than its ledger refuses the credit back; leave that team to an operator."""
+	from central.billing.revenue.credits import WalletDrift
+
+	frappe.db.savepoint("waive_internal_team")
+	try:
+		waive(team)
+	except WalletDrift:
+		frappe.db.rollback(save_point="waive_internal_team")
+		frappe.log_error(title=f"Unpaid invoices of internal team {team} were not waived")
 
 
 def match_currency_to_country():

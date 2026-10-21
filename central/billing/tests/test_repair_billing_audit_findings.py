@@ -28,24 +28,61 @@ class TestRepairBillingAuditFindings(IntegrationTestCase):
 		self.assertFalse(frappe.db.get_value("Team", TEAM, "is_staging_trial"))
 
 	def test_staging_team_unpaid_invoice_is_waived(self):
-		invoice = frappe.get_doc(
-			{
-				"doctype": "Invoice",
-				"team": TEAM,
-				"invoice_type": "Billable",
-				"status": "Open",
-				"period_start": "2026-09-01",
-				"period_end": "2026-09-30",
-				"currency": "INR",
-				"subtotal": 100,
-				"total": 100,
-				"expected_collection": 100,
-			}
-		).insert(ignore_permissions=True)
-		frappe.db.set_value("Team", TEAM, "is_staging_trial", 1)
+		invoice = self._staging_team_invoice()
 		with patch("central.billing.settings.provision_teams_as_trial", return_value=False):
 			repair.mark_staging_teams_internal()
-		self.assertEqual(frappe.db.get_value("Invoice", invoice.name, "status"), "Waived")
+		self.assertEqual(frappe.db.get_value("Invoice", invoice, "status"), "Waived")
+
+	def test_waive_gives_credit_back_to_a_wallet_with_unbooked_credit(self):
+		credits.grant_promotional_credits(TEAM, 100, "INR")
+		invoice = self._staging_team_invoice(credit_applied=40)
+		frappe.db.set_value("Credit Wallet", credits.wallet_name(TEAM, "INR"), "balance", 2600)
+
+		self._run_repair()
+
+		self.assertEqual(frappe.db.get_value("Invoice", invoice, "status"), "Waived")
+		self.assertEqual(credits.get_balance(TEAM, "INR")["balance"], 2640)
+
+	def test_wallet_short_of_its_ledger_leaves_the_invoice_to_an_operator(self):
+		credits.grant_promotional_credits(TEAM, 100, "INR")
+		invoice = self._staging_team_invoice(credit_applied=40)
+		frappe.db.set_value("Credit Wallet", credits.wallet_name(TEAM, "INR"), "balance", 10)
+
+		self._run_repair()
+
+		self.assertEqual(frappe.db.get_value("Invoice", invoice, "status"), "Open")
+		self.assertTrue(frappe.db.get_value("Tax Profile", TEAM, "is_internal"))
+
+	def _staging_team_invoice(self, credit_applied=0):
+		frappe.db.set_value("Team", TEAM, "is_staging_trial", 1)
+		return (
+			frappe.get_doc(
+				{
+					"doctype": "Invoice",
+					"team": TEAM,
+					"invoice_type": "Billable",
+					"status": "Open",
+					"period_start": "2026-09-01",
+					"period_end": "2026-09-30",
+					"currency": "INR",
+					"subtotal": 100,
+					"total": 100,
+					"credit_applied": credit_applied,
+					"expected_collection": 100 - credit_applied,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+
+	def _run_repair(self):
+		# The other steps rewrite rows across the site; this test is about the order of these two.
+		with (
+			patch("central.billing.settings.provision_teams_as_trial", return_value=False),
+			patch.object(repair, "match_currency_to_country"),
+			patch.object(repair, "pin_tiers_set_by_hand"),
+		):
+			repair.execute()
 
 	def test_staging_team_is_kept_on_a_staging_site(self):
 		frappe.db.set_value("Team", TEAM, "is_staging_trial", 1)
