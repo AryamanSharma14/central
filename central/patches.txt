@@ -44,3 +44,5 @@ central.patches.v0_0.set_free_trial_on_creations
 central.patches.v0_0.select_full_ubuntu_image
 # A credit wallet now records the ledger entry that set its balance.
 central.patches.v0_0.point_wallets_at_last_ledger_entry
+# Repair what the billing audit found: staging teams, currencies, hand-set tiers, unexplained wallets.
+central.patches.v0_0.repair_billing_audit_findings
