@@ -493,13 +493,13 @@ def change_plan(plan: str | None = None) -> dict:
 	server on the same team. Returns `{queued, resized, progress_url}`; `progress_url` is the
 	public page that follows the change when the server runs one site."""
 	from central.billing.catalog.subscriptions import begin_resize
-	from central.signups.trial import get_status
+	from central.signups.trial import get_trial_status
 
 	server = _server()
 	if not plan:
 		frappe.throw(frappe._("A plan is required."), frappe.ValidationError)
 	subscription = frappe.db.get_value("Subscription", {"team": _team(), "server_id": server}, "name")
-	if not subscription and get_status(server):
+	if not subscription and get_trial_status(server):
 		frappe.throw(frappe._("Add a payment method to change this site's plan."), frappe.ValidationError)
 	if not subscription:
 		frappe.throw(
@@ -728,7 +728,7 @@ def get_billing_summary(site: str | None = None) -> dict:
 	from central.billing.api.dashboard._shared import _profile_complete
 	from central.billing.api.dashboard.invoices import get_forecast
 	from central.billing.revenue import credits
-	from central.signups.trial import get_status
+	from central.signups.trial import get_trial_status
 
 	team, server = _team(), _server()
 	with _as_operator():  # team + server fixed by credential
@@ -758,7 +758,7 @@ def get_billing_summary(site: str | None = None) -> dict:
 		},
 		"payment_method": {"label": default["label"], "name": default["name"]} if default else None,
 		"profile_complete": _profile_complete(team),
-		"trial": get_status(server, site),
+		"trial": get_trial_status(server, site),
 	}
 
 

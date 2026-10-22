@@ -46,7 +46,12 @@ from central.server_models import (
 	ServerCreation,
 	SiteCreation,
 )
-from central.signups.trial import has_active_payment_method, is_free_trial_creation
+from central.signups.eligibility import (
+	get_open_trial_summary,
+	get_owner_team_names,
+	has_active_payment_method,
+	is_free_trial_creation,
+)
 from central.utils.units import MIB_PER_GIB, MILLICORES_PER_VCPU
 
 
@@ -436,19 +441,22 @@ def validate_trial(team: str) -> None:
 
 
 def validate_trial_site(team: str) -> None:
+	"""Refuse a new free trial while the owner's open trials reach the limit, and name the open one."""
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
-	if trial_site_count(team) >= limit:
-		frappe.throw(
-			_(
-				"You can have at most {0} free trial sites across your teams. Add a payment method for more."
-			).format(limit)
-		)
+	if trial_site_count(team) < limit:
+		return
+
+	summary = get_open_trial_summary(team) or {}
+	if summary.get("address"):
+		throw_action_error("TRIAL_IN_PROGRESS", product=summary["product_title"], address=summary["address"])
+	if summary.get("state") == "Setting up":
+		throw_action_error("TRIAL_IN_PROGRESS", message=_("Your free trial site is still being set up."))
+	throw_action_error("TRIAL_IN_PROGRESS", message=_("You already have an open free trial."))
 
 
 def trial_site_count(team: str) -> int:
 	"""Open trial sites, pending site creations, and provisioned servers whose site Central has not recorded yet, across every team of the team's owner. Locking reads, for the same reason as reserved_rate."""
-	owner = frappe.db.get_value("Team", team, "owner_user")
-	teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name") if owner else [team]
+	teams = get_owner_team_names(team)
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")

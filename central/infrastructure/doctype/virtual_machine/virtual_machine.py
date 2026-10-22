@@ -124,10 +124,18 @@ class VirtualMachine(Document):
 			self.queue_status_notification("server_failed")
 
 		if self.has_value_changed("status") and self.status == "Terminated":
+			self.close_trial()
 			self.enqueue_route_removal()
 			self.revoke_pilot_credentials()
 			UserMailAccount.queue_removal(server=self.name)
 			self.queue_status_notification("server_terminated")
+
+	def close_trial(self) -> None:
+		"""A terminated server ends its open trial now, so its owner can start a new trial at once."""
+		from central.signups.trial import Trial
+
+		if trial := Trial.find_open(self.name):
+			trial.delete()
 
 	def revoke_pilot_credentials(self) -> None:
 		"""A terminated server's Pilot must not reach Central again."""

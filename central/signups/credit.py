@@ -4,7 +4,8 @@ from frappe import _
 from central.billing import settings
 from central.billing.payments.provisioning import grant_welcome_credits, has_owner_received_welcome_credits
 from central.billing.revenue.credits import get_balance, grant_promotional_credits
-from central.signups.trial import convert_team, has_active_payment_method
+from central.signups.eligibility import has_active_payment_method
+from central.signups.trial import convert_team
 
 
 def on_payment_method_update(doc, method: str | None = None) -> None:

@@ -633,14 +633,14 @@ def _update_one_firewall(team: str, resource_id: str, change: FirewallChange) ->
 )
 def keep_trial_site(team: str | None = None, resource_id: str | None = None) -> dict:
 	"""Keep the ended trial on a server: it moves to its paid plan and starts again."""
-	from central.signups.trial import keep_site
+	from central.signups.trial import Trial
 
 	server = VirtualMachine.get_team_server_name(team, resource_id)
 	site = frappe.db.get_value("Site", {"team": team, "server": server, "trial_state": "Ended"})
 	if not site:
 		frappe.throw(_("This server has no ended trial to keep."))
 
-	keep_site(frappe.get_doc("Site", site, for_update=True))
+	Trial.load(site, for_update=True).keep()
 	return {"site": site}
 
 

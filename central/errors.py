@@ -148,6 +148,12 @@ ERROR_CATALOG: dict[str, dict] = {
 		"remediation": "Open Billing to add your billing details and a payment method. Ask a team admin if you cannot manage billing.",
 		"retriable": False,
 	},
+	"TRIAL_IN_PROGRESS": {
+		"title": "You already have a free trial",
+		"message": "Your {product} trial at {address} is still open.",
+		"remediation": "Use that site, or delete it to start a new trial.",
+		"retriable": False,
+	},
 	"TRUST_TIER_LIMIT": {
 		"title": "Your trust tier limit is reached",
 		"message": "Your trust tier allows {limit} servers, and your team already has {count}.",

@@ -166,7 +166,7 @@ class TestResourceActions(IntegrationTestCase):
 	def test_a_site_for_a_team_that_pays_never_sleeps(self):
 		frappe.db.set_single_value("Central Settings", "trial_idle_shutdown_minutes", 10)
 		frappe.clear_cache(doctype="Central Settings")
-		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+		with patch("central.signups.eligibility.has_active_payment_method", return_value=True):
 			name = self.submit(resource_type="Site", subdomain="awake", site=SiteCreation())["action"]
 			_process_locked(name)
 
@@ -317,7 +317,7 @@ class TestResourceActions(IntegrationTestCase):
 		_process_locked(name)
 
 		self.assertTrue(frappe.db.get_value("Resource Action", name, "is_free_trial"))
-		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+		with patch("central.signups.eligibility.has_active_payment_method", return_value=True):
 			frappe.get_doc("Resource Action", name).retry()
 
 		self.assertTrue(self.purchase.call_args.kwargs["is_free_trial"])
