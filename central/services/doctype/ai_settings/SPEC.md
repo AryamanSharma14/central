@@ -8,6 +8,8 @@ Central sells AI served by Grove. A team with AI is one Central Team at Grove, n
 
 AI Settings holds the Grove URL and Central's control credential. A System Manager sets **Grove URL** and selects **Enroll** with the bootstrap secret Grove was given. Grove mints Central's control user and key (`grove.api.control.create_control_client`), and Central stores them. Enroll is a plain whitelisted call, not a form method, so the secret arrives at the top of the request and is popped before anything logs it. **Rotate Credential** asks Grove for a new secret under the current one (`grove.api.control.create_control_client_key`); the old one stops at once.
 
+The **Trials** tab holds what a trial key gets: **Trial Team** (`Central Trial`), the one Grove Team such keys are minted under; **Trial Key Expiry** (Never, or 1, 7, 14 or 30 days after the mint, when Grove revokes it); **Trial Key Cap** (USD, for the life of the key). Nothing reads them yet: the trial mint is to come.
+
 ## Operation
 
 - **Turning AI on**: `central.services.api.ai.enable_ai(team)` inserts a Team Service with `add_on_service = "ai"`. Its `before_insert` checks the team has no AI yet, then registers it at Grove by its id alone (`provision_team`; Grove keeps no email or contact) and sends its limits (`update_team`, below), so a refusal there leaves no row. Every team is billed by Central, so it is paid and gated at Grove. `enable` locks the Team row, so two enables at once make one service. An `ai` row has no region, no subscription and no endpoint: each key calls its own geography's gateway. A team has one.
