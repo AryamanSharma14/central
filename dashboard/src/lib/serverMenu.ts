@@ -14,7 +14,8 @@ export type ServerMenuVerb =
 	| 'restart'
 	| 'resize'
 	| 'snapshot'
-	| 'console'
+	| 'ssh-console'
+	| 'tty-console'
 	| 'rename'
 	| 'terminate'
 
@@ -37,9 +38,15 @@ export function getServerMenuGroups(
 	run: Run,
 	options: ServerMenuOptions = {},
 ): DropdownOption[][] {
-	const entry = (verb: ServerMenuVerb, label: string, icon: string) => ({
+	const entry = (
+		verb: ServerMenuVerb,
+		label: string,
+		icon: string,
+		description?: string,
+	) => ({
 		label,
 		icon,
+		description,
 		onClick: () => run(verb),
 	})
 
@@ -82,10 +89,24 @@ export function getServerMenu(
 	)
 }
 
+/** A submenu's items as flat options named "Parent: Child", for a list that cannot nest. */
+export function withSubmenuItems(option: DropdownOption): DropdownOption[] {
+	if (!option.submenu) return [option]
+
+	return option.submenu
+		.filter((item): item is DropdownOption => !('group' in item))
+		.map((item) => ({
+			...item,
+			label: `${option.label}: ${item.label}`,
+			disabled: option.disabled || item.disabled,
+		}))
+}
+
 type Entry = (
 	verb: ServerMenuVerb,
 	label: string,
 	icon: string,
+	description?: string,
 ) => DropdownOption
 
 function getViewItems(
@@ -120,8 +141,23 @@ function getViewItems(
 
 	if (allowed.console && !isBusy)
 		items.push({
-			...entry('console', 'Web console', 'lucide-terminal'),
+			label: 'Web console',
+			icon: 'lucide-square-terminal',
 			disabled: !isRunning,
+			submenu: [
+				entry(
+					'ssh-console',
+					'SSH session',
+					'lucide-terminal',
+					'Shell as root. No password needed.',
+				),
+				entry(
+					'tty-console',
+					'Serial console (TTY)',
+					'lucide-monitor-cog',
+					'Boot output and login prompt. Needs a user password.',
+				),
+			],
 		})
 
 	return items

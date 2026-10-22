@@ -13,6 +13,15 @@ export function signInDestination(query: LocationQuery): string {
 	return `${PRODUCT_ONBOARDING}?${new URLSearchParams({ product })}`
 }
 
+/** The product onboarding route when sign-in lands there, so the console carries on in place. */
+export function productOnboarding(
+	query: LocationQuery,
+): { path: string; query: LocationQueryRaw } | null {
+	const product = queryString(query.product)
+	if (!product || queryString(query['redirect-to'])) return null
+	return { path: '/onboarding/site', query: { product } }
+}
+
 /** The intent that must survive every step between the auth pages. */
 export function carriedQuery(query: LocationQuery): LocationQueryRaw {
 	const carried: LocationQueryRaw = {}

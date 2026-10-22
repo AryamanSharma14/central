@@ -16,7 +16,7 @@ from frappe.query_builder.functions import Count
 from central.billing.doctype.billing_run.billing_run import snapshot
 from central.billing.platform import metrics
 from central.billing.revenue.invoicing.generate import generate_team_invoice
-from central.billing.revenue.invoicing.lifecycle import held_drafts, open_and_collect
+from central.billing.revenue.invoicing.lifecycle import held_drafts, open_and_collect, settle_internal_teams
 
 # How many teams / invoices one page job is responsible for.
 PAGE_SIZE = 500
@@ -558,6 +558,7 @@ def run_monthly_billing(today=None) -> dict:
 	scheduled; an operator runs them by hand to spread a large run over the billing
 	queue. Same work, same idempotency.
 	"""
+	settle_internal_teams()
 	period_start, period_end = billing_period(today)
 	drafted = generate_draft_invoices(period_start, period_end)
 	opened = open_drafts(period_end)

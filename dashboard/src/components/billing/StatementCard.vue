@@ -45,7 +45,12 @@ const hidden = computed(() =>
 					:label="`View all ${statement.rows.length}`"
 					@click="$emit('open')"
 				/>
-				<Button icon="lucide-download" label="Export CSV" :href="exportUrl" />
+				<Button
+					v-if="statement?.rows?.length"
+					icon="lucide-download"
+					label="Export CSV"
+					:href="exportUrl"
+				/>
 			</div>
 		</header>
 

@@ -542,7 +542,7 @@ def _plan_resize(doc, server, plan, includes, sub_category, override_rate=None) 
 		new_rate = resolve_config_rate(rows, currency, cluster)
 	if override_rate is not None:
 		new_rate = override_rate
-	_enforce_resize_headroom(doc.team, new_rate, exclude=doc.name)
+	enforce_headroom(doc.team, new_rate, exclude=doc.name)
 	if server and server.status in ("Running", "Paused", "Stopped"):
 		_guard_disk_shrink(doc.server_id, shape)
 	return shape
@@ -641,7 +641,7 @@ def resize_composed_subscription(
 		if override_rate is not None
 		else resolve_config_rate(rows, currency, server.region if server else None)
 	)
-	_enforce_resize_headroom(doc.team, new_rate, exclude=subscription)
+	enforce_headroom(doc.team, new_rate, exclude=subscription)
 
 	# Resizing to the identical composition already running is a no-op (no event).
 	if doc.pricing_mode == "Composed" and composition_quantities(doc.includes) == composition_quantities(
@@ -683,7 +683,7 @@ def resize_to_plan(
 	# begin_resize also checks it synchronously for immediate feedback.
 	currency = frappe.db.get_value("Billing Profile", doc.team, "currency")
 	new_rate = frappe.get_doc("Plan", new_plan).get_rate(currency, server.region if server else None)
-	_enforce_resize_headroom(doc.team, new_rate, exclude=subscription)
+	enforce_headroom(doc.team, new_rate, exclude=subscription)
 	return change_plan(subscription, new_plan, changed_by=changed_by)
 
 
@@ -744,16 +744,6 @@ def _validate_resize_shape(
 			{**row, "quantity": disk_min} if row.get("resource_type") == DISK else dict(row) for row in rows
 		]
 	validate_composition(profile, check_rows)
-
-
-def _enforce_resize_headroom(team: str, new_rate, exclude: str | None = None) -> None:
-	"""Staging trials are not spend-capped on resize. The menu already shows the
-	full catalog, and the trial is bounded by credits rather than trust-tier headroom."""
-	if frappe.db.get_value("Team", team, "is_staging_trial"):
-		if new_rate is None:
-			frappe.throw(frappe._("This configuration cannot be priced in your currency."))
-		return
-	enforce_headroom(team, new_rate, exclude=exclude)
 
 
 def _guard_disk_shrink(server_id: str, shape: dict) -> None:
@@ -946,19 +936,28 @@ def enforce_headroom(team: str, new_rate, exclude: str | None = None, for_update
 
 	`for_update` is for the caller that goes on to provision: it reads the run rate
 	under a lock so two creates cannot clear the same headroom."""
-	from central.billing.catalog.entitlements import get_team_caps
+	from central.billing.revenue.tax import is_internal_team
 
 	if new_rate is None:
 		frappe.throw(frappe._("This configuration cannot be priced in your currency."))
-	cap = frappe.utils.flt(get_team_caps(team).max_spend)
-	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
-	available = max(0.0, cap - running)
+	if is_internal_team(team):
+		return
+	available = remaining_headroom(team, exclude, for_update)
 	if frappe.utils.flt(new_rate) > available:
 		frappe.throw(
 			frappe._("This configuration ({0}) exceeds your remaining headroom ({1}).").format(
 				frappe.utils.flt(new_rate), frappe.utils.flt(available)
 			)
 		)
+
+
+def remaining_headroom(team: str, exclude: str | None = None, for_update: bool = False) -> float:
+	"""The monthly spend the team can still add: its trust-tier cap minus its running run-rate."""
+	from central.billing.catalog.entitlements import get_team_caps
+
+	cap = frappe.utils.flt(get_team_caps(team).max_spend)
+	running = locked_team_run_rate(team, exclude) if for_update else team_run_rate(team, exclude=exclude)
+	return max(0.0, cap - running)
 
 
 def project_run_rate(team: str, project: str, exclude: str | None = None) -> float:

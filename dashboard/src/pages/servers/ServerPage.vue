@@ -293,7 +293,7 @@ watch(
 					@open="open"
 					@pilot="openBench(server)"
 					@command="command"
-					@console="openConsole(server)"
+					@console="openConsole(server, $event)"
 					@rename="renaming = true"
 					@snapshot="pendingSnapshot = server"
 					@resize="resizing = true"

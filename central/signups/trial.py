@@ -12,6 +12,7 @@ from frappe.utils import (
 	nowdate,
 )
 
+from central.iam import can
 from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
@@ -24,7 +25,7 @@ def start_trial(site: Site) -> None:
 	if site.trial_state or not site.is_trial():
 		return
 
-	if has_active_payment_method(site.team):
+	if not site.get_creation_request().is_free_trial:
 		site.trial_state = "Converted"
 		return
 
@@ -32,30 +33,100 @@ def start_trial(site: Site) -> None:
 	site.trial_ends_on = add_days(nowdate(), get_trial_days(site.product, "trial_days"))
 
 
+def convert_if_paid(site: Site) -> None:
+	"""Convert a new trial site whose team added a payment method before Central recorded it."""
+	if site.trial_state == "Active" and has_active_payment_method(site.team):
+		convert_within_limit(site)
+
+
 def is_billing_deferred(server: str) -> bool:
 	"""Whether the server runs a free trial site, so it has no subscription yet. Before Central
-	records the site, a signup's server counts as a trial unless its team already pays."""
+	records the site, the creation request says whether it is a free trial."""
 	state = frappe.db.get_value("Site", {"server": server}, "trial_state")
 	if state:
 		return state in ("Active", "Ended", "Deleted")
 
-	request = frappe.db.get_value(
-		"Resource Action", {"server": server, "action": "create"}, ["team", "resource_type"], as_dict=True
+	return bool(
+		frappe.db.get_value("Resource Action", {"server": server, "action": "create"}, "is_free_trial")
 	)
-	return bool(request) and is_free_trial_creation(request.team, request.resource_type)
 
 
 def is_free_trial_creation(team: str, resource_type: str) -> bool:
-	"""Whether a creation request opens a free trial: a site, for a team that does not pay yet."""
-	return resource_type == "Site" and not has_active_payment_method(team)
+	"""Whether a creation request opens a free trial: a site, for a team that has never paid."""
+	return resource_type == "Site" and not has_active_payment_method(team) and not has_paid_before(team)
+
+
+def has_paid_before(team: str) -> bool:
+	"""Whether the team ever had a subscription or a bill. Such a team buys its sites, even after its payment method lapses."""
+	return bool(
+		frappe.db.exists("Subscription", {"team": team})
+		or frappe.db.exists("Invoice", {"team": team, "status": ["not in", ("Draft", "Cancelled")]})
+	)
 
 
 def convert_team(team: str) -> None:
-	"""Turn the team's open trials into paid sites once it has an active payment method."""
+	"""Turn the team's running trials into paid sites, oldest first. An ended trial stays stopped until the customer keeps it."""
 	for name in frappe.get_all(
-		"Site", filters={"team": team, "trial_state": ["in", ("Active", "Ended")]}, pluck="name"
+		"Site", filters={"team": team, "trial_state": "Active"}, pluck="name", order_by="creation asc"
 	):
-		convert_site(frappe.get_doc("Site", name, for_update=True))
+		convert_within_limit(frappe.get_doc("Site", name, for_update=True))
+
+
+def convert_within_limit(site: Site) -> bool:
+	"""Convert the trial when its plan fits the team's spending limit. Otherwise it stays a trial, and the daily job tries again."""
+	from central.billing.catalog.subscriptions import remaining_headroom
+
+	# A converted server gets its subscription only when it starts, so its rate is held here.
+	frappe.db.get_value("Team", site.team, "name", for_update=True)
+	available = remaining_headroom(site.team, for_update=True) - get_starting_rate(site.team)
+	if get_trial_rate(site) > available:
+		site.db_set("trial_error", _("The site's plan is above the team's spending limit."))
+		return False
+
+	convert_site(site)
+	return True
+
+
+def get_starting_rate(team: str) -> float:
+	"""The monthly rate of the team's converted trials whose live servers have no subscription yet."""
+	from frappe.query_builder.functions import Sum
+
+	site = frappe.qb.DocType("Site")
+	machine = frappe.qb.DocType("Virtual Machine")
+	request = frappe.qb.DocType("Resource Action")
+	subscription = frappe.qb.DocType("Subscription")
+	rate = (
+		frappe.qb.from_(site)
+		.join(machine)
+		.on(machine.name == site.server)
+		.join(request)
+		.on((request.server == site.server) & (request.action == "create"))
+		.left_join(subscription)
+		.on((subscription.server_id == site.server) & (subscription.team == site.team))
+		.select(Sum(request.reserved_monthly_rate))
+		.where(
+			(site.team == team)
+			& (site.trial_state == "Converted")
+			& (machine.status != "Terminated")
+			& subscription.name.isnull()
+		)
+	).run()
+	return flt(rate[0][0])
+
+
+def get_trial_rate(site: Site) -> float:
+	request = site.get_creation_request()
+	return flt(request.reserved_monthly_rate) if request else 0.0
+
+
+def keep_site(site: Site) -> None:
+	"""Convert an ended trial that the customer chose to keep, and start its server."""
+	if site.trial_state != "Ended":
+		frappe.throw(_("Only an ended trial can be kept."))
+	if not has_active_payment_method(site.team):
+		frappe.throw(_("Add a payment method to keep this site."))
+	if not convert_within_limit(site):
+		frappe.throw(_("This site's plan is above your spending limit. Contact support to raise the limit."))
 
 
 def convert_site(site: Site) -> None:
@@ -155,8 +226,13 @@ def get_status(server: str, site: str | None = None) -> dict | None:
 		return None
 
 	trial = sites[0]
+	has_payment_method = has_active_payment_method(trial.team)
 	return {
 		"state": trial.trial_state,
+		"can_keep": trial.trial_state == "Ended"
+		and has_payment_method
+		and can(frappe.session.user, trial.team, "billing:manage"),
+		"held": trial.trial_state == "Active" and has_payment_method,
 		"ends_on": trial.trial_ends_on,
 		"days_left": max(date_diff(trial.trial_ends_on, nowdate()), 0),
 		"deletes_on": trial.trial_deletes_on,
@@ -181,7 +257,9 @@ def run_trials() -> None:
 	"""Daily job: warn before a trial ends, stop it on its end date, terminate it on its deletion
 	date, and finish a conversion that failed."""
 	today = getdate(nowdate())
-	open_trials = frappe.get_all("Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name")
+	open_trials = frappe.get_all(
+		"Site", filters={"trial_state": ["in", ("Active", "Ended")]}, pluck="name", order_by="creation asc"
+	)
 	failed_conversions = frappe.get_all(
 		"Site", filters={"trial_state": "Converted", "trial_error": ["is", "set"]}, pluck="name"
 	)
@@ -206,6 +284,9 @@ def advance_trial(site: Site, today) -> None:
 
 
 def advance_active_trial(site: Site, today, notice_days: int) -> None:
+	if has_active_payment_method(site.team) and convert_within_limit(site):
+		return
+
 	days_left = date_diff(site.trial_ends_on, today)
 	if days_left <= 0:
 		end_trial(site, today)

@@ -13,7 +13,11 @@ import { openTeamSwitcher } from '@/composables/useTeamSwitcher'
 import { getServerActions } from '@/lib/capabilities'
 import { billingPeriod } from '@/lib/date'
 import { money } from '@/lib/format'
-import { getServerMenuGroups, type ServerMenuVerb } from '@/lib/serverMenu'
+import {
+	getServerMenuGroups,
+	type ServerMenuVerb,
+	withSubmenuItems,
+} from '@/lib/serverMenu'
 
 export interface SearchItem {
 	name: string
@@ -152,7 +156,8 @@ export function useSearchIndex() {
 				console: canOpenConsole.value,
 			})
 			const run = (verb: ServerMenuVerb): void => {
-				if (verb === 'console') void openConsole(server)
+				if (verb === 'ssh-console') void openConsole(server, 'ssh')
+				else if (verb === 'tty-console') void openConsole(server, 'tty')
 				else if (verb === 'pilot') void openBench(server)
 				else if (verb === 'open')
 					void (site ? openSite(site.name) : openBench(server))
@@ -167,6 +172,7 @@ export function useSearchIndex() {
 
 			return getServerMenuGroups(server, allowed, run, { opensSite: !!site })
 				.flat()
+				.flatMap(withSubmenuItems)
 				.filter((option) => !option.disabled)
 				.map((option) => ({
 					name: `${option.label} ${title}`,

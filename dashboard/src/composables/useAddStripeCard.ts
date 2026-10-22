@@ -22,6 +22,7 @@ import { ref } from 'vue'
 import { API, method } from '@/api/methods'
 import { getErrorMessage, successToast } from '@/lib/feedback'
 import { capitalise } from '@/lib/format'
+import { stripeCardElementStyle } from '@/lib/gateway'
 
 interface CardSetupOrder {
 	client_secret?: string
@@ -87,7 +88,10 @@ export function useAddStripeCard({
 			.submit({ team })
 			.then(() => initiate.data)
 			.catch(() => null)
-		card = stripe.elements().create('card', { hidePostalCode: true })
+		card = stripe.elements().create('card', {
+			hidePostalCode: true,
+			style: stripeCardElementStyle(),
+		})
 		card.on('change', (e) => {
 			complete.value = !!e.complete
 			error.value = e.error?.message ?? ''
@@ -102,8 +106,12 @@ export function useAddStripeCard({
 		error.value = ''
 		try {
 			const order = await orderPromise // usually already resolved by now
+			// The setup call's own message says why it failed, such as the provider being down.
 			if (!order?.client_secret)
-				throw new Error('Could not start card setup. Please try again.')
+				throw (
+					initiate.error ??
+					new Error('Could not start card setup. Please try again.')
+				)
 
 			const { paymentMethod, error: pmError } =
 				await stripe.createPaymentMethod({

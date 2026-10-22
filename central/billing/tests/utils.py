@@ -414,6 +414,7 @@ def complete_billing_profile(team, currency="INR"):
 	money-movement gate (_require_billing_setup) passes. Saves the doc directly,
 	bypassing the API's gateway-supported-currency check, so it works regardless of
 	which gateways a given test has configured."""
+	in_india = currency == "INR"
 	values = {
 		"doctype": "Billing Profile",
 		"team": team,
@@ -422,10 +423,10 @@ def complete_billing_profile(team, currency="INR"):
 		"email": "billing@test.example",
 		"phone": "9999999999",
 		"address_line1": "1 Test Street",
-		"city": "Pune",
-		"state": "Maharashtra",
-		"country": "India",
-		"pincode": "411001",
+		"city": "Pune" if in_india else "Austin",
+		"state": "Maharashtra" if in_india else "Texas",
+		"country": "India" if in_india else "United States",
+		"pincode": "411001" if in_india else "73301",
 	}
 	if frappe.db.exists("Billing Profile", team):
 		doc = frappe.get_doc("Billing Profile", team)

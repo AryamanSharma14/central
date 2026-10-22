@@ -13,7 +13,7 @@ import { carriedQuery } from '@/lib/authRedirect'
 const route = useRoute()
 const router = useRouter()
 const { sendCode } = useEmailSignIn()
-const { product } = useProduct()
+const { product, productKey } = useProduct()
 
 const email = ref(queryString(route.query.email))
 const submitted = ref(false)
@@ -41,7 +41,7 @@ async function submit() {
 </script>
 
 <template>
-	<AuthShell>
+	<AuthShell :show-progress="Boolean(productKey)" :step="1">
 		<h1 class="flex items-center gap-2 text-xl-semibold text-ink-gray-9">
 			<ProductLogo />
 			Sign in to Frappe Cloud

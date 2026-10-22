@@ -11,6 +11,7 @@ from central.infrastructure.doctype.site.site import on_host, record_ready_sites
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.pilot import PilotLoginPending, fetch_site_login_url
 from central.integrations.servers import observe_server
+from central.signups.journey import SetupJourney, get_eta_seconds
 from central.site_provisioning import (
 	signup_offering,
 	subdomain_availability,
@@ -455,7 +456,7 @@ class TestSiteRoutes(SiteOnAMachine):
 
 	def test_onboarding_follows_only_a_site_creation(self):
 		server_action = self.creation_action("Server")
-		self.assertEqual(onboarding_status(self.team.name), {"site": None, "creation": None})
+		self.assertEqual(onboarding_status(self.team.name), {"site": None, "creation": None, "journey": None})
 
 		site_action = self.creation_action("Site")
 		state = onboarding_status(self.team.name)
@@ -463,6 +464,55 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertEqual(state["site"]["name"], self.site().name)
 		self.assertIsNone(state["creation"])
 		self.assertNotEqual(server_action, site_action)
+
+	def test_the_journey_names_the_chosen_address_and_its_request(self):
+		action = self.creation_action("Site")
+		frappe.db.set_value("Resource Action", action, {"subdomain": "raven", "region": self.region.name})
+
+		with patch("central.api.sites.is_site_reachable", return_value=False):
+			journey = onboarding_status(self.team.name)["journey"]
+
+		self.assertEqual(journey["subdomain"], "raven")
+		self.assertEqual(journey["domain"], "par-2.example.test")
+		self.assertEqual(journey["reference"], action)
+
+	def test_the_journey_moves_only_when_each_record_reaches_its_milestone(self):
+		def phase(status: str, server: str | None = None, is_ready: bool = False) -> str:
+			action = frappe._dict(status=status, server=server)
+			return SetupJourney(action, site_state={"ready": is_ready}).get_phase()
+
+		self.assertEqual(phase("Queued"), "booking")
+		self.assertEqual(phase("Sent"), "server")
+		self.server.db_set("status", "Provisioning")
+		self.assertEqual(phase("Succeeded", self.server.name), "server")
+		self.server.db_set("status", "Running")
+		self.assertEqual(phase("Succeeded", self.server.name), "app")
+		self.assertEqual(phase("Succeeded", self.server.name, is_ready=True), "signing")
+		self.assertEqual(phase("Timed Out"), "failed")
+
+	def test_the_estimate_is_the_median_of_recent_trials_in_the_region(self):
+		get_eta_seconds.clear_cache()
+		self.addCleanup(get_eta_seconds.clear_cache)
+		ready_at = frappe.utils.now_datetime()
+		self.site().db_set("ready_at", ready_at)
+		for seconds in (30, 40):
+			self.timed_creation(ready_at, seconds)
+		self.assertIsNone(get_eta_seconds(self.region.name))
+
+		get_eta_seconds.clear_cache()
+		self.timed_creation(ready_at, 90)
+		self.assertEqual(get_eta_seconds(self.region.name), 40)
+
+	def test_the_operator_timeline_stops_at_the_step_that_failed(self):
+		action = frappe.get_doc("Resource Action", self.creation_action("Site"))
+		action.db_set({"status": "Timed Out", "error_message": None})
+		self.site().db_set("ready_at", None)
+
+		steps = {step["label"]: step for step in action.get_setup_timeline()}
+
+		self.assertEqual(steps["Server created"]["error"], "Timed Out")
+		self.assertIsNotNone(steps["Site addressable"]["at"])
+		self.assertIsNone(steps["Site answered"]["at"])
 
 	def test_onboarding_completes_only_after_a_working_login(self):
 		with patch("central.www.dashboard.get_user_team_names", return_value=[self.team.name]):
@@ -476,7 +526,9 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.site().db_set("product", raven)
 		self.creation_action("Site", raven)
 
-		self.assertEqual(onboarding_status(self.team.name, crm), {"site": None, "creation": None})
+		self.assertEqual(
+			onboarding_status(self.team.name, crm), {"site": None, "creation": None, "journey": None}
+		)
 
 	def test_a_claimed_product_site_is_found_without_a_new_login(self):
 		product = self.signup_product("raven-return")
@@ -502,7 +554,7 @@ class TestSiteRoutes(SiteOnAMachine):
 	def test_a_plain_signup_does_not_resume_a_product_trial(self):
 		self.creation_action("Site", self.signup_product("raven-return"))
 
-		self.assertEqual(onboarding_status(self.team.name), {"site": None, "creation": None})
+		self.assertEqual(onboarding_status(self.team.name), {"site": None, "creation": None, "journey": None})
 
 	def test_a_terminated_product_site_does_not_block_a_new_trial(self):
 		product = self.signup_product("raven-return")
@@ -510,7 +562,9 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.creation_action("Site", product)
 		self.server.db_set("status", "Terminated")
 
-		self.assertEqual(onboarding_status(self.team.name, product), {"site": None, "creation": None})
+		self.assertEqual(
+			onboarding_status(self.team.name, product), {"site": None, "creation": None, "journey": None}
+		)
 
 	def test_another_team_cannot_resume_a_product_site(self):
 		product = self.signup_product("raven-return")
@@ -542,6 +596,11 @@ class TestSiteRoutes(SiteOnAMachine):
 			.insert()
 			.name
 		)
+
+	def timed_creation(self, ready_at, seconds: int) -> None:
+		action = self.creation_action("Site")
+		requested_at = frappe.utils.add_to_date(ready_at, seconds=-seconds)
+		frappe.db.set_value("Resource Action", action, {"region": self.region.name, "creation": requested_at})
 
 	def creation_action(self, resource_type: str, product: str | None = None) -> str:
 		return (
@@ -861,6 +920,33 @@ class TestSubdomainAvailability(SiteOnAMachine):
 
 		self.assertFalse(subdomain_availability("acme")["available"])
 		self.assertTrue(subdomain_availability("acme-two")["available"])
+
+	def test_a_name_of_a_terminated_server_is_free_again(self):
+		self.enroll()
+		observe_server(self.server)
+		self.site().db_set("subdomain", "acme")
+		self.server.db_set("status", "Terminated")
+
+		self.assertTrue(subdomain_availability("acme")["available"])
+
+	def test_a_route_holds_its_name_until_it_is_removed(self):
+		self.enroll()
+		observe_server(self.server)
+		frappe.db.set_single_value("Central Settings", "wildcard_domain", "example.test")
+		zone = f"{self.region.name}.example.test"
+		self.region.db_set("proxy_domain", zone)
+		frappe.get_doc(
+			{
+				"doctype": "Site Domain",
+				"domain": f"acme.{zone}",
+				"team": self.team.name,
+				"region": self.region.name,
+				"server": self.server.name,
+			}
+		).insert()
+
+		self.server.db_set("status", "Terminated")
+		self.assertFalse(subdomain_availability("acme")["available"])
 
 	def test_a_malformed_or_reserved_name_is_refused(self):
 		for name in ("", "-acme", "acme.two", "proxy", "admin"):

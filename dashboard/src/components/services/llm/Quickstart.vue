@@ -4,8 +4,6 @@ import { computed, ref, watch } from 'vue'
 import CopyableValue from '@/components/common/CopyableValue.vue'
 import type { AIDialect, AIModel } from '@/types/ai'
 
-// How to call the models: the base URL, and a request, for either API surface. With an
-// `apiKey` (a key just minted) the examples carry it; without one they say $API_KEY.
 interface Props {
 	gatewayUrl: string
 	models: AIModel[]
@@ -14,7 +12,6 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// One key serves both: the gateway takes either SDK's auth header.
 const dialect = ref<AIDialect>('openai')
 const dialects = [
 	{ label: 'OpenAI compatible', value: 'openai' },
@@ -27,8 +24,6 @@ const languages = [
 	{ label: 'Python', value: 'python' },
 ]
 
-// The chat example fits a model that answers in text on the chosen surface. A blank
-// output list is text.
 const chatModels = computed(() =>
 	props.models.filter(
 		(m) =>
@@ -54,10 +49,9 @@ const modelOptions = computed(() =>
 const model = computed(() => selectedModel.value || 'MODEL_ID')
 const key = computed(() => props.apiKey ?? '$API_KEY')
 
-// What each SDK takes as its base URL.
 const baseUrl = computed(() =>
 	dialect.value === 'openai'
-		? `${props.gatewayUrl}/v1`
+		? `${props.gatewayUrl}/openai/v1`
 		: `${props.gatewayUrl}/anthropic`,
 )
 

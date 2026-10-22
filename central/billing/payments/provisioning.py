@@ -114,7 +114,7 @@ def assign_entry_tier(team: str) -> None:
 	if not entry:
 		return  # no ladder seeded — nothing to assign
 	profile.trust_tier_level = entry.name
-	profile.trust_tier = entry.tier
+	profile.flags.tier_set_by_system = True
 	profile.save(ignore_permissions=True)
 
 

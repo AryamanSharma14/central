@@ -148,6 +148,12 @@ ERROR_CATALOG: dict[str, dict] = {
 		"remediation": "Open Billing to add your billing details and a payment method. Ask a team admin if you cannot manage billing.",
 		"retriable": False,
 	},
+	"TRUST_TIER_LIMIT": {
+		"title": "Your trust tier limit is reached",
+		"message": "Your trust tier allows {limit} servers, and your team already has {count}.",
+		"remediation": "Terminate a server you no longer need, or contact support to review your trust tier.",
+		"retriable": False,
+	},
 	"MAILBOX_POOL_EMPTY": {
 		"title": "The server wasn't created",
 		"message": "This region has no mailbox ready for a new server. No server was created.",

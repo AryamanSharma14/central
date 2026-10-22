@@ -630,6 +630,10 @@ export type PayingForItem =
 /** The open free trial of a server's site, from `signups.trial.get_status`. */
 export interface ServerTrial {
 	state: 'Active' | 'Ended'
+	/** An ended trial whose team has a payment method, so it can be kept. */
+	can_keep?: boolean
+	/** The team has a payment method, but the plan is above its spending limit. */
+	held?: boolean
 	ends_on: string
 	days_left: number
 	deletes_on: string | null

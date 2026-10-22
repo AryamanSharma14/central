@@ -119,6 +119,11 @@ class Site(Document):
 
 		start_trial(self)
 
+	def after_insert(self) -> None:
+		from central.signups.trial import convert_if_paid
+
+		convert_if_paid(self)
+
 	def mark_claimed(self) -> None:
 		"""Record the first successful login handoff and schedule the optional rename."""
 		if not self.claimed_at:

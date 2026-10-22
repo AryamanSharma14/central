@@ -19,6 +19,7 @@ from central.billing.catalog.composition import (
 	composition_quantities,
 	validate_composition,
 )
+from central.billing.catalog.entitlements import get_team_caps
 from central.billing.catalog.pricing import resolve_config_rate
 from central.billing.catalog.server_plans import get_server_plans
 from central.billing.doctype.billing_profile.billing_profile import (
@@ -27,6 +28,7 @@ from central.billing.doctype.billing_profile.billing_profile import (
 	require_billing_profile,
 )
 from central.billing.payments.settlement import wallet_funds
+from central.billing.revenue.tax import is_internal_team
 from central.errors import throw_action_error
 from central.iam import can, resolve_team
 from central.infrastructure.doctype.resource_action.resource_action import (
@@ -44,7 +46,7 @@ from central.server_models import (
 	ServerCreation,
 	SiteCreation,
 )
-from central.signups.trial import has_active_payment_method
+from central.signups.trial import has_active_payment_method, is_free_trial_creation
 from central.utils.units import MIB_PER_GIB, MILLICORES_PER_VCPU
 
 
@@ -112,7 +114,8 @@ def submit_request(
 	if existing := _repeated_request(server_input, digest):
 		return existing.customer_status()
 
-	configuration, rate = _build_server_configuration(server_input, snapshot, is_trial_site=bool(site))
+	is_free_trial = bool(site) and is_free_trial_creation(server_input.team, resource_type)
+	configuration, rate = _build_server_configuration(server_input, snapshot, is_free_trial)
 	configuration.site = site
 
 	return ResourceAction.queue(
@@ -123,6 +126,7 @@ def submit_request(
 		resource_type=resource_type,
 		subdomain=subdomain,
 		product=site.product if site else None,
+		is_free_trial=int(is_free_trial),
 		request_payload=configuration.model_dump(),
 		request_key=server_input.request_key,
 		request_digest=digest,
@@ -165,6 +169,8 @@ def submit_command(
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
 	if action == "start" and frappe.db.exists("Site", {"server": server.name, "trial_state": "Ended"}):
+		if has_active_payment_method(team):
+			frappe.throw(_("This trial has ended. Choose Keep this site to start it on its paid plan."))
 		frappe.throw(_("This trial has ended. Add a payment method to start it again."))
 	if action == "terminate" and server.is_termination_protected:
 		frappe.throw(_("Turn off termination protection before you terminate this server."))
@@ -243,7 +249,7 @@ def _repeated_request(server_input: CreateServerInput, digest: str):
 
 
 def _build_server_configuration(
-	server_input: CreateServerInput, snapshot: str | None, is_trial_site: bool
+	server_input: CreateServerInput, snapshot: str | None, is_free_trial: bool
 ) -> tuple[ServerCreation, float]:
 	"""Resolve the authorized image, purchasable composition, and saved configuration."""
 	image = (
@@ -264,7 +270,7 @@ def _build_server_configuration(
 		server_input.plan,
 		includes,
 		server_input.sub_category,
-		is_trial_site,
+		is_free_trial,
 	)
 	validate_guest_input(server_input)
 	# Check the saved keys now so the form shows the error. Dispatch reads their text, which a
@@ -317,12 +323,12 @@ def validate_purchase(
 	plan: str | None,
 	includes: list[dict] | None,
 	sub_category: str | None,
-	is_trial_site: bool = False,
+	is_free_trial: bool = False,
 ) -> tuple[list[dict], float]:
 	"""The composition and monthly rate of a server the team may buy. A free trial site is not
 	bought, so only the trial limit applies to it."""
-	is_free_trial = is_trial_site and not has_active_payment_method(team)
-	trial = is_free_trial or bool(frappe.db.get_value("Team", team, "is_staging_trial"))
+	internal = is_internal_team(team)
+	trial = is_free_trial or (not internal and bool(frappe.db.get_value("Team", team, "is_staging_trial")))
 	if is_free_trial:
 		validate_trial_site(team)
 	elif trial:
@@ -354,17 +360,30 @@ def validate_purchase(
 		composition = includes
 		rate = float(resolve_config_rate(includes, catalog["currency"], region))
 
+	# A free trial site is not bought, and an internal team is not held to a trust tier.
+	if is_free_trial or internal:
+		return composition, float(rate)
+
+	committed_rate = rate + reserved_rate(team)
 	if not trial:
-		committed_rate = rate + reserved_rate(team)
 		require_payment_method_or_credit(team, committed_rate)
-		if committed_rate > catalog["available"]:
-			frappe.throw(
-				_(
-					"This plan and your pending server requests exceed your spending limit. Choose a smaller plan, or contact support to review your limit."
-				)
+	if committed_rate > catalog["available"]:
+		frappe.throw(
+			_(
+				"This plan and your pending server requests exceed your spending limit. Choose a smaller plan, or contact support to review your limit."
 			)
+		)
+	require_server_slot(team)
 
 	return composition, float(rate)
+
+
+def require_server_slot(team: str) -> None:
+	"""Refuse a server beyond the number the team's trust tier allows."""
+	limit = get_team_caps(team).max_resource_count
+	count = server_count(team)
+	if count >= limit:
+		throw_action_error("TRUST_TIER_LIMIT", limit=limit, count=count)
 
 
 def require_payment_method_or_credit(team: str, rate: float) -> None:
@@ -407,12 +426,12 @@ def reserved_rate(team: str) -> float:
 
 
 def validate_trial(team: str) -> None:
-	from central.billing.revenue.credits import get_balance
+	from central.billing.revenue.credits import lock_team_wallet
 
-	if get_balance(team).get("balance", 0) <= 0:
+	if lock_team_wallet(team) <= 0:
 		frappe.throw(_("Your trial credits are used up. Add a payment method to continue."))
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
-	if trial_server_count(team) >= limit:
+	if server_count(team) >= limit:
 		frappe.throw(_("Trial Teams can have at most {0} active or pending servers.").format(limit))
 
 
@@ -420,13 +439,16 @@ def validate_trial_site(team: str) -> None:
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
 	if trial_site_count(team) >= limit:
 		frappe.throw(
-			_("A team can have at most {0} free trial sites. Add a payment method for more.").format(limit)
+			_(
+				"You can have at most {0} free trial sites across your teams. Add a payment method for more."
+			).format(limit)
 		)
 
 
 def trial_site_count(team: str) -> int:
-	"""Open trial sites, pending site creations, and provisioned servers whose site Central has
-	not recorded yet. Locking reads, for the same reason as reserved_rate."""
+	"""Open trial sites, pending site creations, and provisioned servers whose site Central has not recorded yet, across every team of the team's owner. Locking reads, for the same reason as reserved_rate."""
+	owner = frappe.db.get_value("Team", team, "owner_user")
+	teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name") if owner else [team]
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")
@@ -434,7 +456,7 @@ def trial_site_count(team: str) -> int:
 	sites = (
 		frappe.qb.from_(site)
 		.select(Count("*"))
-		.where((site.team == team) & site.trial_state.isin(("Active", "Ended")))
+		.where(site.team.isin(teams) & site.trial_state.isin(("Active", "Ended")))
 		.for_update()
 	).run()
 
@@ -442,8 +464,8 @@ def trial_site_count(team: str) -> int:
 		frappe.qb.from_(request)
 		.select(Count("*"))
 		.where(
-			(request.team == team)
-			& (request.resource_type == "Site")
+			request.team.isin(teams)
+			& (request.is_free_trial == 1)
 			& request.status.isin(PENDING_STATES)
 			& (request.server.isnull() | (request.server == ""))
 		)
@@ -461,8 +483,8 @@ def trial_site_count(team: str) -> int:
 		.on(machine.name == request.server)
 		.select(Count("*"))
 		.where(
-			(request.team == team)
-			& (request.resource_type == "Site")
+			request.team.isin(teams)
+			& (request.is_free_trial == 1)
 			& (request.action == "create")
 			& (machine.status != "Terminated")
 			& ~request.server.isin(started)
@@ -473,7 +495,7 @@ def trial_site_count(team: str) -> int:
 	return sites[0][0] + pending[0][0] + unready[0][0]
 
 
-def trial_server_count(team: str) -> int:
+def server_count(team: str) -> int:
 	"""Active servers plus pending creations. Locking reads, for the same reason as reserved_rate."""
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")

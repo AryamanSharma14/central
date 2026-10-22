@@ -72,6 +72,7 @@ export const API = {
 	setServerIpv4Internet: 'central.api.servers.set_server_ipv4_internet',
 	publicIpv4Pricing: 'central.api.servers.public_ipv4_pricing',
 	terminateServer: 'central.api.servers.terminate_server',
+	keepTrialSite: 'central.api.servers.keep_trial_site',
 	serverOverview: 'central.api.servers.server_overview',
 	serverMetrics: 'central.api.servers.server_metrics',
 	serverHostnames: 'central.api.servers.server_hostnames',
@@ -99,9 +100,10 @@ export const API = {
 	aiUsage: 'central.services.api.ai.get_usage',
 	aiApiKeys: 'central.services.api.ai.list_api_keys',
 	createAIApiKey: 'central.services.api.ai.create_api_key',
+	setAIApiKeyCaps: 'central.services.api.ai.set_api_key_caps',
+	aiModels: 'central.services.api.ai.get_models',
 	revokeAIApiKey: 'central.services.api.ai.revoke_api_key',
-	setAIApiKeyBalanceAccess:
-		'central.services.api.ai.set_api_key_balance_access',
+	pullAIUsage: 'central.services.api.ai.pull_usage',
 
 	objectStorage: 'central.services.api.storage.get_object_storage',
 	bucketUsage: 'central.services.api.storage.get_bucket_usage',

@@ -15,7 +15,7 @@ from central.errors import AtlasConnectionError, AtlasRequestUncertain
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.resource_actions import SERVER_PAGE_SIZE, _process_locked
-from central.resource_actions import get_status, submit_request, trial_server_count, validate_trial
+from central.resource_actions import get_status, server_count, submit_request, validate_trial
 from central.server_models import SiteCreation
 from central.tests.test_sso_keys import reset_signing_key
 from central.tests.utils import central_limit
@@ -152,6 +152,25 @@ class TestResourceActions(IntegrationTestCase):
 
 		payload = self.client.return_value.create_vm.call_args.args[0]
 		self.assertEqual(payload["sleep_after_idle_seconds"], 45 * 60)
+
+	def test_a_free_trial_site_sleeps_in_production(self):
+		frappe.db.set_single_value("Central Settings", "trial_idle_shutdown_minutes", 10)
+		frappe.clear_cache(doctype="Central Settings")
+		name = self.submit(resource_type="Site", subdomain="sleepy", site=SiteCreation())["action"]
+		_process_locked(name)
+
+		self.assertEqual(
+			self.client.return_value.create_vm.call_args.args[0]["sleep_after_idle_seconds"], 600
+		)
+
+	def test_a_site_for_a_team_that_pays_never_sleeps(self):
+		frappe.db.set_single_value("Central Settings", "trial_idle_shutdown_minutes", 10)
+		frappe.clear_cache(doctype="Central Settings")
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			name = self.submit(resource_type="Site", subdomain="awake", site=SiteCreation())["action"]
+			_process_locked(name)
+
+		self.assertEqual(self.client.return_value.create_vm.call_args.args[0]["sleep_after_idle_seconds"], 0)
 
 	def test_a_zero_idle_time_keeps_a_trial_server_awake(self):
 		frappe.db.set_value("Team", self.team.name, "is_staging_trial", 1)
@@ -297,9 +316,11 @@ class TestResourceActions(IntegrationTestCase):
 		self.client.return_value.create_vm.side_effect = AtlasConnectionError("region refused")
 		_process_locked(name)
 
-		frappe.get_doc("Resource Action", name).retry()
+		self.assertTrue(frappe.db.get_value("Resource Action", name, "is_free_trial"))
+		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+			frappe.get_doc("Resource Action", name).retry()
 
-		self.assertTrue(self.purchase.call_args.kwargs["is_trial_site"])
+		self.assertTrue(self.purchase.call_args.kwargs["is_free_trial"])
 
 	def test_a_free_trial_site_gets_no_subscription_but_a_paid_server_does(self):
 		_process_locked(self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"])
@@ -388,8 +409,8 @@ class TestResourceActions(IntegrationTestCase):
 
 	def test_the_trial_cap_follows_central_settings(self):
 		with (
-			patch("central.billing.revenue.credits.get_balance", return_value={"balance": 10}),
-			patch("central.resource_actions.trial_server_count", return_value=1),
+			patch("central.billing.revenue.credits.lock_team_wallet", return_value=10),
+			patch("central.resource_actions.server_count", return_value=1),
 			central_limit("trial_servers_per_team", 1),
 			self.assertRaisesRegex(frappe.ValidationError, "at most 1 active or pending servers"),
 		):
@@ -397,7 +418,7 @@ class TestResourceActions(IntegrationTestCase):
 
 	def test_the_trial_cap_counts_with_locking_reads(self):
 		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
-			trial_server_count(self.team.name)
+			server_count(self.team.name)
 
 		self.assertEqual(len(sql.call_args_list), 2)
 		for call in sql.call_args_list:

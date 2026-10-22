@@ -71,6 +71,16 @@ def invariant_violations() -> list[dict]:
 	]
 
 
+def readiness_gaps() -> list[dict]:
+	"""What the next billing run would bill wrongly or not at all."""
+	from central.billing.platform import readiness
+
+	return [
+		{"alert": "readiness", "subject": v.subject, "team": v.team, "detail": f"{v.check}: {v.detail}"}
+		for v in invariants.audit(checks=readiness.CHECKS)
+	]
+
+
 def held_invoices() -> list[dict]:
 	"""Bills still unissued long after their period closed — missing billing details,
 	accounting records that never synced, or a GSTIN never checked.
@@ -110,7 +120,14 @@ def failed_refunds() -> list[dict]:
 	]
 
 
-SOURCES = (invariant_violations, failed_webhooks, stale_attempts, held_invoices, failed_refunds)
+SOURCES = (
+	invariant_violations,
+	readiness_gaps,
+	failed_webhooks,
+	stale_attempts,
+	held_invoices,
+	failed_refunds,
+)
 
 
 def collect() -> list[dict]:

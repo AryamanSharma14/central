@@ -112,9 +112,11 @@ def initiate_card_setup(team: str | None = None, gateway: str | None = None) -> 
 	# Saved cards are a Stripe-only rail (ADR 0005), so resolve the currency's Stripe
 	# gateway — for INR that's the Stripe gateway, not the Razorpay currency default.
 	gateway = gateway or _card_gateway(_team_currency(team))
+	from central.billing.gateways.base import customer_safe_gateway_errors
 	from central.billing.payments import payments
 
-	return payments.initiate_payment_method_setup(team, gateway)
+	with customer_safe_gateway_errors():
+		return payments.initiate_payment_method_setup(team, gateway)
 
 
 @frappe.whitelist(methods=["POST"])
