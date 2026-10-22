@@ -133,6 +133,10 @@ class VirtualMachine(Document):
 	def onload(self) -> None:
 		self.set_onload("is_access_locked", self.is_access_locked())
 
+	def after_insert(self) -> None:
+		# The region accepted a creation. Open consoles list the new server now, not at its first state report.
+		self.publish_state_change()
+
 	def on_update(self):
 		if self.has_value_changed("status") or self.has_value_changed("plan"):
 			self.sync_subscription_on_status_change()

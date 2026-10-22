@@ -28,8 +28,6 @@ import {
 } from '@/lib/serverMap'
 import type { ComposedConfig, Plan, Profile } from '@/types/api'
 
-const SUCCESS_HOLD_MS = 900
-
 export function useServerCreation() {
 	const router = useRouter()
 	const route = useRoute()
@@ -420,24 +418,22 @@ export function useServerCreation() {
 		operation.reset()
 	}
 
-	// A created server belongs in the fleet, not on this form. The list opens on it.
-	let successTimer: ReturnType<typeof setTimeout> | undefined
-	onBeforeUnmount(() => clearTimeout(successTimer))
+	// A created server opens on its own page. That page looks the server up in the shared
+	// fleet, so the fleet is read again first, or the page would say the server is missing.
+	let isLeaving = false
+	onBeforeUnmount(() => {
+		isLeaving = true
+	})
 	watch(
 		() => action.value?.status,
-		(status) => {
-			// A team switch or reset clears the action, so a pending redirect no longer applies.
-			clearTimeout(successTimer)
+		async (status) => {
 			if (status !== 'Succeeded') return
 			const created = action.value?.resource_id
-			// Let the finished progress register before the page changes.
-			successTimer = setTimeout(() => {
-				operation.reset()
-				router.replace({
-					path: '/servers',
-					query: created ? { created } : {},
-				})
-			}, SUCCESS_HOLD_MS)
+			await fleet.reload()
+			// A team switch or a reset during the read clears the action. Then the redirect no longer applies.
+			if (isLeaving || action.value?.status !== 'Succeeded') return
+			operation.reset()
+			router.replace(created ? `/servers/${created}` : '/servers')
 		},
 	)
 
