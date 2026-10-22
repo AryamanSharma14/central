@@ -218,14 +218,14 @@ class TestGroveClientCalls(IntegrationTestCase):
 
 
 class TestAI(IntegrationTestCase):
-	def setUp(self):
-		team = frappe.get_all(
-			"Team", filters={"owner_user": ("is", "set")}, fields=["name", "owner_user"], limit=1
-		)
-		if not team:
-			self.skipTest("Needs a Team with an owner on the site.")
-		self.team, self.owner = team[0].name, team[0].owner_user
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.owner = ensure_user("ai.owner@example.test")
+		team = frappe.get_doc({"doctype": "Team", "team_name": "AI Test Team", "owner_user": cls.owner})
+		cls.team = team.insert(ignore_permissions=True).name
 
+	def setUp(self):
 		settings = frappe.get_single("AI Settings")
 		settings.update(
 			{
@@ -517,6 +517,7 @@ class TestAI(IntegrationTestCase):
 
 		profile = frappe.get_doc("Billing Profile", self.team)
 		profile.trust_tier_level = ensure_trust_tier_level("t-ai")
+		profile.promotion_basis = "Raised for the AI webhook test."
 		with patch("frappe.integrations.doctype.webhook.webhook.requests.request") as request:
 			request.return_value.status_code = 200
 			request.return_value.text = "{}"
