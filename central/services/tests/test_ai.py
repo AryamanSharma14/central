@@ -23,6 +23,8 @@ MINTED = {
 	"api_key": "gr_testsecret",
 }
 LIMITS = [{"metric": "requests", "window": "1m", "value": 20}]
+# Patch Frappe's send step: how it makes the HTTP call differs between Frappe versions.
+SEND_WEBHOOK = "frappe.integrations.doctype.webhook.webhook.send_webhook_request"
 LISTED = {
 	"name": "k1",
 	"title": "app",
@@ -218,14 +220,14 @@ class TestGroveClientCalls(IntegrationTestCase):
 
 
 class TestAI(IntegrationTestCase):
-	def setUp(self):
-		team = frappe.get_all(
-			"Team", filters={"owner_user": ("is", "set")}, fields=["name", "owner_user"], limit=1
-		)
-		if not team:
-			self.skipTest("Needs a Team with an owner on the site.")
-		self.team, self.owner = team[0].name, team[0].owner_user
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.owner = ensure_user("ai.owner@example.test")
+		team = frappe.get_doc({"doctype": "Team", "team_name": "AI Test Team", "owner_user": cls.owner})
+		cls.team = team.insert(ignore_permissions=True).name
 
+	def setUp(self):
 		settings = frappe.get_single("AI Settings")
 		settings.update(
 			{
@@ -237,6 +239,8 @@ class TestAI(IntegrationTestCase):
 		settings.save()
 		frappe.db.delete("Team Service", {"add_on_service": "ai"})
 		self.addCleanup(frappe.set_user, "Administrator")
+		# Saving the settings creates the webhook; the rollback drops it but not the cached list.
+		self.addCleanup(frappe.client_cache.delete_value, "webhooks")
 
 	def enabled(self):
 		with (
@@ -517,20 +521,19 @@ class TestAI(IntegrationTestCase):
 
 		profile = frappe.get_doc("Billing Profile", self.team)
 		profile.trust_tier_level = ensure_trust_tier_level("t-ai")
-		with patch("frappe.integrations.doctype.webhook.webhook.requests.request") as request:
-			request.return_value.status_code = 200
-			request.return_value.text = "{}"
+		profile.promotion_basis = "Raised for the AI webhook test."
+		with patch(SEND_WEBHOOK) as send:
+			send.return_value.status_code = 200
+			send.return_value.text = "{}"
 			profile.save()
 			# What the after-commit hook does, without committing the test's transaction.
 			flush_webhook_execution_queue()
 
 		body = {"team": self.team, "tier": "t-ai", "observed_at": str(profile.modified)}
-		request.assert_called_once()
-		self.assertEqual(
-			request.call_args.kwargs["url"], frappe.get_value("Webhook", logs["webhook"], "request_url")
-		)
-		self.assertEqual(json.loads(request.call_args.kwargs["data"]), body)
-		headers = request.call_args.kwargs["headers"]
+		send.assert_called_once()
+		_method, url, headers, data, _timeout = send.call_args.args
+		self.assertEqual(url, frappe.get_value("Webhook", logs["webhook"], "request_url"))
+		self.assertEqual(data, body)
 		self.assertEqual(headers[ai_settings.CONTROL_KEY_HEADER], "control-key")
 		self.assertTrue(headers["X-Frappe-Webhook-Signature"])
 		log = frappe.get_last_doc("Webhook Request Log", filters=logs)
@@ -539,10 +542,10 @@ class TestAI(IntegrationTestCase):
 		# Anything but the level is Grove's business no more than before.
 		profile.reload()
 		profile.legal_name = "Quiet Co"
-		with patch("frappe.integrations.doctype.webhook.webhook.requests.request") as request:
+		with patch(SEND_WEBHOOK) as send:
 			profile.save()
 			flush_webhook_execution_queue()
-		request.assert_not_called()
+		send.assert_not_called()
 		self.assertEqual(frappe.db.count("Webhook Request Log", logs), before + 1)
 
 	def test_enroll_pops_the_secret_from_the_request_and_keeps_the_credential(self):
