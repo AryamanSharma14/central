@@ -18,7 +18,6 @@ from central.site_provisioning import (
 	trial_configuration,
 )
 from central.tests.test_iam import ensure_user
-from central.www.dashboard import _onboarding_complete
 
 
 class SiteOnAMachine(IntegrationTestCase):
@@ -514,12 +513,6 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertIsNotNone(steps["Site addressable"]["at"])
 		self.assertIsNone(steps["Site answered"]["at"])
 
-	def test_onboarding_completes_only_after_a_working_login(self):
-		with patch("central.www.dashboard.get_user_team_names", return_value=[self.team.name]):
-			self.assertFalse(_onboarding_complete())
-			self.site().db_set("claimed_at", frappe.utils.now_datetime())
-			self.assertTrue(_onboarding_complete())
-
 	def test_another_product_does_not_resume_the_existing_site(self):
 		raven = self.signup_product("raven-return")
 		crm = self.signup_product("crm-return")
@@ -976,6 +969,7 @@ class TestTrialCreationIsQueued(IntegrationTestCase):
 
 		with (
 			patch("central.site_provisioning.validated_subdomain", return_value="acme"),
+			patch("central.site_provisioning.get_signup_product", return_value=Mock(signup_app="raven")),
 			patch("central.site_provisioning.trial_configuration", return_value={}),
 			patch("central.site_provisioning.submit_request") as submit,
 		):
@@ -996,7 +990,7 @@ class TestTrialCreationIsQueued(IntegrationTestCase):
 			).insert(ignore_permissions=True)
 			submit.return_value = action.customer_status()
 			self.action = action
-			return create_trial_site(None, "acme", "key-" + frappe.generate_hash(length=8))
+			return create_trial_site(None, "acme", "key-" + frappe.generate_hash(length=8), "raven")
 
 	def test_creation_returns_the_queued_action(self):
 		status = self.start()

@@ -211,6 +211,7 @@ def get_console_url(server: VirtualMachine, mode: ConsoleMode) -> str:
 
 	SSH opens a root shell with a key Atlas pushes for that session only. TTY opens the
 	shared serial console, which every guest has and which asks for a user password."""
+	server.require_server_access()
 	if server.status != "Running":
 		frappe.throw(_("Start the server before you open its console."))
 

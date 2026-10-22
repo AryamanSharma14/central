@@ -376,8 +376,10 @@ watch(
 					v-else
 					:overview="details"
 					:can-manage-keys="canManageSSHKeys"
+					:is-access-locked="actions.isAccessLocked"
 					class="mt-6"
 					@changed="reloadOverview"
+					@upgrade="resizing = true"
 				/>
 			</template>
 		</div>
@@ -396,7 +398,7 @@ watch(
 			v-model:target="pendingTerminate"
 			:loading="busy === pendingTerminate?.resource_id"
 			:error="terminateError"
-			:can-snapshot="actions.snapshot"
+			:can-snapshot="actions.snapshot && !actions.isAccessLocked"
 			:is-protected="!!details?.server.is_termination_protected"
 			@confirm="terminate"
 		/>

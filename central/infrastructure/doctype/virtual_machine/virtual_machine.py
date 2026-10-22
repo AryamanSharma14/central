@@ -1,3 +1,6 @@
+import functools
+import inspect
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Self
 
 import frappe
@@ -5,7 +8,7 @@ from frappe import _
 from frappe.model.document import Document
 from requests import RequestException
 
-from central.iam import can
+from central.iam import can, user_has_operator_bypass
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.user_mail_account.user_mail_account import UserMailAccount
 from central.sso import mint_bench_login
@@ -13,6 +16,19 @@ from central.utils.units import mebibytes_to_gigabytes, millicores_to_vcpus
 
 if TYPE_CHECKING:
 	from central.server_models import FirewallChange
+
+
+def requires_server_access(method: Callable) -> Callable:
+	"""Refuse a server method on an open free trial. A `user` argument names who asks;
+	without one, the session user does. Operators keep access."""
+	signature = inspect.signature(method)
+
+	@functools.wraps(method)
+	def wrapper(self: "VirtualMachine", *args, **kwargs):
+		self.require_server_access(signature.bind(self, *args, **kwargs).arguments.get("user"))
+		return method(self, *args, **kwargs)
+
+	return wrapper
 
 
 class VirtualMachine(Document):
@@ -114,6 +130,9 @@ class VirtualMachine(Document):
 		if not self.is_new() and self.has_value_changed("title") and not self.title:
 			frappe.throw(_("Enter a server name."))
 
+	def onload(self) -> None:
+		self.set_onload("is_access_locked", self.is_access_locked())
+
 	def on_update(self):
 		if self.has_value_changed("status") or self.has_value_changed("plan"):
 			self.sync_subscription_on_status_change()
@@ -125,10 +144,31 @@ class VirtualMachine(Document):
 			self.queue_status_notification("server_failed")
 
 		if self.has_value_changed("status") and self.status == "Terminated":
+			self.close_trial()
 			self.enqueue_route_removal()
 			self.revoke_pilot_credentials()
 			UserMailAccount.queue_removal(server=self.name)
 			self.queue_status_notification("server_terminated")
+
+	def close_trial(self) -> None:
+		"""A terminated server ends its open trial now, so its owner can start a new trial at once."""
+		from central.signups.trial import Trial
+
+		if trial := Trial.find_open(self.name):
+			trial.delete()
+
+	def is_access_locked(self) -> bool:
+		"""Whether the server runs an open free trial. Its owner then gets the site, not the server."""
+		from central.signups.access import is_server_locked
+
+		return is_server_locked(self.name)
+
+	def require_server_access(self, user: str | None = None) -> None:
+		"""Refuse SSH, the console, Pilot and snapshots on an open free trial. Operators keep access."""
+		from central.signups.access import SERVER_ACCESS_LOCKED
+
+		if self.is_access_locked() and not user_has_operator_bypass(user):
+			frappe.throw(str(SERVER_ACCESS_LOCKED), frappe.PermissionError)
 
 	def revoke_pilot_credentials(self) -> None:
 		"""A terminated server's Pilot must not reach Central again."""
@@ -315,6 +355,7 @@ class VirtualMachine(Document):
 
 		return {"status": observe_server(self)}
 
+	@requires_server_access
 	def get_bench_login_url(self, user: str) -> str:
 		"""A login URL for a Running server in an active region, gated on `server:console`.
 
@@ -353,6 +394,7 @@ class VirtualMachine(Document):
 
 		return f"{gateway}/?sid={mint_bench_login(audience)}"
 
+	@requires_server_access
 	def set_ssh_keys(self, key_names: list[str]) -> None:
 		"""Replace the team keys that can sign in to this server."""
 		from central.integrations.ssh_keys import replace_server_ssh_keys

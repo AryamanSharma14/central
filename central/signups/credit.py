@@ -4,7 +4,8 @@ from frappe import _
 from central.billing import settings
 from central.billing.payments.provisioning import grant_welcome_credits, has_owner_received_welcome_credits
 from central.billing.revenue.credits import get_balance, grant_promotional_credits
-from central.signups.trial import convert_team, has_active_payment_method
+from central.signups.eligibility import has_active_payment_method
+from central.signups.trial import convert_team
 
 
 def on_payment_method_update(doc, method: str | None = None) -> None:
@@ -21,10 +22,9 @@ def on_payment_method_update(doc, method: str | None = None) -> None:
 
 
 def is_welcome_credit_due(team: str) -> bool:
-	"""A team without trials earns the welcome credit with its first payment method. A trial team
-	earns it only while one of its trials is still Active, which rewards converting early."""
-	states = frappe.get_all("Site", filters={"team": team, "trial_state": ["is", "set"]}, pluck="trial_state")
-	return not states or "Active" in states
+	"""A team earns the welcome credit with its first payment method, unless it had a free trial:
+	the trial site is that team's free start."""
+	return not frappe.db.exists("Site", {"team": team, "trial_state": ["is", "set"]})
 
 
 @frappe.whitelist(methods=["POST"])
@@ -58,8 +58,7 @@ def get_purchase_state(team: str) -> dict:
 
 
 def get_welcome_credit_offer(team: str) -> dict | None:
-	"""The welcome credit the team's first active payment method adds, or None. `ends_on` is the
-	last day a trial team can still earn it."""
+	"""The welcome credit the team's first active payment method adds, or None."""
 	currency = frappe.db.get_value("Billing Profile", team, "currency")
 	amount = settings.welcome_credit_amount(currency) if currency else 0
 	if not amount or has_owner_received_welcome_credits(team, lock=False) or not is_welcome_credit_due(team):
@@ -69,7 +68,4 @@ def get_welcome_credit_offer(team: str) -> dict | None:
 		"amount": amount,
 		"currency": currency,
 		"validity_days": settings.promotional_credit_validity_days(),
-		"ends_on": frappe.db.get_value(
-			"Site", {"team": team, "trial_state": "Active"}, "trial_ends_on", order_by="trial_ends_on asc"
-		),
 	}

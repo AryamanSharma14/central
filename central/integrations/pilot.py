@@ -141,7 +141,7 @@ def rename_admin_domain(server: str, base_url: str | None = None, tls: bool = Tr
 	expected = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	payload = {"domain": urlparse(expected).hostname, "tls": tls}
 
-	return _post_to_pilot(server, base_url or expected, "/api/v1/settings/admin-domain", payload)
+	return _request_pilot("POST", server, base_url or expected, "/api/v1/settings/admin-domain", payload)
 
 
 def rename_site(
@@ -157,7 +157,45 @@ def rename_site(
 	base_url = base_url or _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	payload = {"new_name": new_name, "keep_old_hostname": keep_old_hostname, "make_primary": make_primary}
 
-	return _post_to_pilot(server, base_url, f"/api/v1/sites/{quote(site, safe='')}/actions/rename", payload)
+	return _request_pilot(
+		"POST", server, base_url, f"/api/v1/sites/{quote(site, safe='')}/actions/rename", payload
+	)
+
+
+def get_site_apps(server: str, site_names: list[str]) -> tuple[str, list[str]]:
+	"""The bench's name for the site, and the apps active on it. The bench may know the site by
+	any of `site_names`, so each is tried in order."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	for site in site_names:
+		try:
+			result = _request_pilot("GET", server, base_url, f"/api/v1/sites/{quote(site, safe='')}/apps")
+		except requests.HTTPError as error:
+			# Before its rename lands, the bench knows the site only by its image name.
+			if error.response is not None and error.response.status_code == 404 and site != site_names[-1]:
+				continue
+			raise
+
+		return site, [app["name"] for app in result.get("apps", [])]
+
+	frappe.throw(_("The site has no name that its server knows."))
+
+
+def install_site_app(server: str, site: str, app: str) -> dict:
+	"""Ask a server's pilot to install a marketplace app on one of its sites. Pilot queues a task."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	task = _request_pilot(
+		"POST", server, base_url, f"/api/v1/sites/{quote(site, safe='')}/apps", {"app": app}
+	)
+
+	# An app that was installed and disabled is enabled at once, with no task.
+	return {"site": site, "task_id": task.get("task_id"), "status": task.get("status") or "success"}
+
+
+def get_site_task(server: str, site: str, task_id: str) -> dict:
+	"""Read a task that a server's pilot runs for one of its sites."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	path = f"/api/v1/sites/{quote(site, safe='')}/tasks/{quote(task_id, safe='')}"
+	return _request_pilot("GET", server, base_url, path)
 
 
 def _expected_gateway_url(server) -> str:
@@ -168,14 +206,16 @@ def _expected_gateway_url(server) -> str:
 	return url
 
 
-def _post_to_pilot(server: str, base_url: str, path: str, payload: dict) -> dict:
+def _request_pilot(method: str, server: str, base_url: str, path: str, payload: dict | None = None) -> dict:
+	"""Call a server's pilot as the bench, with a token for its own audience."""
 	audience_id = frappe.db.get_value(
 		"Pilot Credential", {"server": server, "status": "Active"}, "audience_id"
 	)
 	if not audience_id:
 		frappe.throw(frappe._("Server {0} has no enrolled pilot.").format(server))
 
-	response = requests.post(
+	response = requests.request(
+		method,
 		f"{_gateway_url(base_url)}{path}",
 		headers={"Authorization": f"Bearer {mint_bench_login(audience_id)}"},
 		json=payload,

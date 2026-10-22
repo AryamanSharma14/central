@@ -219,6 +219,47 @@ export interface TrialSiteState {
 	login_pending: boolean
 }
 
+/** The owner's open free trial, which a new signup offers before it asks for another site. */
+export interface OpenTrial {
+	state: 'Active' | 'Ended' | 'Setting up'
+	product: string | null
+	product_title: string
+	/** The Product's logo, or null for a plain Frappe Cloud trial. */
+	product_logo?: string | null
+	/** Absent while the site is still being set up. */
+	site?: string
+	server?: string
+	address?: string
+	url?: string
+	ends_on?: string | null
+	deletes_on?: string | null
+}
+
+/** A Pilot task's state while it installs an app on a trial site. */
+export type AppInstallStatus =
+	| 'queued'
+	| 'running'
+	| 'success'
+	| 'failed'
+	| 'killed'
+
+/** The install that `install_trial_app` started: the bench's name for the site and its task. */
+export interface TrialAppInstall {
+	site: string
+	task_id: string | null
+	status: AppInstallStatus
+}
+
+export interface TrialAppInstallProgress {
+	/** `unreachable`: the site did not answer this poll, so the page asks again. */
+	status: AppInstallStatus | 'unreachable'
+	/** Tasks ahead of this one on the server while it is queued. */
+	queue_position: number | null
+	started_at: string | null
+	/** Customer copy for a failed install. The reason is on the Site for operators. */
+	error: string | null
+}
+
 /** The milestone a new site is working towards, as Central reads it. */
 export type SetupPhase = 'booking' | 'server' | 'app' | 'signing' | 'failed'
 

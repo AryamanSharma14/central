@@ -31,7 +31,7 @@ Example: Product Key `raven`, Title `Raven`, Signup App `raven`. The signup link
 
 `GET central.api.signups.get_product(product)` returns the title, logo, subtitle and setup messages of an enabled product, or nothing. Guests can call it, limited to 60 calls per minute for each IP address.
 
-The console keeps `?product=` through signup, sign-in, email verification and the onboarding pages. The site name page sends it to `central.api.sites.create_trial_site(subdomain, request_key, team, product)`. Central refuses an unknown or disabled product before it asks the region for an image. See [Trial sites](../../../infrastructure/doctype/site/SPEC.md#configuration) for how the image is chosen.
+The console keeps `?product=` through signup, sign-in, email verification and the onboarding pages. The site name page sends it to `central.api.sites.create_trial_site(subdomain, request_key, product, team)`. The product is required, because only a product signup gets a free trial. Central refuses an unknown or disabled product before it asks the region for an image. See [Trial sites](../../../infrastructure/doctype/site/SPEC.md#configuration) for how the image is chosen.
 
 A person who can edit a saved product has these Desk actions:
 

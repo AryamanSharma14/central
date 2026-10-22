@@ -128,6 +128,9 @@ export const API = {
 	getSite: 'central.api.sites.get_site',
 	loginSite: 'central.api.sites.login_site',
 	terminateSite: 'central.api.sites.terminate_site',
+	getOpenTrial: 'central.api.sites.get_open_trial',
+	installTrialApp: 'central.api.sites.install_trial_app',
+	trialAppInstall: 'central.api.sites.get_trial_app_install',
 
 	getBenchLink: 'central.api.sso.get_bench_link',
 

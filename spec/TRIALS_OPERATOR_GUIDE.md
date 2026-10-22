@@ -16,22 +16,24 @@ A team without a payment method can only have free trial sites. To create any ot
 
 | Where | Field | Value |
 |---|---|---|
-| Billing Settings | Grant Welcome Credits | On |
-| Billing Settings | Welcome Credit Amounts | USD 10, INR 1000 |
+| Billing Settings | Grant Welcome Credits | Off. A product signup gets a free trial site, not credit. |
+| Billing Settings | Welcome Credit Amounts | Used only when Grant Welcome Credits is on |
 | Billing Settings | Validity (Days) | 60 |
 | Billing Settings | Provision Teams as Trial | Off. This is for staging only. |
 | Plan | Available on Trial | On for each active plan that signup may select. The cheapest eligible marked plan is selected. Its disk must fit the trial image. |
-| Central Settings | Trial Days | 7 |
-| Central Settings | Trial Deletion Days | 7 |
-| Central Settings | Trial Notice Days | 2 |
-| Central Settings | Trial Servers Limit | 3, counted across all teams of one owner |
-| Central Settings | Require Payment Method for Servers | On |
-| Central Settings | Trial Idle Shutdown (Minutes) | 10 |
+| Central Settings, Trials tab | Trial Days | 7 |
+| Central Settings, Trials tab | Trial Deletion Days | 7 |
+| Central Settings, Trials tab | Trial Notice Days | 2 |
+| Central Settings, Trials tab | Trial Servers Limit | 1, counted across all teams of one owner |
+| Central Settings, Limits tab | Require Payment Method for Servers | On |
+| Central Settings, Trials tab | Trial Idle Shutdown (Minutes) | 10 |
 | Region | FrappeMail Service | Enabled. Keep enough free mailboxes, because an empty pool stops new trials. |
 
 A Product can have its own Trial Days and Trial Deletion Days. Leave them at 0 to use Central Settings.
 
-A trial team gets the welcome credit only when it adds a card while a trial is still Active. A card after the trial ends brings the site back, but with no credit. A team without a trial gets the credit with its first card.
+A trial gives the customer the site only. SSH, the web console, Pilot and snapshots open when the trial converts. An operator keeps them. See [Server access](../central/signups/SPEC.md#server-access).
+
+Only a product signup gets a free trial. A direct Central signup adds a card and buys its servers. The entry Trust Tier Level's spending cap must be at least the trial plan's monthly price, or a card leaves the trial held instead of converting it.
 
 ## Common tasks
 
@@ -50,9 +52,9 @@ A trial team gets the welcome credit only when it adds a card while a trial is s
 
 | When | Customer sees |
 |---|---|
-| New Server page, no payment method | A note at the top: add a payment method to create servers and get the welcome credit. Create is off. **Add payment method** opens the payment dialog on the same page. |
-| Onboarding, payment step | A **Billing country** field, saved when picked, which sets the currency. Then the welcome credit offer in that currency, that adding a payment method does not charge it, and an **Add payment method** button. It asks for the other billing details first when they are missing. |
+| New Server page, no payment method | A note at the top: add a payment method to create servers, and get the welcome credit when it is on. Create is off. **Add payment method** opens the payment dialog on the same page. |
+| Onboarding, payment step | A **Billing country** field, saved when picked, which sets the currency. Then the welcome credit offer in that currency when it is on, that adding a payment method does not charge it, and an **Add payment method** button. It asks for the other billing details first when they are missing. |
 | Trial ending, ended, deletion soon, deleted | An email and a notice in the **Trial** category. Customers can turn these off in their notification settings. |
-| Site's in-app billing panel | The days left, the last day to add a card and get the credit, and that the site sleeps after Trial Idle Shutdown minutes without visitors. |
+| Site's in-app billing panel | A notice above the plan with the days left and the end date, and one **Add payment method** button. Adding a payment method starts billing for the plan and opens full server access. |
 | Console resize dialog on a trial server | The same, with an **Add payment method** button. After the card, the plans. |
 | Console resize dialog on an ended trial, team has a card | The deletion date and, for a member with `billing:manage`, a **Keep this site** button. A card does not restart an ended trial by itself. Keep this site moves the site to its paid plan and starts it. |

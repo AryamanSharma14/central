@@ -83,6 +83,14 @@ class TestResourceActions(IntegrationTestCase):
 		self.client.return_value.create_vm.return_value = {"id": "vm-00001", "tenant_id": self.team.tenant_id}
 		CentralSSOSettings.instance().initialize_signing_key("pilot")
 
+	def trial_site(self) -> SiteCreation:
+		"""The site part of a product signup, which a free trial needs."""
+		if not frappe.db.exists("Product", "raven-trial"):
+			frappe.get_doc(
+				{"doctype": "Product", "product_key": "raven-trial", "title": "Raven", "signup_app": "raven"}
+			).insert()
+		return SiteCreation(product="raven-trial")
+
 	def submit(self, **changes):
 		values = dict(
 			team=self.team.name,
@@ -153,10 +161,15 @@ class TestResourceActions(IntegrationTestCase):
 		payload = self.client.return_value.create_vm.call_args.args[0]
 		self.assertEqual(payload["sleep_after_idle_seconds"], 45 * 60)
 
+	def test_a_site_without_a_product_is_not_a_free_trial(self):
+		name = self.submit(resource_type="Site", subdomain="plain", site=SiteCreation())["action"]
+
+		self.assertFalse(frappe.db.get_value("Resource Action", name, "is_free_trial"))
+
 	def test_a_free_trial_site_sleeps_in_production(self):
 		frappe.db.set_single_value("Central Settings", "trial_idle_shutdown_minutes", 10)
 		frappe.clear_cache(doctype="Central Settings")
-		name = self.submit(resource_type="Site", subdomain="sleepy", site=SiteCreation())["action"]
+		name = self.submit(resource_type="Site", subdomain="sleepy", site=self.trial_site())["action"]
 		_process_locked(name)
 
 		self.assertEqual(
@@ -166,8 +179,8 @@ class TestResourceActions(IntegrationTestCase):
 	def test_a_site_for_a_team_that_pays_never_sleeps(self):
 		frappe.db.set_single_value("Central Settings", "trial_idle_shutdown_minutes", 10)
 		frappe.clear_cache(doctype="Central Settings")
-		with patch("central.signups.trial.has_active_payment_method", return_value=True):
-			name = self.submit(resource_type="Site", subdomain="awake", site=SiteCreation())["action"]
+		with patch("central.signups.eligibility.has_active_payment_method", return_value=True):
+			name = self.submit(resource_type="Site", subdomain="awake", site=self.trial_site())["action"]
 			_process_locked(name)
 
 		self.assertEqual(self.client.return_value.create_vm.call_args.args[0]["sleep_after_idle_seconds"], 0)
@@ -312,18 +325,20 @@ class TestResourceActions(IntegrationTestCase):
 		self.assertEqual(get_status(name)["status"], "Failed")
 
 	def test_retry_of_a_trial_site_checks_the_trial_limit_not_the_paid_policy(self):
-		name = self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"]
+		name = self.submit(resource_type="Site", subdomain="raven", site=self.trial_site())["action"]
 		self.client.return_value.create_vm.side_effect = AtlasConnectionError("region refused")
 		_process_locked(name)
 
 		self.assertTrue(frappe.db.get_value("Resource Action", name, "is_free_trial"))
-		with patch("central.signups.trial.has_active_payment_method", return_value=True):
+		with patch("central.signups.eligibility.has_active_payment_method", return_value=True):
 			frappe.get_doc("Resource Action", name).retry()
 
 		self.assertTrue(self.purchase.call_args.kwargs["is_free_trial"])
 
 	def test_a_free_trial_site_gets_no_subscription_but_a_paid_server_does(self):
-		_process_locked(self.submit(resource_type="Site", subdomain="raven", site=SiteCreation())["action"])
+		_process_locked(
+			self.submit(resource_type="Site", subdomain="raven", site=self.trial_site())["action"]
+		)
 		self.subscribe.assert_not_called()
 
 		self.client.return_value.create_vm.return_value = {"id": "vm-00002", "tenant_id": self.team.tenant_id}

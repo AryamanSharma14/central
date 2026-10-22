@@ -104,7 +104,7 @@ def get_composed_config(server: str, team: str | None = None) -> dict:
 	to the region's first profile. `{resizable: False}` when there's no live
 	subscription to resize, with the open free trial that explains why, if any. `starting` is
 	true while a converted trial's server starts and has no subscription yet."""
-	from central.signups.trial import get_status, is_conversion_starting
+	from central.signups.trial import get_trial_status, is_conversion_starting
 
 	team = _resolve_resize_team(team, server)
 	sub = frappe.db.get_value(
@@ -117,7 +117,7 @@ def get_composed_config(server: str, team: str | None = None) -> dict:
 		return {
 			"resizable": False,
 			"composed": False,
-			"trial": get_status(server),
+			"trial": get_trial_status(server),
 			"starting": is_conversion_starting(server),
 		}
 
