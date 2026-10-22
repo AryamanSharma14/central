@@ -1050,6 +1050,15 @@ class TestTrialFunnelEvents(SiteOnAMachine):
 		self.assertEqual(capture.call_args.kwargs["team"], self.team.name)
 		self.assertEqual(capture.call_args.kwargs["properties"]["product"], "raven")
 
+	def test_a_trial_request_carries_how_the_team_first_found_us(self):
+		self.team.db_set({"utm_source": "linkedin", "utm_campaign": "erp-launch", "referrer": None})
+
+		properties = self.captured("Site").call_args.kwargs["properties"]
+
+		self.assertEqual(properties["utm_source"], "linkedin")
+		self.assertEqual(properties["utm_campaign"], "erp-launch")
+		self.assertIsNone(properties["referrer"])
+
 	def test_a_server_request_sends_no_trial_event(self):
 		self.captured("Server").assert_not_called()
 

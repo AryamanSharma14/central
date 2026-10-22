@@ -181,7 +181,13 @@ class ResourceAction(Document):
 		if self.status == "Queued":
 			self.enqueue()
 		if self.is_trial_creation:
-			self.capture_trial_event("trial_requested", region=self.region)
+			first_touch = frappe.db.get_value(
+				"Team",
+				self.team,
+				["utm_source", "utm_medium", "utm_campaign", "referrer", "landing_product"],
+				as_dict=True,
+			)
+			self.capture_trial_event("trial_requested", region=self.region, **first_touch)
 
 	def enqueue(self) -> None:
 		from central.integrations.resource_actions import get_job_timeout_seconds
