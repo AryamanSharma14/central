@@ -17,6 +17,12 @@ class TrialOnAMachine(SiteOnAMachine):
 
 	def setUp(self):
 		super().setUp()
+		# The site takes its trial clock when Central records it, so the settings come first.
+		self.enterContext(
+			self.change_settings(
+				"Central Settings", trial_days=14, trial_deletion_days=7, trial_notice_days=3
+			)
+		)
 		ResourceAction.queue(
 			"create",
 			self.team.name,
@@ -38,11 +44,6 @@ class TrialOnAMachine(SiteOnAMachine):
 		self.enterContext(patch.object(frappe.db, "commit"))
 		self.headroom = self.enterContext(
 			patch("central.billing.catalog.subscriptions.remaining_headroom", return_value=1000)
-		)
-		self.enterContext(
-			self.change_settings(
-				"Central Settings", trial_days=14, trial_deletion_days=7, trial_notice_days=3
-			)
 		)
 
 	def record_site_again(self):
