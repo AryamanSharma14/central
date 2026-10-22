@@ -1,12 +1,13 @@
-# Billing reports
+# Billing reports and dashboards
 
 ## Purpose
 
-This page lists every billing report and the question each one answers. Use it to find the right view when you monitor billing or investigate a problem.
+This page lists every billing report and Insights dashboard, and the question each one answers. Use it to find the right view when you monitor billing or investigate a problem.
 
 ## Where to find them
 
 - Desk: the Billing sidebar groups the reports below under the same headings. Open a report at `/desk/query-report/<Report Name>`. All reports need the System Manager role.
+- Insights: the sidebar's Dashboards section opens each dashboard. The app ships them in `central/billing/insights_workbook/billing/billing.json`, and `bench migrate` installs them. Each dashboard has a Detail line that links the reports behind its tiles.
 
 ## Rules every report follows
 
@@ -26,6 +27,16 @@ This page lists every billing report and the question each one answers. Use it t
 | Telemetry source of a region | Region > Telemetry Data Source | every column that says Used |
 
 Used CPU, memory, disk and bandwidth come from the region's telemetry. Only servers that run the Pilot agent report guest usage. A report says how many servers it could not measure.
+
+## Dashboards
+
+| Dashboard | Use it to |
+|---|---|
+| Cloud Overview | See the whole business on one page: MRR, revenue, gross profit, growth, customers who pay, servers that pay nothing, machines, capacity used and idle cost. |
+| Billing Health | See the state of billing: run rate, money still to collect, payment success, failed and stuck payments, stuck webhooks, accounting sync failures, held invoices and past due subscriptions. |
+| Billing Day | Watch the monthly run for the month that just closed: invoices drafted and settled, how each settled, failures, run errors, stall signal, run time, time to sync, and run history. |
+| P&L | See revenue, bare metal cost, gross profit and margin by month, growth, a 6-month forecast, money against credit, and refunds and disputes. |
+| Unit Economics | See bare metal cost against what servers earn, by region, with a drill-down per machine and per team. |
 
 ## Revenue
 
