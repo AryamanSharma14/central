@@ -103,7 +103,7 @@ Central sends one Pulse event at each signup step with `frappe.utils.telemetry.c
 |---|---|---|
 | `signup_code_sent` | A new email asks for a code | `product` |
 | `signup_verified` | A new email verifies its code and gets an account | `product` |
-| `trial_requested` | Central saves a new trial request. A repeated request with the same key sends nothing. | `product`, `region` |
+| `trial_requested` | Central saves a new trial request. A repeated request with the same key sends nothing. | `product`, `region`, and the Team's [signup attribution](#signup-attribution): `utm_source`, `utm_medium`, `utm_campaign`, `referrer`, `landing_product` |
 | `trial_failed` | The trial's create Resource Action fails or times out | `product`, `status`, `error_code` |
 | `trial_ready` | Central first records that the site answers. See [Readiness](../../../infrastructure/doctype/site/SPEC.md#readiness). | `product`, `seconds_to_ready` |
 | `trial_claimed` | The customer first opens the site | `product` |
@@ -129,4 +129,4 @@ A team created at signup keeps how its owner first found Frappe Cloud. The brows
 | Landing Product | The first page's `product`, when that product exists |
 | Referrer | The page that linked to the first page, trimmed to 1,000 characters |
 
-A bad or unknown value is dropped and the team is still created. Join these fields with invoices to measure revenue by campaign. Pulse holds the funnel counts.
+A bad or unknown value is dropped and the team is still created. Join these fields with invoices to measure revenue by campaign. `trial_requested` carries the same fields, so Pulse can split the trial funnel by campaign.
