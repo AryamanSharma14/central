@@ -10,6 +10,8 @@ from central.billing.catalog.subscriptions import active_segments
 from central.billing.india_gst import INDIA
 from central.billing.platform.invariants import Violation
 
+STALLED_HOURS = 3
+
 # The accounting fields every issued invoice needs. A blank one holds every invoice.
 ACCOUNTING_FIELDS = (
 	"company",
@@ -428,11 +430,116 @@ def check_no_staging_trials_outside_staging() -> list[Violation]:
 	]
 
 
+def check_regions_have_priced_metal() -> list[Violation]:
+	"""A region that runs servers has active bare metal with a monthly cost, so its margin is known."""
+	priced = set(
+		frappe.get_all(
+			"Metal Server", filters={"status": "Active", "cost_per_month_inr": [">", 0]}, pluck="region"
+		)
+	)
+	regions = frappe.get_all(
+		"Virtual Machine",
+		filters={"status": ["not in", ("Terminated", "Failed")]},
+		pluck="region",
+		distinct=True,
+	)
+	return [
+		Violation(
+			check="R1",
+			subject_doctype="Region",
+			subject=region,
+			detail="Runs servers but has no active Metal Server with a monthly cost, so unit economics read 0 cost.",
+		)
+		for region in regions
+		if region not in priced
+	]
+
+
+def check_servers_have_a_known_host() -> list[Violation]:
+	"""A live server in a region with bare metal has a host that one of its Metal Servers records."""
+	hosts = {}
+	for machine in frappe.get_all(
+		"Metal Server", filters={"status": "Active"}, fields=["region", "atlas_host_id"]
+	):
+		hosts.setdefault(machine.region, set()).add(machine.atlas_host_id)
+
+	servers = frappe.get_all(
+		"Virtual Machine",
+		filters={"status": ["not in", ("Terminated", "Failed")], "region": ["in", list(hosts)]},
+		fields=["name", "team", "region", "atlas_host_id"],
+	)
+	return [
+		Violation(
+			check="R2",
+			team=server.team,
+			subject_doctype="Virtual Machine",
+			subject=server.name,
+			detail="Runs on no known Metal Server, so its machine's profitability leaves it out.",
+		)
+		for server in servers
+		if not server.atlas_host_id or server.atlas_host_id not in hosts[server.region]
+	]
+
+
+def check_billing_run_is_moving() -> list[Violation]:
+	"""The closed month's run has started, and no draft it owes waits hours to be collected."""
+	from central.billing.revenue.invoicing.run import billing_period
+
+	_, period_end = billing_period()
+	had_billing = frappe.db.exists("Subscription", {"start_date": ["<=", period_end]})
+	if had_billing and not frappe.db.exists("Billing Run", str(period_end)):
+		return [
+			Violation(
+				check="B5",
+				subject_doctype="Billing Run",
+				subject=str(period_end),
+				detail="The monthly billing run for this month has not started.",
+			)
+		]
+
+	run = frappe.db.get_value(
+		"Billing Run", str(period_end), ["teams", "drafted", "started_at"], as_dict=True
+	)
+	stalled_since = frappe.utils.add_to_date(None, hours=-STALLED_HOURS)
+	if run and run.teams and not run.drafted and run.started_at and run.started_at < stalled_since:
+		return [
+			Violation(
+				check="B5",
+				subject_doctype="Billing Run",
+				subject=str(period_end),
+				detail=f"The billing run started over {STALLED_HOURS} hours ago and has drafted no invoice. Run draft_monthly_invoices.",
+			)
+		]
+
+	# The hourly sweep collects a draft within the hour; three hours means the run stopped.
+	waiting = frappe.db.count(
+		"Invoice",
+		{
+			"status": "Draft",
+			"period_end": ["<=", period_end],
+			"hold_reason": ["is", "not set"],
+			"creation": ["<", stalled_since],
+		},
+	)
+	if not waiting:
+		return []
+	return [
+		Violation(
+			check="B5",
+			subject_doctype="Billing Run",
+			subject=str(period_end),
+			detail=f"{waiting} draft invoice(s) waited over {STALLED_HOURS} hours to be collected. Check the billing workers and the Error Log.",
+			actual=waiting,
+		)
+	]
+
+
 CHECKS = {
 	"B1": ("Billing currency matches the country", check_currency_matches_country),
 	"B2": ("Payment methods are in the billing currency", check_mandates_in_billing_currency),
 	"B3": ("Billed teams can be invoiced", check_billed_teams_are_invoiceable),
 	"B4": ("Accounting setup is complete", check_accounting_setup),
+	"B5": ("The billing run is moving", check_billing_run_is_moving),
 	"T1": ("Spend fits the trust tier", check_spend_within_tier),
 	"T2": ("Servers fit the trust tier", check_servers_within_tier),
 	"T3": ("Tier changes are recorded", check_tier_changes_are_recorded),
@@ -443,4 +550,6 @@ CHECKS = {
 	"W1": ("Billed teams can pay", check_billed_teams_can_pay),
 	"W2": ("Promotional credit expires", check_promotional_credit_expires),
 	"X1": ("No staging trials outside staging", check_no_staging_trials_outside_staging),
+	"R1": ("Regions with servers have priced bare metal", check_regions_have_priced_metal),
+	"R2": ("Servers run on a known Metal Server", check_servers_have_a_known_host),
 }
