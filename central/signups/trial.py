@@ -382,7 +382,6 @@ class Trial:
 			"deletes_on": formatdate(deletes_on) if deletes_on else "",
 			"days_left": date_diff(self.site.trial_ends_on, nowdate()),
 			"credit": fmt_money(credit["amount"], currency=credit["currency"]) if credit else "",
-			"sleeps_after_minutes": self.settings.idle_shutdown_minutes,
 			"product_key": self.site.product,
 		}
 

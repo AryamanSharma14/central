@@ -225,7 +225,7 @@ async function confirmDelete(): Promise<void> {
 		v-model:target="pendingDelete"
 		:title="`Delete ${address}?`"
 		message="The site and all its data are deleted. This can't be undone."
-		confirm-label="Yes, delete"
+		confirm-label="Delete site"
 		theme="red"
 		@confirm="confirmDelete"
 	/>

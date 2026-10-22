@@ -54,7 +54,7 @@ The `Trial` class in `central/signups/trial.py` owns these states. Every change 
 | Event | Sent |
 |---|---|
 | `trial_unopened` | Once, from the day after the site is ready, when nobody has opened it. Not sent when a warning is due. |
-| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. It names the welcome credit when the Team can still earn it, and says that the site sleeps when idle. |
+| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. It names the welcome credit when the Team can still earn it. |
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
 | `trial_deleted` | When the server is terminated. Its button opens the signup page of the same product. |

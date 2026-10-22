@@ -74,7 +74,12 @@ export function useOpenTrial() {
 			sessionStorage.setItem(installKey(product), JSON.stringify(install))
 			followInstall(product, install)
 		} catch (exception) {
-			fail(frappeErrorMessage(exception, 'Could not start the install.'))
+			fail(
+				frappeErrorMessage(
+					exception,
+					'Could not start the install. Try again.',
+				),
+			)
 		}
 	}
 
@@ -108,11 +113,18 @@ export function useOpenTrial() {
 			if (progress.status === 'success') step.value = 'installed'
 			else if (progress.status === 'unreachable')
 				fail('Your site stopped answering. Try again in a few minutes.')
-			else fail(progress.error || 'The install stopped before it finished.')
+			else
+				fail(
+					progress.error ||
+						'The install stopped before it finished. Try again.',
+				)
 		} catch (exception) {
 			sessionStorage.removeItem(installKey(product))
 			fail(
-				frappeErrorMessage(exception, 'Could not read the install progress.'),
+				frappeErrorMessage(
+					exception,
+					'Could not read the install progress. Reload this page to check again.',
+				),
 			)
 		}
 	}
@@ -143,7 +155,12 @@ export function useOpenTrial() {
 			}
 			fail('Your site did not wake up. Try again in a minute.')
 		} catch (exception) {
-			fail(frappeErrorMessage(exception, 'Could not sign you in to your site.'))
+			fail(
+				frappeErrorMessage(
+					exception,
+					'Could not sign you in to your site. Try again in a minute.',
+				),
+			)
 		}
 	}
 
@@ -155,7 +172,9 @@ export function useOpenTrial() {
 		try {
 			await postFrappe(methodUrl(API.terminateSite), { name: trial.value.site })
 		} catch (exception) {
-			fail(frappeErrorMessage(exception, 'Could not delete your site.'))
+			fail(
+				frappeErrorMessage(exception, 'Could not delete your site. Try again.'),
+			)
 			return false
 		}
 		return waitUntilClosed(trial.value.site)

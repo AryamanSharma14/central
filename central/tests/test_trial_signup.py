@@ -120,7 +120,9 @@ class TestTrialSignup(TrialOnAMachine):
 		progress = get_trial_app_install("site.local", "task-1", self.product.name, self.team.name)
 
 		self.assertEqual(progress["status"], "failed")
-		self.assertEqual(progress["error"], "CRM could not be installed on your site.")
+		self.assertEqual(
+			progress["error"], "CRM could not be installed on your site. Try again in a few minutes."
+		)
 		comments = frappe.get_all(
 			"Comment",
 			filters={"reference_doctype": "Site", "reference_name": self.site().name},

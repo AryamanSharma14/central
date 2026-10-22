@@ -26,7 +26,11 @@ class TrialAppInstall:
 		from central.integrations.pilot import get_site_apps, install_site_app
 
 		if self.trial.state != "Active":
-			frappe.throw(_("Only a running free trial site can get another app."))
+			frappe.throw(
+				_(
+					"Only a running free trial site can get another app. Upgrade to keep your site, then add the app."
+				)
+			)
 
 		app = self.product.signup_app
 		try:
@@ -75,7 +79,9 @@ class TrialAppInstall:
 			"status": "failed",
 			"queue_position": None,
 			"started_at": task.get("started_at"),
-			"error": _("{0} could not be installed on your site.").format(self.product.title),
+			"error": _("{0} could not be installed on your site. Try again in a few minutes.").format(
+				self.product.title
+			),
 		}
 
 	def record_failure(self, task_id: str, reason: str | None) -> None:
