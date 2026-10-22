@@ -12,10 +12,12 @@ from central.api.pilot import pilot_credential_auth
 from central.iam import can
 from central.integrations.email_oauth.email_oauth import (
 	CALLBACK_PATH,
+	claim_code,
 	exchange_token,
 	forget_sign_in,
 	get_sign_in,
 	mark_login_sent,
+	remember_code_owner,
 	start_sign_in,
 )
 
@@ -66,6 +68,7 @@ def site_params(note: dict, code: str | None, error: str | None, error_descripti
 		return {"error": error or "invalid_request", "error_description": error_description}
 	# the code goes only to the site's team, so a stranger's site never gets it (consent phishing)
 	if can(frappe.session.user, note["team"], "server:view", server=note["server"]):
+		remember_code_owner(code, note["team"], note["server"])
 		return {"code": code}
 	return {"error": "not_team_member"}
 
@@ -91,6 +94,9 @@ def relay_token(
 	scope: str | None = None,
 ) -> dict:
 	"""Called by a site through its Pilot: swap a code or refresh token at the provider using Frappe Cloud's app secret."""
+	if grant_type == "authorization_code":  # initial exchange of the authorization code for a token
+		credential = frappe.local.pilot_credential
+		claim_code(code, credential.team, credential.server)
 	return exchange_token(
 		provider,
 		grant_type,

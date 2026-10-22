@@ -1,5 +1,6 @@
 """Frappe Cloud's OAuth app at each mail provider, and the note that carries one mailbox sign-in."""
 
+import hashlib
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -79,6 +80,25 @@ def forget_sign_in(state: str) -> None:
 
 def note_key(state: str) -> str:
 	return f"email_oauth:{state}"
+
+
+def remember_code_owner(code: str, team: str, server: str | None) -> None:
+	"""Remember which server's sign-in got `code`, so only that server can swap it."""
+	frappe.cache.set_value(code_key(code), {"team": team, "server": server}, expires_in_sec=NOTE_TTL)
+
+
+def claim_code(code: str | None, team: str, server: str | None) -> None:
+	"""Single use: a code swaps only for the server whose sign-in got it."""
+	key = code_key(code or "")
+	owner = frappe.cache.get_value(key)
+	frappe.cache.delete_value(key)
+	if owner != {"team": team, "server": server}:
+		frappe.throw(_("This sign-in code was not given to this server"), frappe.PermissionError)
+
+
+def code_key(code: str) -> str:
+	# hashed, so the cache never holds a code that still works
+	return f"email_oauth_code:{hashlib.sha256(code.encode()).hexdigest()}"
 
 
 def exchange_token(provider: str, grant_type: str, **params: str | None) -> dict:

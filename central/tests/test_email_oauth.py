@@ -249,7 +249,14 @@ class TestEmailOAuth(IntegrationTestCase):
 		self.as_pilot("/api/method/central.api.email_oauth.relay_token")
 		return relay_token(provider="microsoft", **params), post
 
+	def sign_in(self, code: str = "the-code"):
+		self.call_start(f"https://{self.site}{SITE_CALLBACK}")
+		self.call_callback(self.owner, state="state-1", code=code)
+		frappe.set_user("Administrator")
+
 	def test_relay_token_adds_the_secret_and_returns_microsofts_tokens(self):
+		self.sign_in()
+
 		token, post = self.call_relay_token(
 			200,
 			{"access_token": "at", "refresh_token": "rt"},
@@ -262,6 +269,41 @@ class TestEmailOAuth(IntegrationTestCase):
 		sent = post.call_args.kwargs["data"]
 		self.assertEqual((sent["client_id"], sent["client_secret"]), ("ms-client-id", "ms-secret"))
 		self.assertTrue(sent["redirect_uri"].endswith("/api/method/central.api.email_oauth.callback"))
+
+	def test_relay_token_swaps_a_code_only_for_the_server_whose_sign_in_got_it(self):
+		self.sign_in()
+		other_server = frappe.get_doc(
+			{
+				"doctype": "Virtual Machine",
+				"resource_id": f"vm-other-{frappe.generate_hash(length=6)}",
+				"team": self.team,
+				"region": frappe.db.get_value("Virtual Machine", self.server, "region"),
+			}
+		).insert()
+		self.token = PilotCredential.mint(
+			team=self.team,
+			pilot_credential_id=f"oauth-other-{frappe.generate_hash(length=6)}",
+			server=other_server.name,
+		)
+
+		with self.assertRaises(frappe.PermissionError):
+			self.call_relay_token(
+				200,
+				{"access_token": "at"},
+				grant_type="authorization_code",
+				code="the-code",
+				code_verifier="verifier-1",
+			)
+
+	def test_relay_token_refuses_a_code_central_never_gave_out(self):
+		with self.assertRaises(frappe.PermissionError):
+			self.call_relay_token(
+				200,
+				{"access_token": "at"},
+				grant_type="authorization_code",
+				code="stolen-code",
+				code_verifier="verifier-1",
+			)
 
 	def test_relay_token_passes_on_microsofts_error_code(self):
 		with self.assertRaises(frappe.ValidationError) as caught:
