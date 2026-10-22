@@ -50,6 +50,7 @@ class Region(AtlasConnectionMixin, CargoConnectionMixin, Document):
 		region: DF.Data
 		region_id: DF.Int
 		status: DF.Literal["Active", "Draining", "Disabled"]
+		telemetry_data_source: DF.Data | None
 		webhook_secret: DF.Password | None
 	# end: auto-generated types
 
