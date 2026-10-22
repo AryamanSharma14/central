@@ -237,6 +237,8 @@ class TestAI(IntegrationTestCase):
 		settings.save()
 		frappe.db.delete("Team Service", {"add_on_service": "ai"})
 		self.addCleanup(frappe.set_user, "Administrator")
+		# Saving the settings creates the webhook; the rollback drops it but not the cached list.
+		self.addCleanup(frappe.client_cache.delete_value, "webhooks")
 
 	def enabled(self):
 		with (
