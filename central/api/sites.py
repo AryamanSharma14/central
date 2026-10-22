@@ -116,11 +116,10 @@ def create_trial_team(
 def create_trial_site(
 	subdomain: str,
 	request_key: str,
+	product: str,
 	team: str | None = None,
-	product: str | None = None,
 ) -> dict:
-	"""Start a trial site under a name the customer chose, with the product's app when one is
-	named. Gated on `server:create`."""
+	"""Start a product's trial site under a name the customer chose. Gated on `server:create`."""
 	from central.site_provisioning import create_trial_site as start
 
 	return start(team, subdomain, request_key, product)

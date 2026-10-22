@@ -8,9 +8,10 @@ if TYPE_CHECKING:
 	from central.signups.trial import Trial
 
 
-def is_free_trial_creation(team: str, resource_type: str) -> bool:
-	"""Whether a creation request opens a free trial: a site, for a team that has never paid."""
-	return resource_type == "Site" and not has_active_payment_method(team) and not has_paid_before(team)
+def is_free_trial_creation(team: str, product: str | None) -> bool:
+	"""Whether a creation request opens a free trial: a product's signup site, for a team that has
+	no payment method and has never paid. A direct Central signup buys its servers."""
+	return bool(product) and not has_active_payment_method(team) and not has_paid_before(team)
 
 
 def has_paid_before(team: str) -> bool:

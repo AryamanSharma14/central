@@ -11,7 +11,7 @@ import type { OpenTrial } from '@/types/api'
 
 interface OpenTrialCardProps {
 	trial: OpenTrial
-	/** The product this signup names, or '' for a plain Frappe Cloud signup. */
+	/** The product this signup names. */
 	productKey: string
 	productTitle: string | null
 	/** The new product's Setup Messages, shown in turn while its app installs. */
@@ -62,9 +62,7 @@ const installMinutes = computed(() => {
 const kind = computed(() => {
 	if (props.trial.state === 'Setting up') return 'setting-up'
 	if (props.trial.state === 'Ended') return 'ended'
-	if (props.productKey && props.productKey !== props.trial.product)
-		return 'add-app'
-	return 'open'
+	return props.productKey === props.trial.product ? 'open' : 'add-app'
 })
 
 const heading = computed(() => {

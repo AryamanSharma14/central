@@ -24,7 +24,7 @@ A System Manager can grant credit from the **Grant Credit** action on a Team, fo
 
 ## Trials
 
-A trial site is a site from the signup flow, with or without a Product, for a Team that has no active payment method and has never paid. It runs free for a set number of days. The trial state is on the Site, in the **Trial** section.
+A trial site is a site from a Product's signup flow, for a Team that has no active payment method and has never paid. A direct Central signup has no free trial: it lands in the console, adds a payment method and buys its servers. Only a signup link with `?product=` opens the onboarding pages, and `create_trial_site` needs a product. It runs free for a set number of days. The trial state is on the Site, in the **Trial** section.
 
 A Team has paid when it has a Subscription, or an Invoice that is not Draft or Cancelled. Such a Team buys its signup sites like any other server, also when its payment method has expired or failed. So a Team with unpaid invoices cannot open free servers.
 

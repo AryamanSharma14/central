@@ -33,7 +33,7 @@ A Product can have its own Trial Days and Trial Deletion Days. Leave them at 0 t
 
 A trial gives the customer the site only. SSH, the web console, Pilot and snapshots open when the trial converts. An operator keeps them. See [Server access](../central/signups/SPEC.md#server-access).
 
-A trial team gets the welcome credit only when it adds a card while a trial is still Active. A card after the trial ends brings the site back, but with no credit. A team without a trial gets the credit with its first card.
+Only a product signup gets a free trial. A direct Central signup adds a card and buys its servers. The entry Trust Tier Level's spending cap must be at least the trial plan's monthly price, or a card leaves the trial held instead of converting it.
 
 ## Common tasks
 

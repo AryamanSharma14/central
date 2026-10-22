@@ -25,20 +25,15 @@ SIGNUP_APP_TAG = "app"
 RESERVED_SUBDOMAINS = frozenset({"admin", "atlas", "cargo", "proxy", "site", "www"})
 
 
-def create_trial_site(
-	team: str | None,
-	subdomain: str,
-	request_key: str,
-	product: str | None = None,
-) -> dict:
-	"""Start the machine for a new trial site, under the name the customer chose. It takes the
-	same creation path as a bought server, so a trial gets the same record, retry and errors."""
+def create_trial_site(team: str | None, subdomain: str, request_key: str, product: str) -> dict:
+	"""Start the machine for a product's new trial site, under the name the customer chose. It takes
+	the same creation path as a bought server, so a trial gets the same record, retry and errors."""
 
 	team = resolve_team(frappe.session.user, team)
-	signup_app = get_signup_product(product).signup_app if product else None
+	signup_app = get_signup_product(product).signup_app
 	subdomain = validated_subdomain(subdomain)
 	configuration = trial_configuration(team, signup_app)
-	site = SiteCreation(product=product or None)
+	site = SiteCreation(product=product)
 
 	return submit_request(
 		team=team,

@@ -207,19 +207,17 @@ router.beforeResolve((to, from) => {
 // product signup, which enters its new session in place (useAuth.enterSession).
 router.beforeEach((to) => {
 	const { isGuest } = useAuth()
-	// Seeded with `window.user` (central/www/dashboard.py). A brand-new user has no
-	// live site yet, so they belong in the onboarding funnel, not the dashboard.
-	const onboardingComplete = window.onboarding_complete ?? false
+	// Only a product signup has an onboarding funnel, which ends in its free trial site.
+	// A direct Central signup buys its servers from the console.
 	const productSignup = Boolean(carriedQuery(to.query).product)
 
 	if (to.meta.public) {
 		if (isGuest.value) rememberFirstTouch(to.query)
 		if (isGuest.value || to.meta.allowSignedIn) return true
-		// Logged in but on an auth page — e.g. browser-Back after verifying. Don't dump
-		// them into the dashboard mid-onboarding: resume the funnel until it's finished.
-		return onboardingComplete && !productSignup
-			? '/servers'
-			: { path: '/onboarding/site', query: carriedQuery(to.query) }
+		// Logged in but on an auth page, such as browser-Back after verifying.
+		return productSignup
+			? { path: '/onboarding/site', query: carriedQuery(to.query) }
+			: '/servers'
 	}
 
 	if (isGuest.value) {
@@ -239,8 +237,7 @@ router.beforeEach((to) => {
 			return '/servers'
 	}
 
-	if (to.path.startsWith('/onboarding') && onboardingComplete && !productSignup)
-		return '/servers'
+	if (to.path.startsWith('/onboarding') && !productSignup) return '/servers'
 
 	// Warm the billing-profile completeness cache for the active team, non-blocking
 	// (mirrors the legacy guard): money-moving actions gate on it via

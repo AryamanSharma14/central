@@ -119,7 +119,7 @@ def submit_request(
 	if existing := _repeated_request(server_input, digest):
 		return existing.customer_status()
 
-	is_free_trial = bool(site) and is_free_trial_creation(server_input.team, resource_type)
+	is_free_trial = is_free_trial_creation(server_input.team, site.product if site else None)
 	configuration, rate = _build_server_configuration(server_input, snapshot, is_free_trial)
 	configuration.site = site
 
