@@ -111,7 +111,9 @@ const canOpen = computed(
 		props.actions.open &&
 		!isUbuntu.value &&
 		!isSettingUp(props.server.status) &&
-		(!!props.siteUrl || !!props.server.gateway_url),
+		// Without a site, Open signs in to Pilot, which a free trial locks.
+		(!!props.siteUrl ||
+			(!!props.server.gateway_url && !props.actions.isAccessLocked)),
 )
 
 // Overview and Open are the page itself and its primary button, so the menu omits them.

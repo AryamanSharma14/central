@@ -16,6 +16,7 @@ from central.infrastructure.doctype.virtual_machine.virtual_machine import Virtu
 from central.integrations.atlas import ConsoleMode
 from central.integrations.servers import get_cached_metrics, get_console_url, reconcile
 from central.server_models import FirewallChange
+from central.signups.access import get_locked_servers
 from central.utils.guards import require_capability
 
 METRICS_PERIOD_HOURS = {"1h": 1, "24h": 24, "7d": 168, "14d": 336, "30d": 720}
@@ -71,10 +72,13 @@ def registry(team: str | None = None) -> dict:
 	# mirror catches up — instead of looking like nothing happened.
 	pending = ResourceAction.pending_labels(team)
 	audiences = _pilot_audiences(team)
+	locked = get_locked_servers(team)
 	for server in servers:
 		server["pending_action"] = pending.get(server["resource_id"])
 		server["pilot_audience"] = audiences.get(server["name"])
 		server["capabilities"] = get_server_capabilities(frappe.session.user, team, server["name"])
+		# A free trial gives the site, not the server: the console hides SSH, the console and Pilot.
+		server["is_access_locked"] = server["name"] in locked
 
 	# A creation has no server row until the region accepts it, so it cannot be overlaid
 	# like the pending actions above. It rides here as its own list: the console picks its

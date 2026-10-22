@@ -179,6 +179,8 @@ def submit_command(
 		frappe.throw(_("This trial has ended. Add a payment method to start it again."))
 	if action == "terminate" and server.is_termination_protected:
 		frappe.throw(_("Turn off termination protection before you terminate this server."))
+	if take_snapshot:
+		server.require_server_access()
 
 	document = ResourceAction.get_pending(server.name, action) or ResourceAction.queue(
 		action,
