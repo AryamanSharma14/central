@@ -37,6 +37,7 @@ Used CPU, memory, disk and bandwidth come from the region's telemetry. Only serv
 | Billing Day | Watch the monthly run for the month that just closed: invoices drafted and settled, how each settled, failures, run errors, stall signal, run time, time to sync, and run history. |
 | P&L | See revenue, bare metal cost, gross profit and margin by month, growth, a 6-month forecast, money against credit, and refunds and disputes. |
 | Unit Economics | See bare metal cost against what servers earn, by region, with a drill-down per machine and per team. |
+| Bare Metal Yield | See what the sellable bare metal could earn at the rate card, what it earns, and how much is lost to unsold capacity, servers that pay nothing and discounts. |
 
 ## Revenue
 
@@ -62,6 +63,7 @@ Used CPU, memory, disk and bandwidth come from the region's telemetry. Only serv
 | Metal Server Profitability | Is each machine earning its cost? Its whole monthly cost against what its servers pay, with allocated and used CPU and memory. |
 | Free vs Paid Consumption | What do servers that pay nothing cost us? Servers, allocated and used resources, revenue and bare metal cost per machine and who pays. |
 | Bare Metal ROI | Do the hardware economics work? Purchase, running and repair cost to date, revenue earned, gross profit, payback months, ROI, age, downtime and warranty. |
+| Bare Metal Yield | Of what the sellable bare metal could earn, how much does it earn? Potential revenue, cash revenue, yield and the loss to unsold capacity, unpaid servers and discounts, per region or per machine. |
 
 ## Capacity
 
@@ -81,6 +83,8 @@ Used CPU, memory, disk and bandwidth come from the region's telemetry. Only serv
 - A metered line costs its quantity times its Resource Type's cost per unit. A service whose Resource Type has no cost shows cost 0.
 - Who pays is checked in this order, and the first match wins: Our Own Team (Tax Profile marked internal), Free Trial (the server runs a free trial site), Paying Customer (an active payment method, bought credit or a paid invoice), Not Paying Yet (anything else).
 - Sellable capacity is physical less the host reserve. vCPUs are then multiplied by the CPU overcommit ratio.
+- Potential revenue prices each sellable vCPU, GiB of memory and GiB of disk at the region's INR component rate card (Resource Types Compute, Memory and Disk). A resource with no INR rate counts at 0.
+- Yield is cash revenue divided by potential revenue. Potential revenue is unsold plus unpaid plus discount plus cash revenue. Unsold is the rate card value that no Central server holds, so platform servers count in it. Unpaid is the rate card value of servers that do not pay. Discount is the rate card value of paying servers less what they pay, and is below 0 when they pay more than the rate card.
 - Allocated capacity is what Atlas reports for the host, its own platform servers included, when telemetry answers. Otherwise it is the sum of Central's servers placed on the host.
 - A server belongs to a machine when the server's `atlas_host_id` matches the machine's. Atlas sends a server's host in its `vm.state` webhook: when it records the server, when the state changes and when the server moves.
 - Readiness checks R1 (a region with servers but no priced metal) and R2 (a server on no known machine) feed the daily audit and the operator alerts.

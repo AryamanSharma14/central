@@ -44,29 +44,35 @@ class Fleet:
 			"disk_gib": sum(s.disk_gib for s in servers),
 		}
 		used = {"vcpus": _used_vcpus(machine, host), "memory_gib": host.get("memory_used_gib")}
+		sellable = sellable_capacity(machine)
 
 		out = {}
 		for label, physical_field, reserved_field, allocated_field in RESOURCES:
-			physical = flt(machine.get(physical_field))
-			reserved = flt(machine.get(reserved_field))
-			sellable = physical - reserved
-			if physical_field == "vcpus":
-				sellable *= flt(machine.cpu_overcommit_ratio) or 1
 			allocated = max(flt(host.get(allocated_field)), central[physical_field])
 			out[label] = {
-				"physical": physical,
-				"reserved": reserved,
-				"sellable": sellable,
+				"physical": flt(machine.get(physical_field)),
+				"reserved": flt(machine.get(reserved_field)),
+				"sellable": sellable[physical_field],
 				"allocated": allocated,
 				"platform": max(allocated - central[physical_field], 0),
 				"used": used.get(physical_field),
-				"remaining": max(sellable - allocated, 0),
+				"remaining": max(sellable[physical_field] - allocated, 0),
 			}
 		return out
 
 	@property
 	def gaps(self) -> list[str]:
 		return sorted(set(self.telemetry.gaps))
+
+
+def sellable_capacity(machine) -> dict[str, float]:
+	"""Sellable vCPUs, memory and disk of a machine: physical less the host reserve, with vCPUs overcommitted."""
+	sellable = {
+		physical_field: flt(machine.get(physical_field)) - flt(machine.get(reserved_field))
+		for _label, physical_field, reserved_field, _allocated_field in RESOURCES
+	}
+	sellable["vcpus"] *= flt(machine.cpu_overcommit_ratio) or 1
+	return sellable
 
 
 def _used_vcpus(machine, host: dict) -> float | None:

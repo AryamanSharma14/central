@@ -482,6 +482,18 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
+   "label": "Bare Metal Yield Dashboard",
+   "link_type": "URL",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link",
+   "url": "/insights/dashboards/billing-bare-metal-yield"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Cloud Overview",
    "link_type": "URL",
    "open_in_new_tab": 0,
@@ -688,6 +700,18 @@
    "keep_closed": 0,
    "label": "Bare Metal ROI",
    "link_to": "Bare Metal ROI",
+   "link_type": "Report",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Bare Metal Yield",
+   "link_to": "Bare Metal Yield",
    "link_type": "Report",
    "open_in_new_tab": 0,
    "show_arrow": 0,
@@ -1079,7 +1103,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-22 12:00:00.000000",
+ "modified": "2026-10-22 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Billing",

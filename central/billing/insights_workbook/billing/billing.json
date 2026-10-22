@@ -608,6 +608,165 @@
    "title": "Each region: share of capacity used",
    "workbook": "billing"
   },
+  "billing-each-region-where-its-potential-goes": {
+   "chart_type": "Bar",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 10000,
+    "number_formats": {
+     "Cash revenue": {
+      "decimals": 0,
+      "prefix": "₹"
+     },
+     "Discount": {
+      "decimals": 0,
+      "prefix": "₹"
+     },
+     "Unpaid": {
+      "decimals": 0,
+      "prefix": "₹"
+     },
+     "Unsold": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "x_axis": {
+     "dimension": {
+      "column_name": "region",
+      "data_type": "String",
+      "dimension_name": "Region"
+     }
+    },
+    "y_axis": {
+     "series": [
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "revenue",
+        "data_type": "Decimal",
+        "measure_name": "Cash revenue"
+       },
+       "type": "bar"
+      },
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "discount",
+        "data_type": "Decimal",
+        "measure_name": "Discount"
+       },
+       "type": "bar"
+      },
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "unpaid",
+        "data_type": "Decimal",
+        "measure_name": "Unpaid"
+       },
+       "type": "bar"
+      },
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "unsold",
+        "data_type": "Decimal",
+        "measure_name": "Unsold"
+       },
+       "type": "bar"
+      }
+     ],
+     "stack": true
+    }
+   },
+   "description": null,
+   "folder": null,
+   "info": "The four parts add up to the region's potential revenue.",
+   "name": "billing-each-region-where-its-potential-goes",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 85,
+   "title": "Each region: where its potential revenue goes",
+   "workbook": "billing"
+  },
+  "billing-each-region-yield": {
+   "chart_type": "Table",
+   "config": {
+    "columns": [],
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 100,
+    "number_formats": {
+     "Cash revenue": {
+      "decimals": 0,
+      "prefix": "₹"
+     },
+     "Potential": {
+      "decimals": 0,
+      "prefix": "₹"
+     },
+     "Revenue per sellable vCPU": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "rows": [
+     {
+      "column_name": "region",
+      "data_type": "String",
+      "dimension_name": "Region"
+     }
+    ],
+    "show_row_totals": false,
+    "values": [
+     {
+      "aggregation": "sum",
+      "column_name": "potential",
+      "data_type": "Decimal",
+      "measure_name": "Potential"
+     },
+     {
+      "aggregation": "sum",
+      "column_name": "revenue",
+      "data_type": "Decimal",
+      "measure_name": "Cash revenue"
+     },
+     {
+      "aggregation": "max",
+      "column_name": "yield_share",
+      "data_type": "Decimal",
+      "format": "percent",
+      "measure_name": "Yield"
+     },
+     {
+      "aggregation": "max",
+      "column_name": "vcpu_sold_share",
+      "data_type": "Decimal",
+      "format": "percent",
+      "measure_name": "vCPUs sold"
+     },
+     {
+      "aggregation": "max",
+      "column_name": "revenue_per_sellable_vcpu",
+      "data_type": "Decimal",
+      "measure_name": "Revenue per sellable vCPU"
+     }
+    ]
+   },
+   "description": null,
+   "folder": null,
+   "info": "USD revenue counts at the report rate in Billing Settings. Open the Bare Metal Yield report to see each machine.",
+   "name": "billing-each-region-yield",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 86,
+   "title": "Each region: yield",
+   "workbook": "billing"
+  },
   "billing-earned-from-paying-servers": {
    "chart_type": "Number",
    "config": {
@@ -1366,6 +1525,120 @@
    "query": "billing-cloud-overview-query",
    "sort_order": 74,
    "title": "Live servers",
+   "workbook": "billing"
+  },
+  "billing-lost-to-discounts": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {
+      "negative_is_better": true
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "discount",
+      "data_type": "Decimal",
+      "id": "Lost to discounts",
+      "measure_name": "Lost to discounts"
+     }
+    ],
+    "number_formats": {
+     "Lost to discounts": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Rate card value of paying servers less what they pay. Below zero, they pay above the rate card.",
+   "name": "billing-lost-to-discounts",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 84,
+   "title": "Lost to discounts",
+   "workbook": "billing"
+  },
+  "billing-lost-to-servers-that-pay-nothing": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {
+      "negative_is_better": true
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "unpaid",
+      "data_type": "Decimal",
+      "id": "Lost to servers that pay nothing",
+      "measure_name": "Lost to servers that pay nothing"
+     }
+    ],
+    "number_formats": {
+     "Lost to servers that pay nothing": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Rate card value of servers on free credits, free trials and our own teams.",
+   "name": "billing-lost-to-servers-that-pay-nothing",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 83,
+   "title": "Lost to servers that pay nothing",
+   "workbook": "billing"
+  },
+  "billing-lost-to-unsold-capacity": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {
+      "negative_is_better": true
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "unsold",
+      "data_type": "Decimal",
+      "id": "Lost to unsold capacity",
+      "measure_name": "Lost to unsold capacity"
+     }
+    ],
+    "number_formats": {
+     "Lost to unsold capacity": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Capacity no Central server holds, priced at the rate card. Platform servers count here.",
+   "name": "billing-lost-to-unsold-capacity",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 82,
+   "title": "Lost to unsold capacity",
    "workbook": "billing"
   },
   "billing-machines": {
@@ -2332,6 +2605,42 @@
    "title": "Payments per day",
    "workbook": "billing"
   },
+  "billing-potential-revenue-per-month": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {}
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "potential",
+      "data_type": "Decimal",
+      "id": "Potential revenue per month",
+      "measure_name": "Potential revenue per month"
+     }
+    ],
+    "number_formats": {
+     "Potential revenue per month": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Every sellable vCPU, GiB of memory and GiB of disk at the region's component rate card.",
+   "name": "billing-potential-revenue-per-month",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 79,
+   "title": "Potential revenue per month",
+   "workbook": "billing"
+  },
   "billing-profit-or-loss-per-month": {
    "chart_type": "Number",
    "config": {
@@ -2822,6 +3131,51 @@
    "query": "billing-run-history-query",
    "sort_order": 39,
    "title": "Run time per month (hours)",
+   "workbook": "billing"
+  },
+  "billing-sellable-vcpus-sold": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {
+      "progress": true,
+      "target": {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "sellable_vcpus",
+        "data_type": "Decimal",
+        "measure_name": "of sellable"
+       }
+      }
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "sold_vcpus",
+      "data_type": "Decimal",
+      "id": "Sellable vCPUs sold",
+      "measure_name": "Sellable vCPUs sold"
+     }
+    ],
+    "number_formats": {
+     "Sellable vCPUs sold": {
+      "decimals": 0
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Sellable is physical less the host reserve, with the CPU overcommit applied.",
+   "name": "billing-sellable-vcpus-sold",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 81,
+   "title": "Sellable vCPUs sold",
    "workbook": "billing"
   },
   "billing-servers-that-pay-nothing": {
@@ -3362,10 +3716,239 @@
    "sort_order": 67,
    "title": "Who uses our servers",
    "workbook": "billing"
+  },
+  "billing-yield-cash-revenue-of-potential": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {
+      "progress": true,
+      "target": {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "potential",
+        "data_type": "Decimal",
+        "measure_name": "of potential"
+       }
+      }
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "revenue",
+      "data_type": "Decimal",
+      "id": "Yield: cash revenue of potential",
+      "measure_name": "Yield: cash revenue of potential"
+     }
+    ],
+    "number_formats": {
+     "Yield: cash revenue of potential": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "Cash revenue as a share of what the sellable bare metal would earn at the component rate card.",
+   "name": "billing-yield-cash-revenue-of-potential",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 78,
+   "title": "Yield: cash revenue of potential",
+   "workbook": "billing"
+  },
+  "billing-yield-cash-revenue-per-month": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "number_column_options": [
+     {}
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "revenue",
+      "data_type": "Decimal",
+      "id": "Cash revenue per month",
+      "measure_name": "Cash revenue per month"
+     }
+    ],
+    "number_formats": {
+     "Cash revenue per month": {
+      "decimals": 0,
+      "prefix": "₹"
+     }
+    },
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": "What paying servers pay a month.",
+   "name": "billing-yield-cash-revenue-per-month",
+   "query": "billing-yield-by-region-query",
+   "sort_order": 80,
+   "title": "Cash revenue per month",
+   "workbook": "billing"
   }
  },
  "creation": "2026-10-21 00:00:00.000000",
  "dashboards": {
+  "billing-bare-metal-yield": {
+   "items": [
+    {
+     "filter_name": "Region",
+     "filter_type": "String",
+     "icon": "type",
+     "layout": {
+      "h": 2,
+      "i": "item-filter",
+      "w": 4,
+      "x": 0,
+      "y": 0
+     },
+     "links": {
+      "billing-each-region-where-its-potential-goes": "`billing-yield-by-region-query`.`region`",
+      "billing-each-region-yield": "`billing-yield-by-region-query`.`region`",
+      "billing-lost-to-discounts": "`billing-yield-by-region-query`.`region`",
+      "billing-lost-to-servers-that-pay-nothing": "`billing-yield-by-region-query`.`region`",
+      "billing-lost-to-unsold-capacity": "`billing-yield-by-region-query`.`region`",
+      "billing-potential-revenue-per-month": "`billing-yield-by-region-query`.`region`",
+      "billing-sellable-vcpus-sold": "`billing-yield-by-region-query`.`region`",
+      "billing-yield-cash-revenue-of-potential": "`billing-yield-by-region-query`.`region`",
+      "billing-yield-cash-revenue-per-month": "`billing-yield-by-region-query`.`region`"
+     },
+     "type": "filter"
+    },
+    {
+     "chart": "billing-yield-cash-revenue-of-potential",
+     "layout": {
+      "h": 5,
+      "i": "item-1",
+      "w": 5,
+      "x": 5,
+      "y": 7
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-potential-revenue-per-month",
+     "layout": {
+      "h": 5,
+      "i": "item-2",
+      "w": 5,
+      "x": 0,
+      "y": 2
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-yield-cash-revenue-per-month",
+     "layout": {
+      "h": 5,
+      "i": "item-3",
+      "w": 5,
+      "x": 5,
+      "y": 2
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-sellable-vcpus-sold",
+     "layout": {
+      "h": 5,
+      "i": "item-4",
+      "w": 5,
+      "x": 10,
+      "y": 7
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-lost-to-unsold-capacity",
+     "layout": {
+      "h": 5,
+      "i": "item-5",
+      "w": 5,
+      "x": 10,
+      "y": 2
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-lost-to-servers-that-pay-nothing",
+     "layout": {
+      "h": 5,
+      "i": "item-6",
+      "w": 5,
+      "x": 15,
+      "y": 2
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-lost-to-discounts",
+     "layout": {
+      "h": 5,
+      "i": "item-7",
+      "w": 5,
+      "x": 0,
+      "y": 7
+     },
+     "type": "chart"
+    },
+    {
+     "layout": {
+      "h": 2,
+      "i": "item-8",
+      "w": 20,
+      "x": 0,
+      "y": 12
+     },
+     "text": "<p>Detail: <a href=\"/desk/query-report/Bare Metal Yield\">Bare Metal Yield</a> · <a href=\"/desk/query-report/Unit Economics\">Unit Economics</a> · <a href=\"/desk/query-report/Stranded Capacity\">Stranded Capacity</a> · <a href=\"/desk/query-report/Free vs Paid Consumption\">Free vs Paid Consumption</a></p>",
+     "type": "text"
+    },
+    {
+     "chart": "billing-each-region-where-its-potential-goes",
+     "layout": {
+      "h": 14,
+      "i": "item-9",
+      "w": 10,
+      "x": 0,
+      "y": 14
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "billing-each-region-yield",
+     "layout": {
+      "h": 14,
+      "i": "item-10",
+      "w": 10,
+      "x": 10,
+      "y": 14
+     },
+     "type": "chart"
+    }
+   ],
+   "name": "billing-bare-metal-yield",
+   "title": "Bare Metal Yield",
+   "vertical_compact_layout": 1,
+   "visible_to_roles": [
+    {
+     "role": "System Manager"
+    }
+   ],
+   "workbook": "billing"
+  },
   "billing-billing-day": {
    "items": [
     {
@@ -4483,7 +5066,7 @@
  "folders": [],
  "idx": 0,
  "is_standard": 1,
- "modified": "2026-10-22 14:00:00.000000",
+ "modified": "2026-10-22 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "billing",
@@ -4954,6 +5537,24 @@
    ],
    "sort_order": 22,
    "title": "Where the bill goes",
+   "use_live_connection": 1,
+   "workbook": "billing"
+  },
+  "billing-yield-by-region-query": {
+   "folder": null,
+   "is_builder_query": 0,
+   "is_native_query": 1,
+   "is_script_query": 0,
+   "name": "billing-yield-by-region-query",
+   "operations": [
+    {
+     "data_source": "Site DB",
+     "raw_sql": "WITH latest AS (\n  SELECT c.subscription, c.change_type, c.locked_rate, c.currency,\n    ROW_NUMBER() OVER (PARTITION BY c.subscription ORDER BY c.effective_at DESC, c.creation DESC) AS rn\n  FROM `tabSubscription Change` c\n  WHERE c.change_type IN ('Created', 'Plan Changed', 'Cancelled')\n),\nrate AS (\n  SELECT s.server_id, l.locked_rate, l.currency\n  FROM `tabSubscription` s JOIN latest l ON l.subscription = s.name AND l.rn = 1\n  WHERE s.enabled = 1 AND s.server_id IS NOT NULL AND s.server_id != '' AND l.change_type != 'Cancelled'\n),\ncard AS (\n  SELECT g.name AS region,\n    COALESCE(MAX(CASE WHEN c.priced_for = 'Compute' AND c.cluster = g.name THEN c.rate END),\n      MAX(CASE WHEN c.priced_for = 'Compute' AND COALESCE(c.cluster, '') = '' THEN c.rate END), 0) AS vcpu_rate,\n    COALESCE(MAX(CASE WHEN c.priced_for = 'Memory' AND c.cluster = g.name THEN c.rate END),\n      MAX(CASE WHEN c.priced_for = 'Memory' AND COALESCE(c.cluster, '') = '' THEN c.rate END), 0) AS memory_rate,\n    COALESCE(MAX(CASE WHEN c.priced_for = 'Disk' AND c.cluster = g.name THEN c.rate END),\n      MAX(CASE WHEN c.priced_for = 'Disk' AND COALESCE(c.cluster, '') = '' THEN c.rate END), 0) AS disk_rate\n  FROM `tabRegion` g\n  JOIN `tabCatalog Rate` c ON c.priced_doctype = 'Resource Type' AND c.currency = 'INR'\n  GROUP BY g.name\n),\nservers AS (\n  SELECT v.region,\n    COALESCE(v.vcpus, 0) AS vcpus, COALESCE(v.memory_megabytes, 0) / 1024 AS memory_gib,\n    COALESCE(v.disk_gigabytes, 0) AS disk_gib,\n    CASE\n      WHEN EXISTS (SELECT 1 FROM `tabTax Profile` tp WHERE tp.team = v.team AND tp.is_internal = 1) THEN 'Internal'\n      WHEN (SELECT MAX(st.trial_state) FROM `tabSite` st WHERE st.server = v.name AND st.trial_state != '')\n        IN ('Active', 'Ended', 'Deleted') THEN 'Trial'\n      WHEN NOT EXISTS (SELECT 1 FROM `tabSite` st WHERE st.server = v.name AND st.trial_state != '')\n        AND EXISTS (SELECT 1 FROM `tabResource Action` ra\n          WHERE ra.server = v.name AND ra.action = 'create' AND ra.is_free_trial = 1) THEN 'Trial'\n      WHEN EXISTS (SELECT 1 FROM `tabPayment Method` pm WHERE pm.team = v.team AND pm.status = 'Active')\n        OR EXISTS (SELECT 1 FROM `tabCredit Ledger Entry` e WHERE e.team = v.team AND e.entry_type = 'Credit'\n          AND e.reference_type IN ('Top-up', 'Payment Method'))\n        OR EXISTS (SELECT 1 FROM `tabInvoice` i WHERE i.team = v.team AND i.amount_paid > 0) THEN 'Paid'\n      ELSE 'Free Credits'\n    END AS funding,\n    CASE WHEN COALESCE(r.currency, 'INR') = 'INR' THEN 1\n      WHEN r.currency = 'USD' THEN COALESCE((SELECT CAST(value AS DECIMAL(12, 4)) FROM `tabSingles`\n        WHERE doctype = 'Billing Settings' AND field = 'reporting_usd_to_inr'), 0)\n      ELSE 0 END * COALESCE(r.locked_rate, 0) AS list_rate_inr\n  FROM `tabVirtual Machine` v\n  LEFT JOIN rate r ON r.server_id = v.name\n  WHERE v.status NOT IN ('Terminated', 'Failed')\n),\npriced AS (\n  SELECT s.*,\n    s.vcpus * COALESCE(k.vcpu_rate, 0) + s.memory_gib * COALESCE(k.memory_rate, 0)\n      + s.disk_gib * COALESCE(k.disk_rate, 0) AS card_value\n  FROM servers s LEFT JOIN card k ON k.region = s.region\n),\nserver_region AS (\n  SELECT region, COUNT(*) AS servers, SUM(vcpus) AS sold_vcpus, SUM(card_value) AS held_value,\n    SUM(CASE WHEN funding = 'Paid' THEN card_value ELSE 0 END) AS paid_value,\n    SUM(CASE WHEN funding = 'Paid' THEN list_rate_inr ELSE 0 END) AS revenue\n  FROM priced GROUP BY region\n),\nmetal_region AS (\n  SELECT region, COUNT(*) AS machines, SUM(cost_per_month_inr) AS bill,\n    SUM((vcpus - COALESCE(reserved_vcpus, 0)) * COALESCE(NULLIF(cpu_overcommit_ratio, 0), 1)) AS sellable_vcpus,\n    SUM(memory_gib - COALESCE(reserved_memory_gib, 0)) AS sellable_memory_gib,\n    SUM(disk_gib - COALESCE(reserved_disk_gib, 0)) AS sellable_disk_gib\n  FROM `tabMetal Server` WHERE status = 'Active' GROUP BY region\n),\nregions AS (SELECT region FROM metal_region UNION SELECT region FROM server_region),\ntotals AS (\n  SELECT r.region, COALESCE(m.machines, 0) AS machines, COALESCE(s.servers, 0) AS servers,\n    COALESCE(m.bill, 0) AS bill, COALESCE(m.sellable_vcpus, 0) AS sellable_vcpus,\n    COALESCE(s.sold_vcpus, 0) AS sold_vcpus, COALESCE(s.held_value, 0) AS held_value,\n    COALESCE(s.paid_value, 0) AS paid_value, COALESCE(s.revenue, 0) AS revenue,\n    COALESCE(m.sellable_vcpus, 0) * COALESCE(k.vcpu_rate, 0)\n      + COALESCE(m.sellable_memory_gib, 0) * COALESCE(k.memory_rate, 0)\n      + COALESCE(m.sellable_disk_gib, 0) * COALESCE(k.disk_rate, 0) AS potential\n  FROM regions r\n  LEFT JOIN metal_region m ON m.region = r.region\n  LEFT JOIN server_region s ON s.region = r.region\n  LEFT JOIN card k ON k.region = r.region\n)\n\nSELECT region, machines, servers, bill, sellable_vcpus, sold_vcpus,\n  sold_vcpus / NULLIF(sellable_vcpus, 0) AS vcpu_sold_share,\n  potential,\n  potential - held_value AS unsold,\n  held_value - paid_value AS unpaid,\n  paid_value - revenue AS discount,\n  revenue,\n  revenue / NULLIF(potential, 0) AS yield_share,\n  revenue / NULLIF(sellable_vcpus, 0) AS revenue_per_sellable_vcpu\nFROM totals\n",
+     "type": "sql"
+    }
+   ],
+   "sort_order": 26,
+   "title": "Yield by region",
    "use_live_connection": 1,
    "workbook": "billing"
   }
