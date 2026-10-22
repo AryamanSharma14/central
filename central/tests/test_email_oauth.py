@@ -83,9 +83,11 @@ class TestEmailOAuth(IntegrationTestCase):
 	def as_pilot(self, path: str):
 		set_request(method="POST", path=path, headers={"X-Pilot-Token": self.token})
 
-	def call_start(self, return_url: str, state: str = "state-1") -> dict:
+	def call_start(self, return_url: str, state: str = "state-1", **kwargs) -> dict:
 		self.as_pilot("/api/method/central.api.email_oauth.start")
-		return start(provider="microsoft", state=state, code_challenge="challenge-1", return_url=return_url)
+		return start(
+			provider="microsoft", state=state, code_challenge="challenge-1", return_url=return_url, **kwargs
+		)
 
 	def call_callback(self, user: str, **params) -> frappe._dict:
 		frappe.set_user(user)
@@ -104,9 +106,17 @@ class TestEmailOAuth(IntegrationTestCase):
 		self.assertEqual(query["state"], ["state-1"])
 		self.assertEqual(query["code_challenge"], ["challenge-1"])
 		self.assertEqual(query["prompt"], ["select_account"])
+		self.assertNotIn("login_hint", query)
 		self.assertTrue(query["redirect_uri"][0].endswith("/api/method/central.api.email_oauth.callback"))
 		note = frappe.cache.get_value("email_oauth:state-1")
 		self.assertEqual((note["team"], note["server"]), (self.team, self.server))
+
+	def test_start_with_a_login_hint_goes_to_that_account(self):
+		result = self.call_start(f"https://{self.site}{SITE_CALLBACK}", login_hint="admin@example.com")
+
+		query = parse_qs(urlsplit(result["authorize_url"]).query)
+		self.assertEqual(query["login_hint"], ["admin@example.com"])
+		self.assertNotIn("prompt", query)
 
 	def test_start_refuses_a_return_url_off_this_server(self):
 		for url in (

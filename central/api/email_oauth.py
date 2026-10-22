@@ -27,10 +27,14 @@ LOGIN_PATH = "/dashboard/login"
 # nosemgrep: guest-whitelisted-method -- pilot_credential_auth verifies the caller below.
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 @pilot_credential_auth
-def start(provider: str, state: str, code_challenge: str, return_url: str) -> dict:
+def start(
+	provider: str, state: str, code_challenge: str, return_url: str, login_hint: str | None = None
+) -> dict:
 	"""Called by a site through its Pilot: remember where to send the browser back, return the provider's sign-in link."""
 	credential = frappe.local.pilot_credential
-	return start_sign_in(provider, state, code_challenge, return_url, credential.team, credential.server)
+	return start_sign_in(
+		provider, state, code_challenge, return_url, credential.team, credential.server, login_hint
+	)
 
 
 # nosemgrep: guest-whitelisted-method -- the provider sends the browser here; the code only goes to the site's team.
