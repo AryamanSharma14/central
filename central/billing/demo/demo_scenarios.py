@@ -64,11 +64,13 @@ from central.billing.demo._factory import (
 	backdate_welcome_credit,
 	bank_pending_attempt,
 	collection_moment,
+	demo_host,
 	draw_wallet_credit,
 	make_refund,
 	meter_service_usage,
 	opens_on,
 	plan_name,
+	plan_shape,
 	set_collection_mode,
 	stage_resizes,
 	subscribe_service,
@@ -524,7 +526,16 @@ def _build_team(team, slug, tier, currency, state, resources, resize):
 		# A readable name, so a receipt that groups by machine has a heading worth
 		# reading rather than the raw resource id.
 		if frappe.db.exists("Virtual Machine", resource):
-			frappe.db.set_value("Virtual Machine", resource, "title", f"{slug}-{idx}", update_modified=False)
+			frappe.db.set_value(
+				"Virtual Machine",
+				resource,
+				{
+					"title": f"{slug}-{idx}",
+					"atlas_host_id": f"host-{demo_host(cluster, idx)}",
+					**plan_shape(plan_key),
+				},
+				update_modified=False,
+			)
 		opening = frappe.db.get_value(
 			"Subscription Change", {"subscription": sub, "change_type": "Created"}, "name"
 		)
