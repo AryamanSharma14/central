@@ -99,7 +99,7 @@ def _chart(rows: list[dict]) -> dict | None:
 		return None
 	return {
 		"data": {
-			"labels": [row["title"] or row["plan"] for row in rows[:15]],
+			"labels": [row["title"] or row["plan"] or _("No plan") for row in rows[:15]],
 			"datasets": [{"name": _("List MRR"), "values": [flt(row["list_mrr"], 2) for row in rows[:15]]}],
 		},
 		"type": "bar",
