@@ -34,6 +34,10 @@ SERVER_PAGE_SIZE = 100
 # the stop before a final snapshot. A resize waits for a stop and a start.
 JOB_TIMEOUT_SECONDS = servers.POWER_WAIT_SECONDS + 5 * 60
 RESIZE_JOB_TIMEOUT_SECONDS = 2 * servers.POWER_WAIT_SECONDS + 5 * 60
+# Every new server gets these limits, so one server cannot use all the disk or network of its host.
+DISK_IOPS = 3000
+DISK_THROUGHPUT_MIBPS = 125
+NETWORK_THROUGHPUT_MIBPS = 500
 
 
 def get_job_timeout_seconds(action: str | None) -> int:
@@ -225,6 +229,10 @@ def _create_payload(request) -> dict:
 		"cpu_millicores": configuration.cpu_millicores,
 		"memory_mib": configuration.memory_mib,
 		"disk_mib": configuration.disk_mib,
+		"disk_iops": DISK_IOPS,
+		"disk_throughput_mibps": DISK_THROUGHPUT_MIBPS,
+		"private_network_throughput_mibps": NETWORK_THROUGHPUT_MIBPS,
+		"public_network_throughput_mibps": NETWORK_THROUGHPUT_MIBPS,
 		"hostname": configuration.hostname or "",
 		"ssh_keys": configuration.ssh_keys,
 		"user_data": configuration.user_data,
