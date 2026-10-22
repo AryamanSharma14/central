@@ -82,7 +82,7 @@ Server creation has three network options. Central sends an option to Atlas only
 | Public IPv6 | `public_ipv6: "auto"` |
 | Firewall | `firewall.enabled: true` with the rules below |
 
-Each option has a flag in Central Settings > Feature Flags > New Server Network: Enable Public IPv4, Enable Public IPv6, and Enable Firewall. Each flag is off by default. When a flag is off, the New server page hides that option, and Central refuses a creation request that selects it.
+Each option has a flag in Central Settings > Feature Flags > Networking: Enable Public IPv4, Enable Public IPv6, and Enable Firewall. Each flag is off by default. When a flag is off, the New server page hides that option, and Central refuses a creation request that selects it.
 
 Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
