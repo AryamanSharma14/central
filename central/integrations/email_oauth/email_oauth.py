@@ -24,9 +24,16 @@ PROVIDER_UNAVAILABLE = "provider_unavailable"
 
 
 def start_sign_in(
-	provider: str, state: str, code_challenge: str, return_url: str, team: str, server: str | None
+	provider: str,
+	state: str,
+	code_challenge: str,
+	return_url: str,
+	team: str,
+	server: str | None,
+	login_hint: str | None = None,
 ) -> dict:
-	"""Remember where to send the browser back, and return the provider's sign-in link."""
+	"""Remember where to send the browser back, and return the provider's sign-in link.
+	With `login_hint`, the provider goes to that account instead of asking which one."""
 	config = get_provider(provider)
 	check_return_url(return_url, team, server)
 
@@ -37,6 +44,12 @@ def start_sign_in(
 	)
 
 	scopes = config.get_scopes()
+	params = config.get_query_params()
+	if login_hint:
+		params["login_hint"] = login_hint
+		prompt = " ".join(p for p in params.pop("prompt", "").split() if p != "select_account")
+		if prompt:
+			params["prompt"] = prompt
 	authorize_url = WebApplicationClient(config.client_id).prepare_request_uri(
 		config.authorize_url,
 		redirect_uri=get_url(CALLBACK_PATH),
@@ -44,7 +57,7 @@ def start_sign_in(
 		state=state,
 		code_challenge=code_challenge,
 		code_challenge_method="S256",
-		**config.get_query_params(),
+		**params,
 	)
 	# the site saves these scopes on its Connected App, so it keeps no list of its own
 	return {"authorize_url": authorize_url, "client_id": config.client_id, "scopes": scopes}
