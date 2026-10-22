@@ -430,6 +430,57 @@ def check_no_staging_trials_outside_staging() -> list[Violation]:
 	]
 
 
+def check_regions_have_priced_metal() -> list[Violation]:
+	"""A region that runs servers has active bare metal with a monthly cost, so its margin is known."""
+	priced = set(
+		frappe.get_all(
+			"Metal Server", filters={"status": "Active", "cost_per_month_inr": [">", 0]}, pluck="region"
+		)
+	)
+	regions = frappe.get_all(
+		"Virtual Machine",
+		filters={"status": ["not in", ("Terminated", "Failed")]},
+		pluck="region",
+		distinct=True,
+	)
+	return [
+		Violation(
+			check="R1",
+			subject_doctype="Region",
+			subject=region,
+			detail="Runs servers but has no active Metal Server with a monthly cost, so unit economics read 0 cost.",
+		)
+		for region in regions
+		if region not in priced
+	]
+
+
+def check_servers_have_a_known_host() -> list[Violation]:
+	"""A live server in a region with bare metal has a host that one of its Metal Servers records."""
+	hosts = {}
+	for machine in frappe.get_all(
+		"Metal Server", filters={"status": "Active"}, fields=["region", "atlas_host_id"]
+	):
+		hosts.setdefault(machine.region, set()).add(machine.atlas_host_id)
+
+	servers = frappe.get_all(
+		"Virtual Machine",
+		filters={"status": ["not in", ("Terminated", "Failed")], "region": ["in", list(hosts)]},
+		fields=["name", "team", "region", "atlas_host_id"],
+	)
+	return [
+		Violation(
+			check="R2",
+			team=server.team,
+			subject_doctype="Virtual Machine",
+			subject=server.name,
+			detail="Runs on no known Metal Server, so its machine's profitability leaves it out.",
+		)
+		for server in servers
+		if not server.atlas_host_id or server.atlas_host_id not in hosts[server.region]
+	]
+
+
 def check_billing_run_is_moving() -> list[Violation]:
 	"""The closed month's run has started, and no draft it owes waits hours to be collected."""
 	from central.billing.revenue.invoicing.run import billing_period
@@ -499,4 +550,6 @@ CHECKS = {
 	"W1": ("Billed teams can pay", check_billed_teams_can_pay),
 	"W2": ("Promotional credit expires", check_promotional_credit_expires),
 	"X1": ("No staging trials outside staging", check_no_staging_trials_outside_staging),
+	"R1": ("Regions with servers have priced bare metal", check_regions_have_priced_metal),
+	"R2": ("Servers run on a known Metal Server", check_servers_have_a_known_host),
 }
