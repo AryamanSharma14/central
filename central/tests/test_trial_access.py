@@ -60,6 +60,12 @@ class TestTrialServerAccess(TrialOnAMachine):
 		with self.set_user(self.member):
 			self.machine().require_server_access(self.member)
 
+	def test_the_desk_form_shows_the_lock(self):
+		machine = self.machine()
+		machine.run_method("onload")
+
+		self.assertTrue(machine.get_onload().is_access_locked)
+
 	def test_an_operator_keeps_server_access(self):
 		self.machine().require_server_access("Administrator")
 

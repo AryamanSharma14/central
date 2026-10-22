@@ -129,6 +129,9 @@ class VirtualMachine(Document):
 		if not self.is_new() and self.has_value_changed("title") and not self.title:
 			frappe.throw(_("Enter a server name."))
 
+	def onload(self) -> None:
+		self.set_onload("is_access_locked", self.is_access_locked())
+
 	def on_update(self):
 		if self.has_value_changed("status") or self.has_value_changed("plan"):
 			self.sync_subscription_on_status_change()
