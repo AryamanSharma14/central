@@ -203,7 +203,7 @@
    "label": "Require Payment Method for Servers"
   },
   {
-   "default": "1",
+   "default": "3",
    "description": "Open free trial sites one owner may have across all their teams. A stopped trial counts until it is deleted. For a staging trial team, the servers that team may have.",
    "fieldname": "trial_servers_per_team",
    "fieldtype": "Int",
@@ -319,7 +319,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 12:00:00.000000",
+ "modified": "2026-10-22 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",
