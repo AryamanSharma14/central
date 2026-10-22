@@ -130,12 +130,44 @@ const handlers: Partial<Record<ServerMenuVerb, () => void>> = {
 	terminate: () => emit('terminate'),
 }
 
-const menu = computed(() =>
-	getServerMenu(props.server, props.actions, (verb) => handlers[verb]?.(), {
-		opensSite: !!props.siteUrl,
-		isOnServerPage: true,
-	}),
-)
+const operatorItems = computed(() => {
+	const links = props.details?.operator_links
+	if (!links) return []
+
+	const { desk_url: deskUrl, atlas_url: atlasUrl } = links
+	const open = (url: string) => window.open(url, '_blank', 'noopener')
+	return [
+		{
+			label: 'Open in Desk',
+			icon: 'lucide-app-window',
+			onClick: () => open(deskUrl),
+		},
+		...(atlasUrl
+			? [
+					{
+						label: 'Open in Atlas',
+						icon: 'lucide-earth',
+						onClick: () => open(atlasUrl),
+					},
+				]
+			: []),
+	]
+})
+
+const menu = computed(() => {
+	const groups = getServerMenu(
+		props.server,
+		props.actions,
+		(verb) => handlers[verb]?.(),
+		{ opensSite: !!props.siteUrl, isOnServerPage: true },
+	)
+	if (!operatorItems.value.length) return groups
+
+	return [
+		...groups,
+		{ group: 'Operator', hideLabel: true, options: operatorItems.value },
+	]
+})
 </script>
 
 <template>

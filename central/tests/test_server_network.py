@@ -221,3 +221,19 @@ class TestServerConsole(IntegrationTestCase):
 
 		self.assertEqual(server["public_ipv6"], "2001:db8:5::7")
 		self.assertEqual(server["ssh_command"], "ssh root@2001:db8:5::7")
+
+	def test_overview_gives_an_operator_desk_and_atlas_links(self):
+		links = server_overview(team=self.team.name, resource_id=self.server.name)["server"]["operator_links"]
+
+		self.assertTrue(links["desk_url"].endswith(f"/desk/virtual-machine/{self.server.name}"))
+		base_url = frappe.db.get_value("Region", self.region, "base_url").rstrip("/")
+		self.assertEqual(links["atlas_url"], f"{base_url}/desk/virtual-machine/vm-00001")
+
+	def test_overview_hides_operator_links_from_a_team_owner(self):
+		frappe.set_user(self.owner)
+		try:
+			server = server_overview(team=self.team.name, resource_id=self.server.name)["server"]
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertIsNone(server["operator_links"])

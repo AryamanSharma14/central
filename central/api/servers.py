@@ -9,7 +9,7 @@ from frappe.utils.translations import _lt
 from pydantic import ValidationError
 
 from central.errors import handle_resource_operation
-from central.iam import can, get_server_capabilities
+from central.iam import can, get_server_capabilities, user_has_operator_bypass
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
@@ -180,6 +180,7 @@ def server_overview(team: str | None = None, resource_id: str | None = None) -> 
 			**server,
 			**_overview_plan(server, team),
 			"team_name": row.team_name or team,
+			"operator_links": _operator_links(row),
 			"region_details": {
 				"display_name": row.region_display_name or server.region,
 				"provider": row.region_provider,
@@ -332,6 +333,7 @@ def _overview_server_row(resource_id: str, team: str):
 			region.display_name.as_("region_display_name"),
 			region.provider.as_("region_provider"),
 			region.country_code.as_("region_country_code"),
+			region.base_url.as_("region_base_url"),
 			team_table.team_name.as_("team_name"),
 		)
 		.where((server.resource_id == resource_id) & (server.team == team))
@@ -340,6 +342,21 @@ def _overview_server_row(resource_id: str, team: str):
 	)
 
 	return rows[0] if rows else None
+
+
+def _operator_links(row) -> dict | None:
+	"""Desk and Atlas form links for an operator. Other users get None, so the region URL stays private."""
+	if not user_has_operator_bypass():
+		return None
+
+	atlas_url = None
+	if row.region_base_url and row.atlas_vm_id:
+		atlas_url = f"{row.region_base_url.rstrip('/')}/desk/virtual-machine/{row.atlas_vm_id}"
+
+	return {
+		"desk_url": frappe.utils.get_url_to_form("Virtual Machine", row.resource_id),
+		"atlas_url": atlas_url,
+	}
 
 
 def _ssh_command(row) -> str | None:
