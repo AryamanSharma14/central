@@ -30,5 +30,8 @@ interface Window {
 		addons?: boolean
 		storage?: boolean
 		llm?: boolean
+		public_ipv4?: boolean
+		public_ipv6?: boolean
+		firewall?: boolean
 	}
 }

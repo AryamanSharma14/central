@@ -17,6 +17,10 @@
   "enable_pdf_print_service",
   "enable_email_delivery_service",
   "enable_object_storage_service",
+  "new_server_network_section",
+  "enable_public_ipv4",
+  "enable_public_ipv6",
+  "enable_firewall",
   "servers_tab",
   "common_site_config",
   "limits_tab",
@@ -95,6 +99,30 @@
    "fieldname": "enable_email_delivery_service",
    "fieldtype": "Check",
    "label": "Enable Email Delivery Service"
+  },
+  {
+   "description": "Network options on the New server page. An option that is off is hidden, and Central refuses a request that asks for it.",
+   "fieldname": "new_server_network_section",
+   "fieldtype": "Section Break",
+   "label": "New Server Network"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_public_ipv4",
+   "fieldtype": "Check",
+   "label": "Enable Public IPv4"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_public_ipv6",
+   "fieldtype": "Check",
+   "label": "Enable Public IPv6"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_firewall",
+   "fieldtype": "Check",
+   "label": "Enable Firewall"
   },
   {
    "fieldname": "general_tab",
@@ -319,7 +347,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 19:00:00.000000",
+ "modified": "2026-10-22 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",

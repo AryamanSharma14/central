@@ -17,6 +17,7 @@ import {
 	ramFor,
 	rateCardComplete,
 } from '@/lib/composed'
+import { features } from '@/lib/features'
 import { money } from '@/lib/format'
 import { planPrice } from '@/lib/plans'
 import {
@@ -171,7 +172,8 @@ export function useServerCreation() {
 	watch(ipv4PriceLabel, (label) => {
 		if (!label) hasPublicIpv4.value = false
 	})
-	const hasPublicIpv6 = ref(true)
+	// A hidden switch keeps its option off, and Central refuses it while its flag is off.
+	const hasPublicIpv6 = ref(features.publicIpv6)
 	const isFirewallEnabled = ref(false)
 	watch(selection, () => {
 		selectedPlan.value = null

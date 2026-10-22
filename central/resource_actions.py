@@ -108,6 +108,9 @@ def submit_request(
 			_("You cannot create servers for this Team. Ask a team admin to review your access."),
 			frappe.PermissionError,
 		)
+	frappe.get_cached_doc("Central Settings").require_new_server_network_options(
+		server_input.has_public_ipv4, server_input.has_public_ipv6, server_input.is_firewall_enabled
+	)
 	if server_input.has_public_ipv4:
 		from central.billing.catalog.public_ips import require_public_ipv4_rate
 
