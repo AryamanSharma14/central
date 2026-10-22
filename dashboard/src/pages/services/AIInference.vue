@@ -3,6 +3,7 @@ import { Alert, Button, Dialog, Skeleton, TabButtons, Tooltip } from 'frappe-ui'
 import { ref } from 'vue'
 import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import AISettings from '@/components/services/llm/AISettings.vue'
 import ApiKeys from '@/components/services/llm/ApiKeys.vue'
 import Models from '@/components/services/llm/Models.vue'
 import Quickstart from '@/components/services/llm/Quickstart.vue'
@@ -26,6 +27,7 @@ const TABS = [
 	{ label: 'Usage', value: 'usage', glyph: 'lucide-chart-column' },
 	{ label: 'API keys', value: 'keys', glyph: 'lucide-key-round' },
 	{ label: 'Models', value: 'models', glyph: 'lucide-boxes' },
+	{ label: 'Settings', value: 'settings', glyph: 'lucide-settings' },
 ]
 const tab = ref('usage')
 
@@ -120,6 +122,10 @@ const enableAI = async (): Promise<void> => {
 					/>
 				</div>
 				<Models v-show="tab === 'models'" :active="tab === 'models'" />
+				<AISettings
+					v-show="tab === 'settings'"
+					:can-manage="canManageServices"
+				/>
 			</template>
 
 			<EmptyState
