@@ -388,6 +388,9 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 			<thead>
 				<tr class="text-sm text-ink-gray-5">
 					<th scope="col" class="pb-2 font-normal">Name</th>
+					<th scope="col" class="hidden pb-2 font-normal sm:table-cell">
+						Geography
+					</th>
 					<th
 						v-if="!sharedLimits"
 						scope="col"
@@ -427,15 +430,16 @@ const revoke = async (key: AIApiKey): Promise<void> => {
 							class="mt-0.5 flex items-center gap-1.5 font-mono text-xs text-ink-gray-5"
 						>
 							{{ key.masked }}
-							<template v-if="mintable.length > 1">
-								<span aria-hidden="true">·</span>
-								<Tooltip :text="key.gateway_url">
-									<span class="font-sans"
-										>{{ geographyLabel(key.geography) }}</span
-									>
-								</Tooltip>
-							</template>
 						</span>
+					</td>
+
+					<td
+						class="hidden border-t border-outline-gray-1 py-2.5 pr-3 text-sm sm:table-cell"
+						:class="key.status === 'active' && 'text-ink-gray-6'"
+					>
+						<Tooltip :text="key.gateway_url">
+							<span>{{ geographyLabel(key.geography) }}</span>
+						</Tooltip>
 					</td>
 
 					<td
