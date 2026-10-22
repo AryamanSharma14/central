@@ -6,7 +6,6 @@
  "engine": "InnoDB",
  "field_order": [
   "general_tab",
-  "trial_idle_shutdown_minutes",
   "invitation_expiry_days",
   "wildcard_domain",
   "central_id",
@@ -27,12 +26,18 @@
   "sign_in_section",
   "sign_in_code_attempts",
   "sign_in_codes_per_email",
-  "trials_section",
+  "servers_section",
   "require_payment_method",
-  "trial_servers_per_team",
+  "trials_tab",
+  "trial_clock_section",
   "trial_days",
   "trial_deletion_days",
+  "column_break_trial_clock",
   "trial_notice_days",
+  "trial_limits_section",
+  "trial_servers_per_team",
+  "column_break_trial_limits",
+  "trial_idle_shutdown_minutes",
   "github_tab",
   "github_app_section",
   "github_app_id",
@@ -98,7 +103,7 @@
   },
   {
    "default": "10",
-   "description": "Minutes a trial server may sit idle before its region puts it to sleep. Customer traffic wakes it. Set 0 to keep trial servers awake. Paid servers do not use idle sleep. Resizing disables idle sleep.",
+   "description": "Minutes a trial server may sit idle before its region puts it to sleep. Customer traffic wakes it. Set 0 to keep trial servers awake. Paid servers do not sleep.",
    "fieldname": "trial_idle_shutdown_minutes",
    "fieldtype": "Int",
    "label": "Trial Idle Shutdown (Minutes)",
@@ -186,9 +191,9 @@
    "non_negative": 1
   },
   {
-   "fieldname": "trials_section",
+   "fieldname": "servers_section",
    "fieldtype": "Section Break",
-   "label": "Trials"
+   "label": "Servers"
   },
   {
    "default": "1",
@@ -198,32 +203,32 @@
    "label": "Require Payment Method for Servers"
   },
   {
-   "default": "3",
-   "description": "Free trial sites one owner may hold across all their teams. For a staging trial team, the servers that team may hold.",
+   "default": "1",
+   "description": "Open free trial sites one owner may have across all their teams. A stopped trial counts until it is deleted. For a staging trial team, the servers that team may have.",
    "fieldname": "trial_servers_per_team",
    "fieldtype": "Int",
    "label": "Trial Servers Limit",
    "non_negative": 1
   },
   {
-   "default": "14",
-   "description": "Days a trial site runs from when it is first ready. A Product can set its own.",
+   "default": "7",
+   "description": "Days a free trial site runs from when Central records it. A Product can set its own days.",
    "fieldname": "trial_days",
    "fieldtype": "Int",
    "label": "Trial Days",
    "non_negative": 1
   },
   {
-   "default": "14",
-   "description": "Days a stopped trial site is kept before its server is terminated. A Product can set its own.",
+   "default": "7",
+   "description": "Days a stopped trial site is kept, so the customer can still upgrade and keep it. Then its server is terminated. A Product can set its own days.",
    "fieldname": "trial_deletion_days",
    "fieldtype": "Int",
    "label": "Trial Deletion Days",
    "non_negative": 1
   },
   {
-   "default": "3",
-   "description": "Days before a trial ends, and before an ended trial is deleted, that Central sends the warning email. A second warning goes out on the last day.",
+   "default": "2",
+   "description": "Days before a trial ends, and before a stopped trial is deleted, that Central sends a warning email. A second warning goes out on the last day.",
    "fieldname": "trial_notice_days",
    "fieldtype": "Int",
    "label": "Trial Notice Days",
@@ -235,10 +240,10 @@
    "label": "GitHub"
   },
   {
+   "description": "Pilot benches clone private repositories with short-lived tokens of this App. Use Create GitHub App to fill these fields.",
    "fieldname": "github_app_section",
    "fieldtype": "Section Break",
-   "label": "GitHub App",
-   "description": "Pilot benches clone private repositories with short-lived tokens of this App. Use Create GitHub App to fill these fields."
+   "label": "GitHub App"
   },
   {
    "fieldname": "github_app_id",
@@ -283,13 +288,38 @@
    "fieldtype": "Password",
    "label": "Private Key",
    "length": 8192
+  },
+  {
+   "fieldname": "trials_tab",
+   "fieldtype": "Tab Break",
+   "label": "Trials"
+  },
+  {
+   "description": "A free trial site runs for Trial Days, then its server stops. After Trial Deletion Days, its server is terminated. Upgrading at any time keeps the site and opens server access.",
+   "fieldname": "trial_clock_section",
+   "fieldtype": "Section Break",
+   "label": "Trial Period"
+  },
+  {
+   "fieldname": "column_break_trial_clock",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The trial server uses the cheapest plan marked Available on Trial in the region. The welcome credit is set in Billing Settings.",
+   "fieldname": "trial_limits_section",
+   "fieldtype": "Section Break",
+   "label": "Trial Server"
+  },
+  {
+   "fieldname": "column_break_trial_limits",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-16 00:00:00.000000",
+ "modified": "2026-10-22 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",
