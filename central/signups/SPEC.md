@@ -8,7 +8,7 @@ The Signups module holds what a new customer gets: the [Product](doctype/product
 
 Grant Welcome Credits is off by default, so no team gets a welcome credit: a product signup gets a free trial site instead, and every other server needs a payment method. When an operator turns it on, a Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
 
-A Team with trial sites gets the credit only while one of its trials is Active. This rewards a card before the trial ends. A card after the trial ends still converts the site, but adds no credit. `get_welcome_credit_offer` returns `ends_on`, the earliest end date of the Team's Active trials, so the console and the site can name the last day.
+A Team that had a free trial gets no welcome credit, because the trial site is its free start. A card still converts its trial site. `is_welcome_credit_due` holds this rule.
 
 | Billing Settings field | Value on a new install |
 |---|---|
@@ -54,7 +54,7 @@ The `Trial` class in `central/signups/trial.py` owns these states. Every change 
 | Event | Sent |
 |---|---|
 | `trial_unopened` | Once, from the day after the site is ready, when nobody has opened it. Not sent when a warning is due. |
-| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. It names the welcome credit when the Team can still earn it. |
+| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. |
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
 | `trial_deleted` | When the server is terminated. Its button opens the signup page of the same product. |
@@ -136,7 +136,7 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 

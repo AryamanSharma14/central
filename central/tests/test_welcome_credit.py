@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, nowdate
 
 from central.billing.revenue import credits
 from central.billing.states import transition
@@ -114,19 +114,13 @@ class TestWelcomeCredit(IntegrationTestCase):
 	def test_no_payment_method_is_asked_for_when_the_requirement_is_off(self):
 		self.assertFalse(get_purchase_state(TEAM)["payment_method_required"])
 
-	def test_a_trial_team_gets_the_credit_while_its_trial_is_active(self):
-		self.add_trial(TEAM, "Active")
-		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
-			offer = get_purchase_state(TEAM)["welcome_credit"]
-			self.activate_payment_method(TEAM)
+	def test_a_team_that_had_a_free_trial_gets_no_welcome_credit(self):
+		for state in ("Active", "Ended"):
+			with self.subTest(state=state):
+				frappe.db.delete("Site", {"team": TEAM})
+				self.add_trial(TEAM, state)
+				with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
+					self.assertIsNone(get_purchase_state(TEAM)["welcome_credit"])
+					self.activate_payment_method(TEAM)
 
-		self.assertEqual(getdate(offer["ends_on"]), getdate(add_days(nowdate(), 3)))
-		self.assertEqual(self.promotion_count(TEAM), 1)
-
-	def test_a_trial_team_whose_trial_ended_gets_no_credit(self):
-		self.add_trial(TEAM, "Ended")
-		with billing_settings(grant_welcome_credits=1, welcome_credit_amounts=AMOUNTS):
-			self.assertIsNone(get_purchase_state(TEAM)["welcome_credit"])
-			self.activate_payment_method(TEAM)
-
-		self.assertEqual(self.promotion_count(TEAM), 0)
+				self.assertEqual(self.promotion_count(TEAM), 0)

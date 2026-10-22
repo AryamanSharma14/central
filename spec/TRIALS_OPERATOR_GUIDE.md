@@ -55,6 +55,6 @@ Only a product signup gets a free trial. A direct Central signup adds a card and
 | New Server page, no payment method | A note at the top: add a payment method to create servers, and get the welcome credit when it is on. Create is off. **Add payment method** opens the payment dialog on the same page. |
 | Onboarding, payment step | A **Billing country** field, saved when picked, which sets the currency. Then the welcome credit offer in that currency when it is on, that adding a payment method does not charge it, and an **Add payment method** button. It asks for the other billing details first when they are missing. |
 | Trial ending, ended, deletion soon, deleted | An email and a notice in the **Trial** category. Customers can turn these off in their notification settings. |
-| Site's in-app billing panel | The days left, the last day to add a card and get the credit, and that the site sleeps after Trial Idle Shutdown minutes without visitors. |
+| Site's in-app billing panel | A notice above the plan with the days left and the end date, and one **Add payment method** button. Adding a payment method starts billing for the plan and opens full server access. |
 | Console resize dialog on a trial server | The same, with an **Add payment method** button. After the card, the plans. |
 | Console resize dialog on an ended trial, team has a card | The deletion date and, for a member with `billing:manage`, a **Keep this site** button. A card does not restart an ended trial by itself. Keep this site moves the site to its paid plan and starts it. |

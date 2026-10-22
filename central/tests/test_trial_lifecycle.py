@@ -453,7 +453,7 @@ class TestTrialLifecycle(TrialOnAMachine):
 
 		convert_trial_server.assert_called_once_with(self.server.name, start=True)
 
-	def test_the_in_app_trial_status_carries_the_credit_offer_and_the_idle_minutes(self):
+	def test_the_in_app_trial_status_carries_its_contract_fields(self):
 		"""The site's billing tab reads these fields; their names are the contract with Pilot."""
 		status = trial.get_trial_status(self.server.name)
 
@@ -466,11 +466,8 @@ class TestTrialLifecycle(TrialOnAMachine):
 				"ends_on",
 				"days_left",
 				"deletes_on",
-				"credit",
-				"sleeps_after_minutes",
 			},
 		)
-		self.assertEqual(status["sleeps_after_minutes"], trial.TrialSettings().idle_shutdown_minutes)
 
 	def test_resize_options_say_the_trial_blocks_a_resize(self):
 		from central.billing.api.dashboard.catalog import get_composed_config

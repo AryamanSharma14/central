@@ -120,9 +120,9 @@
   "docstatus": 0,
   "doctype": "Notification Event Type",
   "event_type": "trial_expiring",
-  "in_app_body": "Your free trial of {{ context.address }} ends on {{ context.ends_on }}. Upgrade to keep the site{% if context.credit %} and get {{ context.credit }} credit{% endif %}.",
+  "in_app_body": "Your free trial of {{ context.address }} ends on {{ context.ends_on }}. Upgrade to keep the site.",
   "in_app_title": "Your {{ context.product }} trial ends on {{ context.ends_on }}",
-  "modified": "2026-10-22 20:00:00",
+  "modified": "2026-10-23 10:00:00",
   "name": "trial_expiring",
   "required_cap": "billing:view",
   "severity": "Warning"

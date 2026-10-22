@@ -7,7 +7,6 @@ from frappe.utils import (
 	cint,
 	date_diff,
 	flt,
-	fmt_money,
 	formatdate,
 	get_datetime,
 	getdate,
@@ -52,7 +51,6 @@ class TrialSettings:
 		self.days = cint(product_days.trial_days) or cint(settings.trial_days)
 		self.deletion_days = cint(product_days.trial_deletion_days) or cint(settings.trial_deletion_days)
 		self.notice_days = cint(settings.trial_notice_days)
-		self.idle_shutdown_minutes = cint(settings.trial_idle_shutdown_minutes)
 
 
 class Trial:
@@ -309,8 +307,6 @@ class Trial:
 
 	def get_status(self) -> dict:
 		"""The open trial, for the console and the in-app billing panel."""
-		from central.signups.credit import get_welcome_credit_offer
-
 		has_payment_method = has_active_payment_method(self.site.team)
 		return {
 			"state": self.state,
@@ -321,8 +317,6 @@ class Trial:
 			"ends_on": self.site.trial_ends_on,
 			"days_left": max(date_diff(self.site.trial_ends_on, nowdate()), 0),
 			"deletes_on": self.site.trial_deletes_on,
-			"credit": get_welcome_credit_offer(self.site.team),
-			"sleeps_after_minutes": self.settings.idle_shutdown_minutes,
 		}
 
 	def get_summary(self) -> dict:
@@ -371,9 +365,6 @@ class Trial:
 		self.site.db_set("trial_last_notice", notice)
 
 	def get_notice_context(self) -> dict:
-		from central.signups.credit import get_welcome_credit_offer
-
-		credit = get_welcome_credit_offer(self.site.team)
 		deletes_on = self.site.trial_deletes_on
 		return {
 			"address": self.address,
@@ -381,7 +372,6 @@ class Trial:
 			"ends_on": formatdate(self.site.trial_ends_on),
 			"deletes_on": formatdate(deletes_on) if deletes_on else "",
 			"days_left": date_diff(self.site.trial_ends_on, nowdate()),
-			"credit": fmt_money(credit["amount"], currency=credit["currency"]) if credit else "",
 			"product_key": self.site.product,
 		}
 
