@@ -172,6 +172,8 @@ const ROUTE_TRANSITIONS: Record<string, string> = {
 	'Server>Servers': 'server-open-back',
 	'Servers>NewServer': 'server-create',
 	'NewServer>Servers': 'server-create-back',
+	// A finished creation opens its server the same way the list does.
+	'NewServer>Server': 'server-open',
 	'Login>VerifyEmail': 'auth-step',
 	'Signup>VerifyEmail': 'auth-step',
 	'VerifyEmail>OnboardingSite': 'auth-step',
