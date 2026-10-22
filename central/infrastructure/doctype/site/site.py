@@ -272,9 +272,10 @@ class Site(Document):
 
 		return is_ready
 
-	def get_login_url(self, user: str | None = None) -> str | None:
+	def get_login_url(self, user: str | None = None, product: str | None = None) -> str | None:
 		"""A one-click session for `user`, or for Administrator, on the site's public address.
-		Use the customer hostname only after its route answers and Pilot accepts its site name."""
+		Use the customer hostname only after its route answers and Pilot accepts its site name.
+		It lands on the page of `product`, or of the site's own product."""
 		from central.integrations.pilot import fetch_site_login_url, is_site_reachable
 
 		gateway, audience = self.get_pilot_access()
@@ -291,13 +292,23 @@ class Site(Document):
 		for pilot_name in pilot_names:
 			if minted := fetch_site_login_url(gateway, audience, pilot_name, login_user, full_name):
 				host = self.name if pilot_name == IMAGE_SITE_NAME else self.rename_target
-				return on_host(minted, host, self.get_landing_route())
+				return on_host(minted, host, self.get_landing_route(product))
 
 		return None
 
-	def get_landing_route(self) -> str | None:
+	def get_landing_route(self, product: str | None = None) -> str | None:
 		"""The product's page, where the app runs its own setup, instead of Desk."""
-		return frappe.db.get_value("Product", self.product, "landing_route") if self.product else None
+		product = product or self.product
+		return frappe.db.get_value("Product", product, "landing_route") if product else None
+
+	def get_pilot_site_names(self) -> list[str]:
+		"""The names the bench may know this site by, the most likely first. A requested rename
+		changes the bench's name for it before Central sees the new address answer."""
+		return (
+			[self.rename_target, IMAGE_SITE_NAME]
+			if self.subdomain and self.rename_task
+			else [IMAGE_SITE_NAME]
+		)
 
 	def get_login_user(self, user: str | None) -> tuple[str | None, str | None]:
 		"""Who `user` signs in as: themselves on a trial site of their team, otherwise
