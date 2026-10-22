@@ -6,13 +6,13 @@ The Signups module holds what a new customer gets: the [Product](doctype/product
 
 ## Welcome credit
 
-A Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
+Grant Welcome Credits is off by default, so no team gets a welcome credit: a product signup gets a free trial site instead, and every other server needs a payment method. When an operator turns it on, a Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
 
 A Team with trial sites gets the credit only while one of its trials is Active. This rewards a card before the trial ends. A card after the trial ends still converts the site, but adds no credit. `get_welcome_credit_offer` returns `ends_on`, the earliest end date of the Team's Active trials, so the console and the site can name the last day.
 
 | Billing Settings field | Value on a new install |
 |---|---|
-| Grant Welcome Credits | On |
+| Grant Welcome Credits | Off |
 | Welcome Credit Amounts | 10 USD, 1000 INR |
 | Validity (Days) | 60 |
 
