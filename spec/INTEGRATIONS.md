@@ -84,6 +84,8 @@ Server creation has three network options. Central sends an option to Atlas only
 
 Each option has a flag in Central Settings > Feature Flags > Networking: Enable Public IPv4, Enable Public IPv6, and Enable Firewall. Each flag is off by default. When a flag is off, the New server page hides that option, and Central refuses a creation request that selects it.
 
+Every creation also sends the disk IOPS, disk throughput, and private and public network throughput from Central Settings > Servers > Server Limits. A change applies to servers created after it.
+
 Every new server gets the web server rules: inbound TCP ports 22, 80, and 443 and all outbound traffic, after the system rules in [Firewall](#firewall). The option only sets `firewall.enabled`. A disabled firewall permits all traffic and keeps the rules for when the customer turns it on.
 
 A creation request can carry `user_data` of up to 16 KiB, which is also the Atlas limit. Central sends it to Atlas unchanged as `guest.user_data`, and cloud-init in the guest runs it on first boot. A caller uses it to set up a server without signing in after creation. Central saves it on the Resource Action with the other creation inputs, so it must not hold a long-lived secret.

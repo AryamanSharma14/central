@@ -28,6 +28,12 @@
   "servers_tab",
   "server_creation_section",
   "require_payment_method",
+  "server_limits_section",
+  "disk_iops",
+  "disk_throughput_mibps",
+  "column_break_server_limits",
+  "private_network_throughput_mibps",
+  "public_network_throughput_mibps",
   "site_config_section",
   "common_site_config",
   "limits_tab",
@@ -188,6 +194,48 @@
    "fieldname": "require_payment_method",
    "fieldtype": "Check",
    "label": "Require Payment Method"
+  },
+  {
+   "fieldname": "server_limits_section",
+   "fieldtype": "Section Break",
+   "label": "Server Limits",
+   "description": "Every new server gets these limits, so one server cannot use all of its host's disk or network."
+  },
+  {
+   "default": "3000",
+   "description": "Disk operations per second.",
+   "fieldname": "disk_iops",
+   "fieldtype": "Int",
+   "label": "Disk IOPS",
+   "non_negative": 1
+  },
+  {
+   "default": "125",
+   "description": "Disk read and write speed.",
+   "fieldname": "disk_throughput_mibps",
+   "fieldtype": "Int",
+   "label": "Disk Throughput (MiB/s)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_server_limits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "500",
+   "description": "Traffic within the region.",
+   "fieldname": "private_network_throughput_mibps",
+   "fieldtype": "Int",
+   "label": "Private Network Throughput (MiB/s)",
+   "non_negative": 1
+  },
+  {
+   "default": "500",
+   "description": "Traffic to and from the internet.",
+   "fieldname": "public_network_throughput_mibps",
+   "fieldtype": "Int",
+   "label": "Public Network Throughput (MiB/s)",
+   "non_negative": 1
   },
   {
    "fieldname": "site_config_section",
@@ -389,7 +437,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 22:36:00.000000",
+ "modified": "2026-10-22 22:37:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",

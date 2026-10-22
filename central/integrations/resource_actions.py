@@ -34,10 +34,6 @@ SERVER_PAGE_SIZE = 100
 # the stop before a final snapshot. A resize waits for a stop and a start.
 JOB_TIMEOUT_SECONDS = servers.POWER_WAIT_SECONDS + 5 * 60
 RESIZE_JOB_TIMEOUT_SECONDS = 2 * servers.POWER_WAIT_SECONDS + 5 * 60
-# Every new server gets these limits, so one server cannot use all the disk or network of its host.
-DISK_IOPS = 3000
-DISK_THROUGHPUT_MIBPS = 125
-NETWORK_THROUGHPUT_MIBPS = 500
 
 
 def get_job_timeout_seconds(action: str | None) -> int:
@@ -224,15 +220,16 @@ def _create_payload(request) -> dict:
 		from central.resource_actions import resolve_team_ssh_keys
 
 		configuration.ssh_keys = resolve_team_ssh_keys(request.team, configuration.ssh_key_ids)
+	settings = frappe.get_cached_doc("Central Settings")
 	payload = {
 		"image_id": configuration.image_id,
 		"cpu_millicores": configuration.cpu_millicores,
 		"memory_mib": configuration.memory_mib,
 		"disk_mib": configuration.disk_mib,
-		"disk_iops": DISK_IOPS,
-		"disk_throughput_mibps": DISK_THROUGHPUT_MIBPS,
-		"private_network_throughput_mibps": NETWORK_THROUGHPUT_MIBPS,
-		"public_network_throughput_mibps": NETWORK_THROUGHPUT_MIBPS,
+		"disk_iops": settings.disk_iops,
+		"disk_throughput_mibps": settings.disk_throughput_mibps,
+		"private_network_throughput_mibps": settings.private_network_throughput_mibps,
+		"public_network_throughput_mibps": settings.public_network_throughput_mibps,
 		"hostname": configuration.hostname or "",
 		"ssh_keys": configuration.ssh_keys,
 		"user_data": configuration.user_data,

@@ -23,6 +23,8 @@ class CentralSettings(Document):
 
 		central_id: DF.Int
 		common_site_config: DF.JSON | None
+		disk_iops: DF.Int
+		disk_throughput_mibps: DF.Int
 		enable_addons: DF.Check
 		enable_email_delivery_service: DF.Check
 		enable_firewall: DF.Check
@@ -40,6 +42,8 @@ class CentralSettings(Document):
 		invitation_expiry_days: DF.Int
 		invitation_resend_cooldown_minutes: DF.Int
 		invitations_per_hour: DF.Int
+		private_network_throughput_mibps: DF.Int
+		public_network_throughput_mibps: DF.Int
 		sign_in_code_attempts: DF.Int
 		sign_in_codes_per_email: DF.Int
 		require_payment_method: DF.Check
@@ -62,8 +66,16 @@ class CentralSettings(Document):
 			GitHubConnection.disable_all()
 
 	def validate_limits(self) -> None:
-		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""
-		for fieldname in ("invitations_per_hour", "sign_in_code_attempts", "sign_in_codes_per_email"):
+		"""A zero would refuse every invitation or sign-in code, or give a new server no disk or network."""
+		for fieldname in (
+			"invitations_per_hour",
+			"sign_in_code_attempts",
+			"sign_in_codes_per_email",
+			"disk_iops",
+			"disk_throughput_mibps",
+			"private_network_throughput_mibps",
+			"public_network_throughput_mibps",
+		):
 			if self.get(fieldname) < 1:
 				frappe.throw(_("{0} must be at least 1.").format(_(self.meta.get_label(fieldname))))
 

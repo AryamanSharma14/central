@@ -69,6 +69,20 @@ class TestCreationNetworkPayload(TestCase):
 		self.assertEqual(_create_payload(creation_request())["user_data"], "")
 		self.assertEqual(_create_payload(creation_request(user_data=script))["user_data"], script)
 
+	def test_server_limits_come_from_central_settings(self, _idle) -> None:
+		limits = {
+			"disk_iops": 4000,
+			"disk_throughput_mibps": 250,
+			"private_network_throughput_mibps": 900,
+			"public_network_throughput_mibps": 300,
+		}
+		settings = SimpleNamespace(**limits)
+
+		with patch("frappe.get_cached_doc", return_value=settings):
+			payload = _create_payload(creation_request())
+
+		self.assertEqual({key: payload[key] for key in limits}, limits)
+
 
 def guest_input(user_data: str) -> CreateServerInput:
 	return CreateServerInput(
