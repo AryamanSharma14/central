@@ -129,7 +129,9 @@ def exchange_token(provider: str, grant_type: str, **params: str | None) -> dict
 	if grant_type == "authorization_code":
 		data["redirect_uri"] = get_url(CALLBACK_PATH)
 
-	response = requests.post(config.token_url, data={k: v for k, v in data.items() if v}, timeout=30)
+	response = requests.post(
+		config.token_url, data={k: v for k, v in data.items() if v}, timeout=30, allow_redirects=False
+	)
 	token = response.json()
 	if not response.ok:
 		# Pilot keeps only this text, so the site can still tell invalid_grant apart (standard OAuth error code)
