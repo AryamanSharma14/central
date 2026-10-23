@@ -8,7 +8,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import set_request
 
-from central.api.email_oauth import callback, relay_token, start
+from central.api.email_oauth import callback, get_active_providers, relay_token, start
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.email_oauth.email_oauth import PROVIDER, PROVIDER_UNAVAILABLE
@@ -147,6 +147,17 @@ class TestEmailOAuth(IntegrationTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, PROVIDER_UNAVAILABLE):
 			self.call_start(f"https://{self.site}{SITE_CALLBACK}")
 
+	# get_active_providers
+
+	def test_get_active_providers_lists_only_the_enabled_ones(self):
+		frappe.db.set_value(PROVIDER, {"name": ("!=", "microsoft")}, "enabled", 0)
+		self.as_pilot("/api/method/central.api.email_oauth.get_active_providers")
+		self.assertEqual(get_active_providers(), ["microsoft"])
+
+		self.microsoft.reload().update({"enabled": 0}).save()
+
+		self.assertEqual(get_active_providers(), [])
+
 	# Email OAuth Provider
 
 	def test_provider_cannot_be_enabled_without_credentials(self):
@@ -164,10 +175,11 @@ class TestEmailOAuth(IntegrationTestCase):
 		self.assertEqual(doc.get_scopes(), ["openid"])
 		self.assertEqual(doc.client_id, "ms-client-id")
 
-	# both Pilot endpoints
+	# every Pilot endpoint
 
 	def test_endpoints_need_a_pilot_credential(self):
 		calls = {
+			"get_active_providers": get_active_providers,
 			"start": lambda: start(
 				provider="microsoft",
 				state="s",
