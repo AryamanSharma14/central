@@ -168,9 +168,14 @@
    "group": "Adjustments",
    "link_doctype": "Refund",
    "link_fieldname": "payment_attempt"
+  },
+  {
+   "group": "Gateway",
+   "link_doctype": "Webhook Event",
+   "link_fieldname": "payment_attempt"
   }
  ],
- "modified": "2026-06-03 00:00:00.000000",
+ "modified": "2026-10-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Payment Attempt",

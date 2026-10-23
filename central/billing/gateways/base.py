@@ -95,6 +95,10 @@ class GatewayUnsupported(GatewayError):
 	"""The gateway does not support this optional capability."""
 
 
+class WebhookNotFound(GatewayError):
+	"""The stored webhook endpoint does not exist in the account these keys belong to."""
+
+
 class GatewayAdapter(ABC):
 	"""One instance per Payment Gateway config row."""
 
@@ -102,6 +106,9 @@ class GatewayAdapter(ABC):
 	# that overrides it. Lets ops keep live secrets in site config instead of
 	# the Payment Gateway doc (DB). Empty = always read from the doc.
 	conf_keys: ClassVar[dict[str, str]] = {}
+
+	# The webhook events Central subscribes to on this gateway.
+	webhook_events: ClassVar[tuple[str, ...]] = ()
 
 	# Whether this provider can charge a saved method off-session at all. How MUCH
 	# it may pull that way is not a property of the provider — Stripe is ceilingless
@@ -207,6 +214,16 @@ class GatewayAdapter(ABC):
 		adapter's required set. Gateways that can't self-register leave this
 		unsupported and the admin enters the secret manually."""
 		raise GatewayUnsupported(f"{type(self).__name__} does not support register_webhook")
+
+	def get_webhook(self, endpoint_id: str) -> dict:
+		"""Read a webhook endpoint as `{"url", "is_active", "events"}`.
+
+		Raises WebhookNotFound when the endpoint is not in the keys' account."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support get_webhook")
+
+	def update_webhook_events(self, endpoint_id: str, callback_url: str, events: list[str]) -> None:
+		"""Replace the events a webhook endpoint sends. The signing secret does not change."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support update_webhook_events")
 
 	def create_order(
 		self, amount, currency: str, receipt: str, notes: dict | None = None, customer: str | None = None

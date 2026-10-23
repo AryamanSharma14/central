@@ -420,6 +420,7 @@ def apply_mandate_event(event_name: str) -> dict:
 	if not method:
 		charges._mark_event(event, "Ignored")
 		return {"handled": False, "reason": "no_method_for_mandate"}
+	event.payment_method = method.name
 	if status not in _DEAD_MANDATE_STATUSES:
 		charges._mark_event(event, "Processed")
 		return {"handled": True, "result": "mandate_still_live", "payment_method": method.name}

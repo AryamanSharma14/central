@@ -17,10 +17,12 @@ import requests
 from central.billing.gateways.base import (
 	GatewayAdapter,
 	GatewayAuthError,
+	GatewayError,
 	GatewayTimeout,
 	NormalisedEvent,
 	PaymentResult,
 	RefundResult,
+	WebhookNotFound,
 	header_value,
 )
 
@@ -31,13 +33,14 @@ _TRANSIENT = (
 	requests.exceptions.RequestException,
 )
 
-# The charge lifecycle events the webhook spine consumes (see webhooks.py).
-RAZORPAY_WEBHOOK_EVENTS = [
+# The events the webhook spine consumes (see webhooks.handle_webhook_event).
+RAZORPAY_WEBHOOK_EVENTS = (
 	"payment.captured",
 	"payment.failed",
 	"payment.authorized",
+	# Recorded only; refunds made outside Central are not applied yet.
 	"refund.processed",
-]
+)
 
 
 class RazorpayAdapter(GatewayAdapter):
@@ -53,6 +56,8 @@ class RazorpayAdapter(GatewayAdapter):
 	# currency on the gateway row (ADR 0022) — INR is capped at ₹15,000 by the RBI,
 	# and that binds every gateway settling INR, not this one in particular.
 	supports_off_session_charge = True
+
+	webhook_events = RAZORPAY_WEBHOOK_EVENTS
 
 	def _client(self):
 		return razorpay.Client(auth=(self.get_credential("api_key"), self.get_credential("api_secret")))
@@ -76,14 +81,42 @@ class RazorpayAdapter(GatewayAdapter):
 		secret = frappe.generate_hash(length=32)
 		# Razorpay wants events as an object {name: 1}, not a list — a list is
 		# serialised positionally and the API rejects it ("Invalid event name/names: 1, 2, 3").
-		webhook = self._client().webhook.create(
-			{
-				"url": callback_url,
-				"secret": secret,
-				"events": {name: 1 for name in (events or RAZORPAY_WEBHOOK_EVENTS)},
-			}
-		)
+		try:
+			webhook = self._client().webhook.create(
+				{
+					"url": callback_url,
+					"secret": secret,
+					"events": {name: 1 for name in (events or RAZORPAY_WEBHOOK_EVENTS)},
+				}
+			)
+		except razorpay.errors.BadRequestError as e:
+			raise GatewayError(str(e)) from e
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
 		return {"endpoint_id": webhook.get("id"), "secret": secret}
+
+	def get_webhook(self, endpoint_id: str) -> dict:
+		"""Read the webhook. The keys are already proven, so a refused read means the
+		webhook is not in this account."""
+		try:
+			webhook = self._client().webhook.fetch(endpoint_id, None)
+		except razorpay.errors.BadRequestError as e:
+			raise WebhookNotFound(endpoint_id) from e
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
+		events = webhook.get("events") or []
+		# Razorpay returns the events as {name: true} or as a list of names.
+		if isinstance(events, dict):
+			events = [name for name, enabled in events.items() if enabled]
+		return {"url": webhook.get("url"), "is_active": bool(webhook.get("active")), "events": list(events)}
+
+	def update_webhook_events(self, endpoint_id: str, callback_url: str, events: list[str]) -> None:
+		try:
+			self._client().webhook.edit(
+				endpoint_id, None, {"url": callback_url, "events": {name: 1 for name in events}}
+			)
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
 
 	def setup_payment_method(self, team, setup_data: dict) -> dict:
 		"""Create a recurring authorisation order — UPI Autopay or card.

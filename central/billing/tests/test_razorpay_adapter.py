@@ -157,6 +157,38 @@ class TestRazorpayAdapter(GatewayAdapterContract, IntegrationTestCase):
 		self.assertIsInstance(sent["events"], dict)
 		self.assertTrue(all(v == 1 for v in sent["events"].values()))
 
+	def test_get_webhook_reads_events_given_as_a_map(self):
+		adapter = self.make_adapter()
+		with self._client() as c:
+			c.webhook.fetch.return_value = {
+				"url": "https://site/x",
+				"active": True,
+				"events": {"payment.captured": True, "payment.failed": False},
+			}
+			webhook = adapter.get_webhook("wh_1")
+		self.assertEqual(
+			webhook, {"url": "https://site/x", "is_active": True, "events": ["payment.captured"]}
+		)
+
+	def test_a_refused_webhook_read_is_not_found(self):
+		import razorpay
+
+		from central.billing.gateways.base import WebhookNotFound
+
+		adapter = self.make_adapter()
+		with self._client() as c:
+			c.webhook.fetch.side_effect = razorpay.errors.BadRequestError("The id provided does not exist")
+			with self.assertRaises(WebhookNotFound):
+				adapter.get_webhook("wh_old")
+
+	def test_update_webhook_events_sends_the_url_and_event_map(self):
+		adapter = self.make_adapter()
+		with self._client() as c:
+			adapter.update_webhook_events("wh_1", "https://site/x", ["payment.captured"])
+		c.webhook.edit.assert_called_once_with(
+			"wh_1", None, {"url": "https://site/x", "events": {"payment.captured": 1}}
+		)
+
 	def test_create_customer_returns_id(self):
 		adapter = self.make_adapter()
 		with self._client() as c:

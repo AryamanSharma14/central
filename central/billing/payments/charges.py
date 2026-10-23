@@ -39,7 +39,13 @@ _AUTHORISED_EVENTS = {
 	"charge.authorized",
 }
 _SUCCESS_EVENTS = {"payment_intent.succeeded", "charge.succeeded", "payment.captured"}
-_FAILURE_EVENTS = {"payment_intent.payment_failed", "charge.failed", "payment.failed"}
+_FAILURE_EVENTS = {
+	"payment_intent.payment_failed",
+	# Stripe cancels an authorisation that expires uncaptured; it will never capture.
+	"payment_intent.canceled",
+	"charge.failed",
+	"payment.failed",
+}
 
 _TERMINAL_ATTEMPT = ("Captured", "Failed", "Refunded")
 _UNSETTLED_INVOICE = ("Open", "Overdue")
@@ -421,6 +427,7 @@ def apply_webhook(event_name: str) -> dict:
 		return {"handled": False, "reason": "no_matching_attempt"}
 
 	attempt = frappe.get_doc("Payment Attempt", attempt_name)
+	event.payment_attempt = attempt_name
 	if is_authorised:
 		# Funds held, capture pending. Advance only from initiated — never walk a
 		# terminal attempt backwards if the capture/fail webhook arrived first.
@@ -599,6 +606,14 @@ def _extract_failure(adapter_key: str, payload: dict) -> dict | None:
 	if adapter_key == "Stripe":
 		obj = ((payload.get("data") or {}).get("object")) or {}
 		err = obj.get("last_payment_error") or {}
+		if not err and obj.get("cancellation_reason"):
+			reason = obj["cancellation_reason"]
+			return {
+				"failure_code": "canceled",
+				"decline_code": reason,
+				"failure_reason": f"Stripe cancelled the payment ({reason})",
+				"raw": {"cancellation_reason": reason},
+			}
 		if not err:
 			return None
 		return {

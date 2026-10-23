@@ -22,19 +22,29 @@ from central.billing.gateways.base import (
 	NormalisedEvent,
 	PaymentResult,
 	RefundResult,
+	WebhookNotFound,
 	header_value,
 )
 
-# The charge/refund lifecycle events the webhook spine consumes (see webhooks.py).
-STRIPE_WEBHOOK_EVENTS = [
+# The events the webhook spine consumes (see webhooks.handle_webhook_event).
+STRIPE_WEBHOOK_EVENTS = (
 	"payment_intent.succeeded",
 	"payment_intent.payment_failed",
+	# An authorisation Stripe cancels, for example one that expired uncaptured.
+	"payment_intent.canceled",
 	"payment_intent.amount_capturable_updated",
+	# Recorded only; refunds made outside Central are not applied yet.
 	"charge.refunded",
+	"charge.dispute.created",
+	"charge.dispute.closed",
 	# An Indian mandate the customer or their bank revokes — the card stays valid,
 	# the permission to debit it does not.
 	"mandate.updated",
-]
+	"payment_method.detached",
+	# Recorded on the card only. The customer can retry on the same SetupIntent, so
+	# one failed try does not fail the card.
+	"setup_intent.setup_failed",
+)
 
 
 def _country_code(value) -> str | None:
@@ -121,6 +131,8 @@ class StripeAdapter(GatewayAdapter):
 	# same RBI rule as anyone else.
 	supports_off_session_charge = True
 
+	webhook_events = STRIPE_WEBHOOK_EVENTS
+
 	def _configure(self):
 		stripe.api_key = self.get_credential("api_secret")
 		# https://docs.stripe.com/rate-limits#object-lock-timeouts
@@ -144,13 +156,35 @@ class StripeAdapter(GatewayAdapter):
 	def register_webhook(self, callback_url: str, events: list[str] | None = None) -> dict:
 		"""Create a Stripe webhook endpoint; Stripe returns the `whsec_…` secret."""
 		self._configure()
-		endpoint = _to_dict(
-			stripe.WebhookEndpoint.create(
-				url=callback_url,
-				enabled_events=events or STRIPE_WEBHOOK_EVENTS,
+		with _stripe_errors():
+			endpoint = _to_dict(
+				stripe.WebhookEndpoint.create(
+					url=callback_url,
+					enabled_events=list(events or STRIPE_WEBHOOK_EVENTS),
+				)
 			)
-		)
 		return {"endpoint_id": endpoint.get("id"), "secret": endpoint.get("secret")}
+
+	def get_webhook(self, endpoint_id: str) -> dict:
+		"""Read the endpoint. Keys for another account, or another mode, cannot see it."""
+		self._configure()
+		with _stripe_errors():
+			try:
+				endpoint = _to_dict(stripe.WebhookEndpoint.retrieve(endpoint_id))
+			except stripe.error.InvalidRequestError as e:
+				if getattr(e, "code", None) == "resource_missing":
+					raise WebhookNotFound(endpoint_id) from e
+				raise
+		return {
+			"url": endpoint.get("url"),
+			"is_active": endpoint.get("status") == "enabled",
+			"events": list(endpoint.get("enabled_events") or []),
+		}
+
+	def update_webhook_events(self, endpoint_id: str, callback_url: str, events: list[str]) -> None:
+		self._configure()
+		with _stripe_errors():
+			stripe.WebhookEndpoint.modify(endpoint_id, enabled_events=list(events))
 
 	def setup_payment_method(self, team, setup_data: dict) -> dict:
 		"""Create an off-session SetupIntent; UI confirms it with the card.
