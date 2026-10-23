@@ -707,14 +707,14 @@ class TestTrialImage(IntegrationTestCase):
 			"items": [{"id": f"image-{index}", "created_at": index, "tags": {}} for index in range(count)]
 		}
 
-	def resolve(self, page: dict, signup_app: str | None = None) -> tuple[dict, dict]:
+	def resolve(self, page: dict, product: frappe._dict | None = None) -> tuple[dict, dict]:
 		with (
 			patch("central.site_provisioning.signup_offering", return_value="pilot"),
 			patch("central.site_provisioning.trial_regions", return_value=["par-2"]),
 			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
 			patch("central.site_provisioning.list_images", return_value=page) as list_images,
 		):
-			return trial_configuration("any-team", signup_app), list_images.call_args.kwargs
+			return trial_configuration("any-team", product), list_images.call_args.kwargs
 
 	def test_the_region_is_asked_for_a_site_image_on_the_signup_version(self):
 		"""The tags ride the regional query, so a page of other images cannot hide a match."""
@@ -736,12 +736,15 @@ class TestTrialImage(IntegrationTestCase):
 
 		self.assertEqual(configuration["image_id"], "image-1")
 
-	def test_a_product_trial_asks_the_region_for_its_app(self):
+	def test_a_product_trial_asks_the_region_for_its_app_on_its_frappe_version(self):
 		page = {"items": [{"id": "image-raven", "created_at": 1, "tags": {"app": "raven"}}]}
+		product = frappe._dict(signup_app="raven", frappe_version="version-16")
 
-		configuration, asked = self.resolve(page, signup_app="raven")
+		configuration, asked = self.resolve(page, product)
 
-		self.assertEqual(asked["extra_tags"], {"has_site": "1", "frappe_version": "develop", "app": "raven"})
+		self.assertEqual(
+			asked["extra_tags"], {"has_site": "1", "frappe_version": "version-16", "app": "raven"}
+		)
 		self.assertEqual(configuration["image_id"], "image-raven")
 
 	def test_a_region_with_only_app_images_stops_the_trial(self):
@@ -761,7 +764,9 @@ class TestTrialImage(IntegrationTestCase):
 			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
 			patch("central.site_provisioning.list_images", side_effect=[self.images(0), self.images(1)]),
 		):
-			configuration = trial_configuration("any-team", "raven")
+			configuration = trial_configuration(
+				"any-team", frappe._dict(signup_app="raven", frappe_version="develop")
+			)
 
 		self.assertEqual(configuration["region"], "par-2")
 		self.assertEqual(configuration["image_id"], "image-0")

@@ -26,8 +26,8 @@ def site_domain(team: str | None = None, product: str | None = None) -> dict:
 	from central.signups.doctype.product.product import get_signup_product
 	from central.site_provisioning import trial_zone
 
-	signup_app = get_signup_product(product).signup_app if product else None
-	return {"domain": trial_zone(team, signup_app)}
+	signup_product = get_signup_product(product) if product else None
+	return {"domain": trial_zone(team, signup_product)}
 
 
 @frappe.whitelist(methods=["GET"])

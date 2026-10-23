@@ -14,6 +14,8 @@ PRODUCT_KEY_PATTERN = re.compile(r"[a-z][a-z0-9-]*")
 # A path on the site itself, never another host.
 LANDING_ROUTE_PATTERN = re.compile(r"/[A-Za-z0-9_/-]*")
 APP_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
+# A Frappe branch as Cargo writes it in the image's frappe_version tag.
+FRAPPE_VERSION_PATTERN = re.compile(r"develop|version-[0-9]+")
 # The lifecycle emails a product can add a note to, as in Product Email Note.
 PRODUCT_EMAILS = (
 	"site_ready",
@@ -40,6 +42,7 @@ class Product(Document):
 
 		email_notes: DF.Table[ProductEmailNote]
 		enabled: DF.Check
+		frappe_version: DF.Data
 		getting_started_url: DF.Data | None
 		landing_route: DF.Data | None
 		logo: DF.AttachImage | None
@@ -62,6 +65,9 @@ class Product(Document):
 
 		if not APP_NAME_PATTERN.fullmatch(self.signup_app or ""):
 			frappe.throw(_("Use the app's module name for the signup app, such as raven."))
+
+		if not FRAPPE_VERSION_PATTERN.fullmatch(self.frappe_version or ""):
+			frappe.throw(_("Use a Frappe branch for the Frappe version, such as develop or version-16."))
 
 		if self.landing_route and not LANDING_ROUTE_PATTERN.fullmatch(self.landing_route):
 			frappe.throw(_("Use a path on the site for the landing route, such as /raven."))
@@ -175,9 +181,7 @@ class Product(Document):
 
 		frappe.only_for("System Manager")
 
-		return preview_images(
-			signup_offering(), region, offset, extra_tags=product_image_tags(self.signup_app)
-		)
+		return preview_images(signup_offering(), region, offset, extra_tags=product_image_tags(self))
 
 
 def get_email_product(product_key: str | None) -> Product | None:
