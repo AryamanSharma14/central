@@ -157,9 +157,15 @@ const open = computed({
 				<RadioGroup v-model="computeOnly" label="Storage" padded>
 					<Radio
 						:value="true"
-						:label="`Keep ${formatGb(currentDisk)} GB disk`"
+						:label="`Keep current ${formatGb(currentDisk)} GB disk size`"
 					/>
-					<Radio :value="false" label="Increase storage" />
+					<Radio :value="false" label="Increase storage">
+						<template #description>
+							<strong class="text-p-sm-medium text-ink-amber-7">
+								Disk size cannot be decreased later.
+							</strong>
+						</template>
+					</Radio>
 				</RadioGroup>
 				<p class="text-p-sm text-ink-gray-6">Prices include storage.</p>
 

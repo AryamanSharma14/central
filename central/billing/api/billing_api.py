@@ -124,6 +124,15 @@ def _includes_spec_line(includes: list[dict]) -> str:
 	return " · ".join(p for p in parts if p)
 
 
+def _includes_disk_gigabytes(includes: list[dict]) -> float:
+	"""The disk size in a plan's includes, 0 when the plan lists none."""
+	return sum(
+		frappe.utils.flt(item.get("quantity"))
+		for item in includes or []
+		if (item.get("resource_type") or "").lower() in ("disk", "storage")
+	)
+
+
 def _provider_region(cluster: str | None) -> tuple[str | None, str | None]:
 	"""Split a cluster slug into (provider, 'City, Country') for the Change-plan header."""
 	from central.billing.regions import REGION_META
@@ -779,7 +788,10 @@ def get_plan_options() -> dict:
 	from central.billing.api.dashboard.catalog import get_eligible_plans
 
 	team, server = _team(), _server()
-	row = frappe.db.get_value("Virtual Machine", server, ["region", "plan"], as_dict=True) or frappe._dict()
+	row = (
+		frappe.db.get_value("Virtual Machine", server, ["region", "plan", "disk_gigabytes"], as_dict=True)
+		or frappe._dict()
+	)
 	subscription = frappe.db.get_value("Subscription", {"team": team, "server_id": server}, "name")
 
 	# No provisioned server/cluster → offer nothing. A cluster-less menu would skip
@@ -809,6 +821,8 @@ def get_plan_options() -> dict:
 		}
 		for rows in (menu.get("plans") or {}).values()
 		for p in rows
+		# A plan change takes the plan's own disk, and a disk can't shrink.
+		if _includes_disk_gigabytes(p.get("includes")) >= frappe.utils.flt(row.disk_gigabytes)
 	]
 	# The running plan may be outside the eligible set (no headroom to re-pick) — always
 	# show it, marked Current, so the list reflects what's actually running.
