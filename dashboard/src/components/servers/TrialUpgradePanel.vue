@@ -7,7 +7,7 @@ import EditBillingProfileDialog from '@/components/billing/EditBillingProfileDia
 import { useBillingSetup } from '@/composables/useBillingSetup'
 import { useSession } from '@/composables/useSession'
 import { getErrorMessage } from '@/lib/feedback'
-import { formatDate, money, plural } from '@/lib/format'
+import { formatDate, plural } from '@/lib/format'
 import type { ServerTrial } from '@/types/billing'
 
 interface Props {
@@ -40,33 +40,11 @@ const description = computed(() => {
 		: `This site is stopped. Add a payment method before ${deletesOn} to keep it and choose a plan.`
 })
 
-// The card earns the credit only before the trial ends, so the line names that day.
-const credit = computed(() => {
-	const offer = props.trial.credit
-	if (!offer) return null
-	const amount = money(offer.amount, offer.currency, {
-		trimTrailingZeros: true,
-	})
-	return offer.ends_on
-		? `Add a payment method by ${formatDate(offer.ends_on)} and get ${amount} credit`
-		: `Get ${amount} credit when you add a payment method`
-})
-
 const facts = computed(() => [
 	{
 		icon: 'lucide-credit-card',
-		text: credit.value
-			? 'After the credit is used, we charge this card for your monthly bill.'
-			: 'We charge this card for your monthly bill.',
+		text: 'We charge this card for your monthly bill.',
 	},
-	...(props.trial.state === 'Active' && props.trial.sleeps_after_minutes
-		? [
-				{
-					icon: 'lucide-moon',
-					text: `Until you add a payment method, your site sleeps after ${plural(props.trial.sleeps_after_minutes, 'minute')} without visitors. The next visit wakes it in a few seconds.`,
-				},
-			]
-		: []),
 	{
 		icon: 'lucide-shield-check',
 		text: 'Your site and its data stay as they are.',
@@ -124,17 +102,6 @@ defineExpose({ addMethod, methodAdded, keep, keeping })
 			title="Couldn't keep this site"
 			:description="keepError"
 		/>
-
-		<div
-			v-if="credit"
-			class="flex items-center gap-3 rounded-6 bg-surface-gray-2 px-4 py-3"
-		>
-			<span
-				class="lucide-gift size-4 shrink-0 text-ink-gray-8"
-				aria-hidden="true"
-			/>
-			<p class="text-p-sm-medium text-ink-gray-9">{{ credit }}</p>
-		</div>
 
 		<ul class="space-y-3">
 			<li

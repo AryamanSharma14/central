@@ -136,9 +136,10 @@ export function useSearchIndex() {
 					name: server.title || server.resource_id,
 					description: server.region,
 					icon: 'lucide-server',
-					onSelect: canOpenConsole.value
-						? () => openServer(server)
-						: () => void router.push(`/servers/${server.resource_id}`),
+					onSelect:
+						canOpenConsole.value && !server.is_access_locked
+							? () => openServer(server)
+							: () => void router.push(`/servers/${server.resource_id}`),
 				})),
 			}
 		}
@@ -170,6 +171,7 @@ export function useSearchIndex() {
 			}
 			const title = server.title || server.resource_id
 
+			// Locked actions are disabled, and the filter below leaves disabled ones out.
 			return getServerMenuGroups(server, allowed, run, { opensSite: !!site })
 				.flat()
 				.flatMap(withSubmenuItems)

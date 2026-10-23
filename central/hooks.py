@@ -138,6 +138,7 @@ after_install = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.settings.ensure_welcome_credit_amounts",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 ]
 
@@ -252,12 +253,13 @@ scheduler_events = {
 		"central.billing.platform.invariants.run_invariant_audit",
 	],
 	"hourly": [
+		"central.billing.revenue.invoicing.collect_due_invoices",
 		"central.billing.ingester.erpnext_sync.retry_failed_syncs",
 		"central.billing.payments.reconciliation.run_reconciliation",
 		"central.billing.platform.alerts.run_operator_alerts",
 	],
 	"monthly": [
-		"central.billing.revenue.invoicing.run_monthly_billing",
+		"central.billing.revenue.invoicing.draft_monthly_invoices",
 		"central.billing.payments.payments.expire_payment_methods",
 	],
 }
@@ -267,6 +269,7 @@ after_migrate = [
 	"central.billing.settings.ensure_snapshot_settings",
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 	# The Webhook that carries a team's tier to Grove, so an edit to its spec rolls out.
 	"central.services.doctype.ai_settings.ai_settings.sync_webhook",
@@ -283,6 +286,7 @@ before_tests = [
 	"central.billing.platform.constraints.ensure_constraints",
 	"central.billing.settings.ensure_welcome_credit_amounts",
 	"central.billing.gateways.setup.ensure_gateway_records",
+	"central.integrations.email_oauth.setup.ensure_email_oauth_providers",
 	"central.billing.navigation.ensure_workspace_sidebars",
 ]
 

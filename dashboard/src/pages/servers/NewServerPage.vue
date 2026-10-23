@@ -13,6 +13,7 @@ import ServerSummary from '@/components/servers/ServerSummary.vue'
 import SSHKeysField from '@/components/servers/SSHKeysField.vue'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
 import { useServerCreation } from '@/composables/useServerCreation'
+import { features } from '@/lib/features'
 import { flagEmoji, regionLabel } from '@/lib/serverMap'
 import { getCreationStage } from '@/lib/status'
 import type { ActionStatus } from '@/types/serverCreation'
@@ -245,7 +246,12 @@ watch(
 						</div>
 					</section>
 
-					<section v-if="image">
+					<section
+						v-if="
+							image &&
+							(features.publicIpv4 || features.publicIpv6 || features.firewall)
+						"
+					>
 						<h2 class="mb-3 text-base-semibold text-ink-gray-8">Network</h2>
 						<ServerNetworkOptions
 							v-model:has-public-ipv4="hasPublicIpv4"

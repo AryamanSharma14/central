@@ -220,11 +220,16 @@ def _create_payload(request) -> dict:
 		from central.resource_actions import resolve_team_ssh_keys
 
 		configuration.ssh_keys = resolve_team_ssh_keys(request.team, configuration.ssh_key_ids)
+	settings = frappe.get_cached_doc("Central Settings")
 	payload = {
 		"image_id": configuration.image_id,
 		"cpu_millicores": configuration.cpu_millicores,
 		"memory_mib": configuration.memory_mib,
 		"disk_mib": configuration.disk_mib,
+		"disk_iops": settings.disk_iops,
+		"disk_throughput_mibps": settings.disk_throughput_mibps,
+		"private_network_throughput_mibps": settings.private_network_throughput_mibps,
+		"public_network_throughput_mibps": settings.public_network_throughput_mibps,
 		"hostname": configuration.hostname or "",
 		"ssh_keys": configuration.ssh_keys,
 		"user_data": configuration.user_data,

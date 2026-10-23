@@ -46,7 +46,12 @@ from central.server_models import (
 	ServerCreation,
 	SiteCreation,
 )
-from central.signups.trial import has_active_payment_method, is_free_trial_creation
+from central.signups.eligibility import (
+	get_open_trial_summary,
+	get_owner_team_names,
+	has_active_payment_method,
+	is_free_trial_creation,
+)
 from central.utils.units import MIB_PER_GIB, MILLICORES_PER_VCPU
 
 
@@ -103,6 +108,9 @@ def submit_request(
 			_("You cannot create servers for this Team. Ask a team admin to review your access."),
 			frappe.PermissionError,
 		)
+	frappe.get_cached_doc("Central Settings").require_new_server_network_options(
+		server_input.has_public_ipv4, server_input.has_public_ipv6, server_input.is_firewall_enabled
+	)
 	if server_input.has_public_ipv4:
 		from central.billing.catalog.public_ips import require_public_ipv4_rate
 
@@ -114,7 +122,7 @@ def submit_request(
 	if existing := _repeated_request(server_input, digest):
 		return existing.customer_status()
 
-	is_free_trial = bool(site) and is_free_trial_creation(server_input.team, resource_type)
+	is_free_trial = is_free_trial_creation(server_input.team, site.product if site else None)
 	configuration, rate = _build_server_configuration(server_input, snapshot, is_free_trial)
 	configuration.site = site
 
@@ -174,6 +182,8 @@ def submit_command(
 		frappe.throw(_("This trial has ended. Add a payment method to start it again."))
 	if action == "terminate" and server.is_termination_protected:
 		frappe.throw(_("Turn off termination protection before you terminate this server."))
+	if take_snapshot:
+		server.require_server_access()
 
 	document = ResourceAction.get_pending(server.name, action) or ResourceAction.queue(
 		action,
@@ -436,19 +446,22 @@ def validate_trial(team: str) -> None:
 
 
 def validate_trial_site(team: str) -> None:
+	"""Refuse a new free trial while the owner's open trials reach the limit, and name the open one."""
 	limit = cint(frappe.get_cached_value("Central Settings", "Central Settings", "trial_servers_per_team"))
-	if trial_site_count(team) >= limit:
-		frappe.throw(
-			_(
-				"You can have at most {0} free trial sites across your teams. Add a payment method for more."
-			).format(limit)
-		)
+	if trial_site_count(team) < limit:
+		return
+
+	summary = get_open_trial_summary(team) or {}
+	if summary.get("address"):
+		throw_action_error("TRIAL_IN_PROGRESS", product=summary["product_title"], address=summary["address"])
+	if summary.get("state") == "Setting up":
+		throw_action_error("TRIAL_IN_PROGRESS", message=_("Your free trial site is still being set up."))
+	throw_action_error("TRIAL_IN_PROGRESS", message=_("You already have an open free trial."))
 
 
 def trial_site_count(team: str) -> int:
 	"""Open trial sites, pending site creations, and provisioned servers whose site Central has not recorded yet, across every team of the team's owner. Locking reads, for the same reason as reserved_rate."""
-	owner = frappe.db.get_value("Team", team, "owner_user")
-	teams = frappe.get_all("Team", filters={"owner_user": owner}, pluck="name") if owner else [team]
+	teams = get_owner_team_names(team)
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
 	request = frappe.qb.DocType("Resource Action")

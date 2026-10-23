@@ -12,6 +12,9 @@ FLAG_FIELDS = {
 	"pdf": "enable_pdf_print_service",
 	"email": "enable_email_delivery_service",
 	"storage": "enable_object_storage_service",
+	"public_ipv4": "enable_public_ipv4",
+	"public_ipv6": "enable_public_ipv6",
+	"firewall": "enable_firewall",
 }
 
 
@@ -41,6 +44,18 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 		self._set(enable_llm_service=1)
 		self.assertIs(frappe.get_cached_doc("Central Settings").feature_flags()["llm"], True)
 		self.assertIs(frappe.get_cached_doc("Central Settings").feature_flags()["pdf"], False)
+
+	def test_new_server_network_option_is_refused_while_its_flag_is_off(self):
+		for requested in ((True, False, False), (False, True, False), (False, False, True)):
+			with self.assertRaises(frappe.ValidationError):
+				frappe.get_cached_doc("Central Settings").require_new_server_network_options(*requested)
+
+		frappe.get_cached_doc("Central Settings").require_new_server_network_options(False, False, False)
+
+	def test_new_server_network_option_is_allowed_once_its_flag_is_on(self):
+		self._set(enable_public_ipv4=1, enable_public_ipv6=1, enable_firewall=1)
+
+		frappe.get_cached_doc("Central Settings").require_new_server_network_options(True, True, True)
 
 	def test_common_site_config_must_be_a_json_object_that_fits_in_metadata(self):
 		self.addCleanup(frappe.db.set_single_value, "Central Settings", "common_site_config", None)

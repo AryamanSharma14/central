@@ -4,7 +4,6 @@ import frappe
 from frappe.core.api.file import get_max_file_size
 from frappe.sessions import get_csrf_token
 
-from central.iam import get_user_team_names
 from central.identity.doctype.team_invitation.team_invitation import get_expiry_days
 
 no_cache = 1
@@ -45,26 +44,4 @@ def get_context(context):
 def build_auth_context() -> dict:
 	return {
 		"user": frappe.session.user or "Guest",
-		"onboarding_complete": _onboarding_complete(),
 	}
-
-
-def _onboarding_complete() -> bool:
-	"""True once the user's team completed a site login handoff — the signal the SPA uses to keep a
-	brand-new user inside the onboarding funnel (and let a returning one skip it).
-	A first-run user (no team or no site yet) is still onboarding."""
-	user = frappe.session.user
-	if not user or user == "Guest":
-		return False
-	teams = get_user_team_names(user)
-	if not teams:
-		return False
-
-	return bool(
-		frappe.get_list(
-			"Site",
-			filters={"team": ["in", teams], "claimed_at": ["is", "set"]},
-			pluck="name",
-			limit=1,
-		)
-	)

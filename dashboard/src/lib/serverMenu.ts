@@ -1,6 +1,6 @@
 import type { DropdownOption, DropdownOptions } from 'frappe-ui'
 import type { VirtualMachineRow } from '@/composables/useServers'
-import type { ServerActions } from '@/lib/capabilities'
+import { ACCESS_LOCKED_REASON, type ServerActions } from '@/lib/capabilities'
 import { copyToClipboard } from '@/lib/clipboard'
 import { reportError, successToast } from '@/lib/feedback'
 import { canChange, canStart, canStop, isSettingUp } from '@/lib/status'
@@ -122,45 +122,70 @@ function getViewItems(
 
 	if (!isOnServerPage) items.push(entry('overview', 'Overview', 'lucide-gauge'))
 
+	// Without a site, Open signs in to Pilot, which a free trial locks.
 	if (canOpen && !isOnServerPage)
-		items.push({
-			...entry(
-				'open',
-				opensSite ? 'Visit site' : 'Open server',
-				opensSite ? 'lucide-globe' : 'lucide-server',
-			),
-			disabled: !isRunning || !(opensSite || server.gateway_url),
-		})
+		items.push(
+			...lockable(allowed, !opensSite, {
+				...entry(
+					'open',
+					opensSite ? 'Visit site' : 'Open server',
+					opensSite ? 'lucide-globe' : 'lucide-server',
+				),
+				disabled: !isRunning || !(opensSite || server.gateway_url),
+			}),
+		)
 
 	// On a site server the primary open visits the site, so the bench gets its own entry.
 	if (canOpen && opensSite)
-		items.push({
-			...entry('pilot', 'Open server', 'lucide-server'),
-			disabled: !isRunning || !server.gateway_url,
-		})
+		items.push(
+			...lockable(allowed, true, {
+				...entry('pilot', 'Open server', 'lucide-server'),
+				disabled: !isRunning || !server.gateway_url,
+			}),
+		)
 
 	if (allowed.console && !isBusy)
-		items.push({
-			label: 'Web console',
-			icon: 'lucide-square-terminal',
-			disabled: !isRunning,
-			submenu: [
-				entry(
-					'ssh-console',
-					'SSH session',
-					'lucide-terminal',
-					'Shell as root. No password needed.',
-				),
-				entry(
-					'tty-console',
-					'Serial console (TTY)',
-					'lucide-monitor-cog',
-					'Boot output and login prompt. Needs a user password.',
-				),
-			],
-		})
+		items.push(
+			...lockable(allowed, true, {
+				label: 'Web console',
+				icon: 'lucide-square-terminal',
+				disabled: !isRunning,
+				submenu: [
+					entry(
+						'ssh-console',
+						'SSH session',
+						'lucide-terminal',
+						'Shell as root. No password needed.',
+					),
+					entry(
+						'tty-console',
+						'Serial console (TTY)',
+						'lucide-monitor-cog',
+						'Boot output and login prompt. Needs a user password.',
+					),
+				],
+			}),
+		)
 
 	return items
+}
+
+/** An action a free trial locks stays in the menu, off, with the reason. */
+function lockable(
+	allowed: ServerActions,
+	isServerAccess: boolean,
+	option: DropdownOption,
+): DropdownOption[] {
+	if (!isServerAccess || !allowed.isAccessLocked) return [option]
+
+	// Every menu row takes a description, but the option union does not say so.
+	return [
+		{
+			...option,
+			disabled: true,
+			description: ACCESS_LOCKED_REASON,
+		} as DropdownOption,
+	]
 }
 
 function getPowerItems(
@@ -192,7 +217,13 @@ function getChangeItems(
 		items.push(entry('resize', 'Resize', 'lucide-sliders-horizontal'))
 
 	if (allowed.snapshot)
-		items.push(entry('snapshot', 'Take snapshot', 'lucide-camera'))
+		items.push(
+			...lockable(
+				allowed,
+				true,
+				entry('snapshot', 'Take snapshot', 'lucide-camera'),
+			),
+		)
 
 	return items
 }

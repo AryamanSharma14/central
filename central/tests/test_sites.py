@@ -18,7 +18,6 @@ from central.site_provisioning import (
 	trial_configuration,
 )
 from central.tests.test_iam import ensure_user
-from central.www.dashboard import _onboarding_complete
 
 
 class SiteOnAMachine(IntegrationTestCase):
@@ -514,12 +513,6 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertIsNotNone(steps["Site addressable"]["at"])
 		self.assertIsNone(steps["Site answered"]["at"])
 
-	def test_onboarding_completes_only_after_a_working_login(self):
-		with patch("central.www.dashboard.get_user_team_names", return_value=[self.team.name]):
-			self.assertFalse(_onboarding_complete())
-			self.site().db_set("claimed_at", frappe.utils.now_datetime())
-			self.assertTrue(_onboarding_complete())
-
 	def test_another_product_does_not_resume_the_existing_site(self):
 		raven = self.signup_product("raven-return")
 		crm = self.signup_product("crm-return")
@@ -976,6 +969,7 @@ class TestTrialCreationIsQueued(IntegrationTestCase):
 
 		with (
 			patch("central.site_provisioning.validated_subdomain", return_value="acme"),
+			patch("central.site_provisioning.get_signup_product", return_value=Mock(signup_app="raven")),
 			patch("central.site_provisioning.trial_configuration", return_value={}),
 			patch("central.site_provisioning.submit_request") as submit,
 		):
@@ -996,7 +990,7 @@ class TestTrialCreationIsQueued(IntegrationTestCase):
 			).insert(ignore_permissions=True)
 			submit.return_value = action.customer_status()
 			self.action = action
-			return create_trial_site(None, "acme", "key-" + frappe.generate_hash(length=8))
+			return create_trial_site(None, "acme", "key-" + frappe.generate_hash(length=8), "raven")
 
 	def test_creation_returns_the_queued_action(self):
 		status = self.start()
@@ -1055,6 +1049,15 @@ class TestTrialFunnelEvents(SiteOnAMachine):
 		self.assertEqual(capture.call_args.args[0], "trial_requested")
 		self.assertEqual(capture.call_args.kwargs["team"], self.team.name)
 		self.assertEqual(capture.call_args.kwargs["properties"]["product"], "raven")
+
+	def test_a_trial_request_carries_how_the_team_first_found_us(self):
+		self.team.db_set({"utm_source": "linkedin", "utm_campaign": "erp-launch", "referrer": None})
+
+		properties = self.captured("Site").call_args.kwargs["properties"]
+
+		self.assertEqual(properties["utm_source"], "linkedin")
+		self.assertEqual(properties["utm_campaign"], "erp-launch")
+		self.assertIsNone(properties["referrer"])
 
 	def test_a_server_request_sends_no_trial_event(self):
 		self.captured("Server").assert_not_called()

@@ -29,11 +29,16 @@ class CentralSettings(Document):
 		app_rollout_step_percent: DF.Int
 		central_id: DF.Int
 		common_site_config: DF.JSON | None
+		disk_iops: DF.Int
+		disk_throughput_mibps: DF.Int
 		enable_addons: DF.Check
 		enable_email_delivery_service: DF.Check
+		enable_firewall: DF.Check
 		enable_llm_service: DF.Check
 		enable_object_storage_service: DF.Check
 		enable_pdf_print_service: DF.Check
+		enable_public_ipv4: DF.Check
+		enable_public_ipv6: DF.Check
 		github_app_id: DF.Data | None
 		github_app_slug: DF.Data | None
 		github_client_id: DF.Data | None
@@ -43,6 +48,8 @@ class CentralSettings(Document):
 		invitation_expiry_days: DF.Int
 		invitation_resend_cooldown_minutes: DF.Int
 		invitations_per_hour: DF.Int
+		private_network_throughput_mibps: DF.Int
+		public_network_throughput_mibps: DF.Int
 		sign_in_code_attempts: DF.Int
 		sign_in_codes_per_email: DF.Int
 		require_payment_method: DF.Check
@@ -66,8 +73,16 @@ class CentralSettings(Document):
 			GitHubConnection.disable_all()
 
 	def validate_limits(self) -> None:
-		"""A zero would refuse every invitation, every sign-in code, or every wrong code at once."""
-		for fieldname in ("invitations_per_hour", "sign_in_code_attempts", "sign_in_codes_per_email"):
+		"""A zero would refuse every invitation or sign-in code, or give a new server no disk or network."""
+		for fieldname in (
+			"invitations_per_hour",
+			"sign_in_code_attempts",
+			"sign_in_codes_per_email",
+			"disk_iops",
+			"disk_throughput_mibps",
+			"private_network_throughput_mibps",
+			"public_network_throughput_mibps",
+		):
 			if self.get(fieldname) < 1:
 				frappe.throw(_("{0} must be at least 1.").format(_(self.meta.get_label(fieldname))))
 
@@ -132,4 +147,20 @@ class CentralSettings(Document):
 			"pdf": bool(self.enable_pdf_print_service),
 			"email": bool(self.enable_email_delivery_service),
 			"storage": bool(self.enable_object_storage_service),
+			"public_ipv4": bool(self.enable_public_ipv4),
+			"public_ipv6": bool(self.enable_public_ipv6),
+			"firewall": bool(self.enable_firewall),
 		}
+
+	def require_new_server_network_options(
+		self, has_public_ipv4: bool, has_public_ipv6: bool, is_firewall_enabled: bool
+	) -> None:
+		"""Refuse a network option that the New server page does not offer yet."""
+		refusals = (
+			(has_public_ipv4 and not self.enable_public_ipv4, _("A public IPv4 address")),
+			(has_public_ipv6 and not self.enable_public_ipv6, _("A public IPv6 address")),
+			(is_firewall_enabled and not self.enable_firewall, _("The firewall")),
+		)
+		for is_refused, option in refusals:
+			if is_refused:
+				frappe.throw(_("{0} is not available for new servers yet.").format(option))

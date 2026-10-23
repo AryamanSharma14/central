@@ -46,5 +46,7 @@ central.patches.v0_0.select_full_ubuntu_image
 central.patches.v0_0.point_wallets_at_last_ledger_entry
 # Repair what the billing audit found: staging teams, currencies, hand-set tiers, unexplained wallets.
 central.patches.v0_0.repair_billing_audit_findings
+# New servers read their disk and network limits from Central Settings.
+central.patches.v0_0.seed_server_limits
 # The app rollout steps read 0 on a Central Settings saved before they existed, and Pilot holds every update on 0.
 central.patches.v0_0.seed_app_rollout_settings

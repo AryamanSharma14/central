@@ -22,7 +22,6 @@ interface Window {
 	socketio_port?: number
 	/** Site timezone Frappe stores naive datetimes in. See dashboard.py. */
 	system_timezone?: string
-	onboarding_complete?: boolean
 	/** Days a new team invitation stays open, from Central Settings. */
 	invitation_expiry_days?: number
 	/** Upload limit in bytes, from System Settings. */
@@ -31,5 +30,8 @@ interface Window {
 		addons?: boolean
 		storage?: boolean
 		llm?: boolean
+		public_ipv4?: boolean
+		public_ipv6?: boolean
+		firewall?: boolean
 	}
 }

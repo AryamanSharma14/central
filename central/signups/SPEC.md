@@ -6,13 +6,13 @@ The Signups module holds what a new customer gets: the [Product](doctype/product
 
 ## Welcome credit
 
-A Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
+Grant Welcome Credits is off by default, so no team gets a welcome credit: a product signup gets a free trial site instead, and every other server needs a payment method. When an operator turns it on, a Team gets the welcome credit when its first payment method becomes active, not at signup. The credit is granted once for each owner across all of the owner's Teams.
 
-A Team with trial sites gets the credit only while one of its trials is Active. This rewards a card before the trial ends. A card after the trial ends still converts the site, but adds no credit. `get_welcome_credit_offer` returns `ends_on`, the earliest end date of the Team's Active trials, so the console and the site can name the last day.
+A Team that had a free trial gets no welcome credit, because the trial site is its free start. A card still converts its trial site. `is_welcome_credit_due` holds this rule.
 
 | Billing Settings field | Value on a new install |
 |---|---|
-| Grant Welcome Credits | On |
+| Grant Welcome Credits | Off |
 | Welcome Credit Amounts | 10 USD, 1000 INR |
 | Validity (Days) | 60 |
 
@@ -24,7 +24,7 @@ A System Manager can grant credit from the **Grant Credit** action on a Team, fo
 
 ## Trials
 
-A trial site is a site from the signup flow, with or without a Product, for a Team that has no active payment method and has never paid. It runs free for a set number of days. The trial state is on the Site, in the **Trial** section.
+A trial site is a site from a Product's signup flow, for a Team that has no active payment method and has never paid. A direct Central signup has no free trial: it lands in the console, adds a payment method and buys its servers. Only a signup link with `?product=` opens the onboarding pages, and `create_trial_site` needs a product. It runs free for a set number of days. The trial state is on the Site, in the **Trial** section.
 
 A Team has paid when it has a Subscription, or an Invoice that is not Draft or Cancelled. Such a Team buys its signup sites like any other server, also when its payment method has expired or failed. So a Team with unpaid invoices cannot open free servers.
 
@@ -32,11 +32,11 @@ A Team has paid when it has a Subscription, or an Invoice that is not Draft or C
 
 | Field | Where | Meaning |
 |---|---|---|
-| Trial Days | Central Settings, and Product | Days a trial site runs from when Central records it. A Product with 0 uses Central Settings. |
-| Trial Deletion Days | Central Settings, and Product | Days a stopped trial site is kept before its server is terminated. A Product with 0 uses Central Settings. |
-| Trial Notice Days | Central Settings | Days before the end date, and before the deletion date, that the warning email goes out. |
+| Trial Days | Central Settings (Trials tab), and Product | Days a trial site runs from when Central records it. A Product with 0 uses Central Settings. |
+| Trial Deletion Days | Central Settings (Trials tab), and Product | Days a stopped trial site is kept before its server is terminated. A Product with 0 uses Central Settings. |
+| Trial Notice Days | Central Settings (Trials tab) | Days before the end date, and before the deletion date, that the warning email goes out. |
 
-Example: Central Settings has Trial Days 14 and Trial Deletion Days 14. Product `raven` has Trial Days 30. A Raven trial runs 30 days, stops, and is terminated 14 days later.
+Example: Central Settings has Trial Days 7 and Trial Deletion Days 7. Product `raven` has Trial Days 14. A Raven trial runs 14 days, stops, and is terminated 7 days later.
 
 ### Operation
 
@@ -47,17 +47,17 @@ Central records the site when the region first reports its machine with an addre
 | Active | Central records the site and its creation request is a free trial | Sets Trial Ends On. When the Team added a payment method before Central recorded the site, the site converts at once. |
 | Converted | Central records the site and its creation request is not a free trial | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
-| Deleted | Trial Deletes On is reached and the server is Terminated | Asks for a normal terminate action each day until the server is Terminated, then sets the state. |
+| Deleted | The server is Terminated: on Trial Deletes On, or when the customer terminates it earlier | On Trial Deletes On, asks for a normal terminate action each day until the server is Terminated. Sets the state when the server is Terminated, so the owner can start a new trial at once. |
 
-The daily job `central.signups.trial.run_trials` moves each site. It sends each email once and records the last one in Trial Last Notice.
+The `Trial` class in `central/signups/trial.py` owns these states. Every change goes through `Trial.move_to`, which refuses a change that its transition table does not allow. The daily job `central.signups.trial.run_trials` moves each site. It sends each email once and records the last one in Trial Last Notice.
 
 | Event | Sent |
 |---|---|
 | `trial_unopened` | Once, from the day after the site is ready, when nobody has opened it. Not sent when a warning is due. |
-| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. It names the welcome credit when the Team can still earn it, and says that the site sleeps when idle. |
+| `trial_expiring` | Trial Notice Days before Trial Ends On, and again on the last day. |
 | `trial_ended` | When the stop job has stopped the server, not when the trial ends |
 | `trial_deletion_soon` | Trial Notice Days before Trial Deletes On |
-| `trial_deleted` | When the server is terminated |
+| `trial_deleted` | When the server is terminated. Its button opens the signup page of the same product. |
 | `trial_converted` | When a payment method converts the trial |
 
 A Product can add its own paragraph to each email and show its own logo and name. See [Product emails](doctype/product/SPEC.md#emails). These events are in the **Trial** notification category. A user can turn the email or the in-app notice for this category off in their notification settings. Each event goes to the Team members who hold `billing:view`.
@@ -68,10 +68,51 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 
 | Request | What Central checks |
 |---|---|
-| A trial site from the signup flow, Team that has no payment method and has never paid | The Team's owner has fewer open trial sites (Active or Ended), pending trial site creations, and provisioned trial servers whose site Central has not recorded yet, across all the owner's Teams, than Central Settings, Trial Servers Limit. A new Team gives no new trials. No credit is needed. |
+| A trial site from the signup flow, Team that has no payment method and has never paid | The Team's owner has fewer open trial sites (Active or Ended), pending trial site creations, and provisioned trial servers whose site Central has not recorded yet, across all the owner's Teams, than Central Settings, Trial Servers Limit. A new Team gives no new trials. No credit is needed. Otherwise Central refuses with `TRIAL_IN_PROGRESS`, which names the open trial. |
 | Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team adds a payment method and then chooses Keep this site, which converts the trial and starts the server. |
 | Resize a trial server | Refused, because a trial server has no subscription. The console resize dialog and the in-app plan list ask for a payment method first. `get_composed_config` returns `trial`, and `billing_api.change_plan` refuses with "Add a payment method to change this site's plan." |
+
+### Signup with an open trial
+
+`central.api.sites.get_open_trial(team)` returns the owner's oldest open trial across all the owner's Teams, or null. The signup page reads it before it asks for a site name, so it can offer that site instead. It returns `site`, `server`, `address`, `url`, `product`, `product_title`, `product_logo`, `state`, `ends_on` and `deletes_on`. While the first site is still being set up, it returns only `state` (Setting up) and the product fields. A caller who cannot view the trial's Team gets the same fields only, so a site of another Team is not named. It needs `server:create`.
+
+| Open trial | What the customer can do |
+|---|---|
+| Active | Open the site, and install another product's app there. |
+| Ended | Keep the site, or terminate its server. A terminated trial is Deleted at once, so a new trial can start. |
+
+### Another product's app on the open trial site
+
+`TrialAppInstall` in `central/signups/app_install.py` adds a product's app to the owner's Active trial site, so one free site runs both products. The enabled Product gives the app (Signup App), the title, the logo, the Setup Messages and the landing page.
+
+| Step | API | What happens |
+|---|---|---|
+| Start | `install_trial_app(product, team)` | Central reads the site's apps from Pilot. When the site has the app, it returns `success` and no task. Otherwise Pilot queues the install, and Central adds a comment on the Site with the Pilot task. |
+| Progress | `get_trial_app_install(site, task_id, product, team)`, a POST every 3 seconds | Returns `status` (queued, running, success, failed, or unreachable when the site did not answer this time), `queue_position` and `started_at`. |
+| Open | `login_site(name, product)` | Signs in on the Product's Landing Route. |
+
+| Failure | Customer sees | Operator sees |
+|---|---|---|
+| The site does not answer at start | "Your site did not answer. Wait a minute, then try again." | Error Log "Trial app install failed" |
+| The site does not answer for 2 minutes of polls | "Your site stopped answering. Try again in a few minutes." | Nothing new. Pilot keeps the task. |
+| The Pilot task fails | "CRM could not be installed on your site." with Try again and Open my site | Error Log and a comment on the Site with Pilot's reason |
+
+### Server access
+
+An open trial (Active or Ended) gives the customer the site, not the server. A free trial whose site Central has not recorded yet is locked too, because its creation request says it is a free trial. `VirtualMachine.require_server_access` refuses these routes with a permission error until the trial converts:
+
+| Route | Entry point |
+|---|---|
+| Set the server's SSH keys | `VirtualMachine.set_ssh_keys` |
+| Web console, SSH or TTY | `central.integrations.servers.get_console_url` |
+| Pilot sign-in, also "Open server" in the site | `VirtualMachine.get_bench_login_url` |
+| Snapshot, also the final snapshot on terminate | `central.api.snapshots.take_snapshot`, `submit_command` |
+| GitHub connect for the server's Pilot | `GitHubConnectionAttempt.bind` |
+
+A System Manager keeps access. A Team SSH Key sync skips a locked server, so its keys never reach it. A trial server starts with no SSH keys. Site sign-in (`claim_site`, `login_site`) stays open. The console registry returns `is_access_locked` on each server, so the console hides these actions.
+
+`central.api.pilot.get_server_access` returns `is_locked` for the server of the calling Pilot credential. It is for Pilot, which must refuse the site's config edits and config downloads while the server is locked. A credential whose server is not linked yet reads as locked.
 
 ### Console
 
@@ -95,7 +136,7 @@ A Deleted trial is not converted, because its server is gone. Its Trial Cost run
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left`, `deletes_on`, `credit` (the welcome credit offer, or null) and `sleeps_after_minutes` (Central Settings, Trial Idle Shutdown). It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 

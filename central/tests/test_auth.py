@@ -252,7 +252,6 @@ class TestAuth(IntegrationTestCase):
 		context = build_auth_context()
 
 		self.assertEqual(context["user"], "Guest")
-		self.assertFalse(context["onboarding_complete"])
 
 	def _code(self) -> str:
 		return EmailCode(self.email).pending["code"]
