@@ -12,7 +12,6 @@ from central.api.pilot import pilot_credential_auth
 from central.iam import can
 from central.integrations.email_oauth.email_oauth import (
 	CALLBACK_PATH,
-	PROVIDER,
 	claim_code,
 	exchange_token,
 	forget_sign_in,
@@ -43,7 +42,7 @@ def start(
 @pilot_credential_auth
 def get_active_providers() -> list[str]:
 	"""Called by a site through its Pilot: the providers a mailbox can sign in with right now."""
-	return frappe.get_all(PROVIDER, filters={"enabled": 1}, pluck="name", order_by="name")
+	return frappe.get_all("Email OAuth Provider", filters={"enabled": 1}, pluck="name", order_by="name")
 
 
 # nosemgrep: guest-whitelisted-method -- the provider sends the browser here; the code only goes to the site's team.
