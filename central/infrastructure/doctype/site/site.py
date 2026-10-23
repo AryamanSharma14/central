@@ -253,8 +253,13 @@ class Site(Document):
 	@frappe.whitelist(methods=["POST"])
 	def open_as_administrator(self) -> str | None:
 		"""Operator action: a one-click login to this site, recorded on the site and its server."""
+		from central.integrations.pilot import PilotLoginPending
+
 		frappe.only_for("System Manager")
-		url = self.get_login_url(frappe.session.user)
+		try:
+			url = self.get_login_url(frappe.session.user)
+		except PilotLoginPending:
+			frappe.throw(_("Pilot could not create a login yet. Try again in a minute."))
 		note = _("{0} opened site {1} as Administrator.").format(frappe.session.user, self.name)
 		self.add_comment("Info", note)
 		frappe.get_doc("Virtual Machine", self.server).add_comment("Info", note)

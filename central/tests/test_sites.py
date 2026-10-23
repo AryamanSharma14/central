@@ -382,6 +382,17 @@ class TestSiteRoutes(SiteOnAMachine):
 		self.assertIsNone(self.site().claimed_at)
 		self.enqueue_doc.assert_not_called()
 
+	def test_a_missed_probe_during_a_claim_is_reported_as_pending(self):
+		with (
+			patch("central.api.sites.is_site_reachable", return_value=False),
+			patch("central.integrations.pilot.fetch_site_login_url") as login,
+		):
+			state = claim_site(self.site().name)
+
+		self.assertTrue(state["login_pending"])
+		self.assertIsNone(self.site().claimed_at)
+		login.assert_not_called()
+
 	def test_terminating_a_site_terminates_the_machine_it_is(self):
 		result = terminate_site(self.site().name)
 
@@ -625,6 +636,19 @@ class TestSiteHandoff(IntegrationTestCase):
 			self.assertRaises(PilotLoginPending),
 		):
 			fetch_site_login_url("https://pilot.example.test", "pilot-1", "site.local")
+
+	def test_a_busy_or_unreachable_machine_is_retryable(self):
+		import requests
+
+		post = Mock(side_effect=[Mock(status_code=429), Mock(status_code=503), requests.Timeout()])
+		for attempt in ("rate limited", "server error", "timeout"):
+			with (
+				self.subTest(attempt),
+				patch("central.integrations.pilot.mint_site_login", return_value="token"),
+				patch("central.integrations.pilot.requests.post", post),
+				self.assertRaises(PilotLoginPending),
+			):
+				fetch_site_login_url("https://pilot.example.test", "pilot-1", "site.local")
 
 	def test_a_login_token_names_the_user_or_administrator(self):
 		from central.sso import mint_site_login

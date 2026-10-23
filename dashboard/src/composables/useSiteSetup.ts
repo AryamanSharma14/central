@@ -28,6 +28,7 @@ export function useSiteSetup() {
 	const status = ref<TrialOnboardingStatus | null>(null)
 	const error = ref('')
 	const loginUrl = ref<string | null>(null)
+	const isSigningIn = ref(false)
 	const now = ref(Date.now())
 	let timer: ReturnType<typeof setTimeout> | undefined
 	let clock: ReturnType<typeof setInterval> | undefined
@@ -87,34 +88,38 @@ export function useSiteSetup() {
 				{ name: site.value!.name },
 			)
 			if (claimed.login_pending) return retryClaim()
-			if (!claimed.login_url) {
-				error.value = SIGN_IN_FAILED
-				return
-			}
+			if (!claimed.login_url) return failSignIn(SIGN_IN_FAILED)
 			arrive(claimed.login_url)
 		} catch (exception) {
-			error.value = frappeErrorMessage(exception, SIGN_IN_FAILED)
+			failSignIn(frappeErrorMessage(exception, SIGN_IN_FAILED))
 		}
 	}
 
 	function retryClaim() {
 		const retryDelay = LOGIN_RETRY_DELAYS_MS[loginRetryIndex]
-		if (retryDelay === undefined) {
-			error.value = SIGN_IN_FAILED
-			return
-		}
+		if (retryDelay === undefined) return failSignIn(SIGN_IN_FAILED)
 		loginRetryIndex += 1
 		timer = setTimeout(claim, retryDelay)
 	}
 
+	function failSignIn(message: string) {
+		error.value = message
+		isSigningIn.value = false
+	}
+
 	function arrive(url: string) {
+		error.value = ''
 		loginUrl.value = url
 		// Long enough to read "Arrived", short enough that nobody waits on it.
 		timer = setTimeout(() => window.location.assign(url), 1200)
 	}
 
+	// The bare address opens on a login page the customer has no password for, so sign in again.
 	function openSite() {
-		if (site.value?.url) window.location.assign(site.value.url)
+		if (isSigningIn.value) return
+		isSigningIn.value = true
+		loginRetryIndex = 0
+		claim()
 	}
 
 	onMounted(() => {
@@ -134,6 +139,7 @@ export function useSiteSetup() {
 		secondsLeft,
 		failure,
 		error,
+		isSigningIn,
 		openSite,
 	}
 }

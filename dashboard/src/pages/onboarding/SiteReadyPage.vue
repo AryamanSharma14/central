@@ -21,6 +21,7 @@ const {
 	secondsLeft,
 	failure,
 	error,
+	isSigningIn,
 	openSite,
 } = useSiteSetup()
 
@@ -69,17 +70,18 @@ function tryAgain() {
 		<template v-if="signInFailed">
 			<h1 class="text-2xl-semibold text-ink-gray-9">Your site is ready</h1>
 			<p class="mt-2 text-p-base text-ink-gray-5">
-				We couldn't sign you in automatically, but your site is up. Open it and
-				sign in as Administrator.
+				Your site is up, but signing you in is taking longer than usual. Open
+				your site to try again.
 			</p>
 			<Button
 				class="mt-8 w-full"
 				variant="solid"
 				size="md"
 				label="Open my site"
+				:loading="isSigningIn"
 				@click="openSite"
 			/>
-			<ErrorMessage class="mt-4" :message="error" />
+			<ErrorMessage v-if="!isSigningIn" class="mt-4" :message="error" />
 		</template>
 
 		<template v-else>

@@ -83,9 +83,10 @@ def fetch_site_login_url(
 	full_name: str | None = None,
 ) -> str | None:
 	"""Relay a Central-signed site assertion to the bench's login endpoint and return the desk
-	URL it mints (a fresh local session) for `user`, or Administrator. A 401 is retryable while
-	Pilot finishes starting. A 404 means the bench has no site by that name. Other failures
-	return None and are logged so a consistently-failing bench or Central is diagnosable."""
+	URL it mints (a fresh local session) for `user`, or Administrator. A 401 while Pilot finishes
+	starting, a rate limit, and a busy or unreachable machine are retryable. A 404 means the bench
+	has no site by that name. Other failures return None and are logged so a consistently-failing
+	bench or Central is diagnosable."""
 	try:
 		token = mint_site_login(audience_id, site, user, full_name)
 		response = requests.post(
@@ -94,7 +95,9 @@ def fetch_site_login_url(
 			timeout=SITE_LOGIN_TIMEOUT_SECONDS,
 			allow_redirects=False,
 		)
-		if response.status_code == 401:
+		# A small machine can time out the login it mints while it is busy. Minting again only
+		# starts another session, so these are safe to retry.
+		if response.status_code in (401, 429) or response.status_code >= 500:
 			raise PilotLoginPending
 		if response.status_code == 404:
 			return None
@@ -103,6 +106,8 @@ def fetch_site_login_url(
 		url = payload.get("url") if isinstance(payload, dict) else None
 	except PilotLoginPending:
 		raise
+	except (requests.ConnectionError, requests.Timeout):
+		raise PilotLoginPending from None
 	except Exception:  # minting (signing key / DB / encode) must also fall back, not 500
 		frappe.log_error(
 			title=f"Site login relay failed: {site}",
