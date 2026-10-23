@@ -816,9 +816,34 @@ class TestSiteNaming(SiteOnAMachine):
 			) as login,
 			patch("central.integrations.pilot.is_site_reachable", return_value=True),
 		):
-			self.assertEqual(site.get_login_url(), f"https://{site.name}/desk?sid=abc")
+			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
 
 		self.assertEqual([call.args[2] for call in login.call_args_list], [site.rename_target, "site.local"])
+
+	def test_the_chosen_name_signs_in_before_the_rename(self):
+		"""The image serves every name in its zone, so the route alone makes the name answer."""
+		site = self.site()
+		with (
+			patch("central.integrations.pilot.is_site_reachable", return_value=True),
+			patch(
+				"central.integrations.pilot.fetch_site_login_url",
+				return_value="https://site.local/desk?sid=abc",
+			) as login,
+		):
+			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
+
+		self.assertEqual(login.call_args.args[2], "site.local")
+		self.assertEqual(self.site().primary_url, f"https://{site.rename_target}")
+
+	def test_a_new_site_routes_its_chosen_name_to_its_server(self):
+		site = self.site()
+		zone = "central.infrastructure.doctype.region.region.Region.get_zone"
+		with patch(zone, return_value=self.region.proxy_domain):
+			site.route_subdomain()
+			site.route_subdomain()
+
+		route = frappe.get_doc("Site Domain", site.rename_target)
+		self.assertEqual((route.server, route.site, route.route_type), (self.server.name, site.name, "Site"))
 
 	def test_central_redirects_to_the_renamed_host_when_ready(self):
 		site = self.site()

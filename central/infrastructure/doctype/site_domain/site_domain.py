@@ -74,6 +74,7 @@ class SiteDomain(Document):
 		self.validate_auto_routed_host()
 		if self.has_auto_routed_name:
 			frappe.throw(_("The region routes {0} already. It needs no route record.").format(self.domain))
+		self.validate_chosen_subdomain()
 
 	def after_insert(self) -> None:
 		frappe.enqueue_doc(self.doctype, self.name, "apply", enqueue_after_commit=True)
@@ -137,6 +138,20 @@ class SiteDomain(Document):
 		it from the label, so no record here could ever bring it to this server."""
 		if self.has_auto_routed_name and not self.is_auto_routed:
 			frappe.throw(_("The region routes {0} to another server.").format(self.domain))
+
+	def validate_chosen_subdomain(self) -> None:
+		"""Refuse a site label that a Site on another live server has chosen. The Site holds the
+		name before its rename routes it."""
+		if self.route_type != "Site":
+			return
+
+		filters = {
+			"subdomain": self.site_label,
+			"server": ["!=", self.server],
+			"server.status": ["!=", "Terminated"],
+		}
+		if frappe.get_all("Site", filters=filters, limit=1):
+			frappe.throw(_("{0} is already taken.").format(self.domain), frappe.DuplicateEntryError)
 
 	def apply(self) -> None:
 		"""Send this route to the regional proxy and record the outcome. Safe to repeat.

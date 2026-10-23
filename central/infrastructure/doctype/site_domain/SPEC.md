@@ -67,7 +67,7 @@ A Pilot uses these endpoints from its `bench-domain-provider`. Each endpoint aut
 | `central.api.pilot.register_domain` | POST | `register` |
 | `central.api.pilot.deregister_domain` | POST | `deregister` |
 
-A site needs no DNS records. `register_domain` creates the route when no other server holds the name. For a routed name of the Pilot server, it returns success and creates nothing.
+A site needs no DNS records. `register_domain` creates the route when no other server holds the name. A Site on another server that is not Terminated also holds its chosen `subdomain` before its rename routes it, so Central refuses that label too. For a routed name of the Pilot server, it returns success and creates nothing.
 
 A custom domain needs verification before Central creates a record:
 
