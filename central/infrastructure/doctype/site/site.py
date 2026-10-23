@@ -123,6 +123,29 @@ class Site(Document):
 		from central.signups.trial import Trial
 
 		Trial(self).convert_if_paid()
+		if self.subdomain:
+			frappe.enqueue_doc(
+				self.doctype, self.name, "route_subdomain", queue="short", enqueue_after_commit=True
+			)
+
+	def route_subdomain(self) -> None:
+		"""Route the chosen name to the server now, so the first sign-in can use it before the
+		rename lands. A job keeps a refused route from stopping the Site record."""
+		if frappe.db.exists("Site Domain", self.rename_target):
+			return
+
+		route = frappe.get_doc(
+			{
+				"doctype": "Site Domain",
+				"domain": self.rename_target,
+				"team": self.team,
+				"server": self.server,
+				"site": self.name,
+				"region": frappe.db.get_value("Virtual Machine", self.server, "region"),
+			}
+		)
+		# The system routes the name the customer chose at signup; no user acts here.
+		route.insert(ignore_permissions=True)
 
 	def mark_claimed(self) -> None:
 		"""Record the first successful login handoff and schedule the optional rename."""
@@ -279,7 +302,7 @@ class Site(Document):
 
 	def get_login_url(self, user: str | None = None, product: str | None = None) -> str | None:
 		"""A one-click session for `user`, or for Administrator, on the site's public address.
-		Use the customer hostname only after its route answers and Pilot accepts its site name.
+		Use the customer hostname once it answers, and the automatic address until then.
 		It lands on the page of `product`, or of the site's own product."""
 		from central.integrations.pilot import fetch_site_login_url, is_site_reachable
 
@@ -288,15 +311,14 @@ class Site(Document):
 			return None
 
 		login_user, full_name = self.get_login_user(user)
-		renamed_ready = (
-			self.subdomain and self.rename_task and is_site_reachable(f"https://{self.rename_target}")
-		)
-		if renamed_ready and not self.renamed_at:
+		# The image serves every name in its zone, so the chosen name answers once its route does.
+		is_chosen_name_ready = bool(self.subdomain) and is_site_reachable(f"https://{self.rename_target}")
+		if is_chosen_name_ready and not self.renamed_at:
 			self.db_set("renamed_at", frappe.utils.now_datetime())
-		pilot_names = [self.rename_target, IMAGE_SITE_NAME] if renamed_ready else [IMAGE_SITE_NAME]
+		host = self.rename_target if is_chosen_name_ready else self.name
+		pilot_names = self.get_pilot_site_names() if is_chosen_name_ready else [IMAGE_SITE_NAME]
 		for pilot_name in pilot_names:
 			if minted := fetch_site_login_url(gateway, audience, pilot_name, login_user, full_name):
-				host = self.name if pilot_name == IMAGE_SITE_NAME else self.rename_target
 				return on_host(minted, host, self.get_landing_route(product))
 
 		return None
