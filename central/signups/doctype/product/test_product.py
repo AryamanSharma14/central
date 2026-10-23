@@ -277,6 +277,28 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 		_, html = engine._notification_email(self.event, context)
 		self.assertIn(f'href="{self.site().url}"', html)
 
+	def test_site_emails_name_and_link_the_chosen_name(self):
+		"""Every Site email names the address its button opens, the trial emails included."""
+		from central.signups.trial import Trial
+
+		site = self.site()
+		site.db_set("subdomain", "acme")
+		with patch(
+			"central.infrastructure.doctype.region.region.Region.get_zone",
+			return_value=self.region.proxy_domain,
+		):
+			site.route_subdomain()
+		frappe.db.set_value("Site Domain", site.rename_target, "status", "Active")
+
+		context = engine._resolve_context(self.team.name, "site_ready", None, site.name, "Site")
+		context["reference_title"] = engine._get_reference_title(self.team.name, "Site", site.name)
+		subject, html = engine._notification_email(self.event, context)
+
+		self.assertEqual(subject, f"Site ready: {site.rename_target}")
+		self.assertIn(f"Site {site.rename_target} is ready.", html)
+		self.assertIn(f'href="https://{site.rename_target}"', html)
+		self.assertEqual(Trial(self.site()).address, site.rename_target)
+
 	def test_billing_emails_link_central_and_deleted_email_has_no_site_link(self):
 		product = self.product(landing_route="/raven")
 		with patch("central.notification.engine.central_url", return_value="https://central.example.test"):

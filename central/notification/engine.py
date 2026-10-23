@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
 
+from urllib.parse import urlsplit
+
 import frappe
 from frappe import _
 from frappe.utils import escape_html
@@ -192,6 +194,10 @@ def _get_reference_title(team: str, reference_doctype: str | None, reference_nam
 	if not row or (is_team_owned and row.team != team):
 		return reference_name
 
+	# A site is named by the address its owner opens, which the email's button also opens.
+	if reference_doctype == "Site":
+		return urlsplit(frappe.get_doc("Site", reference_name).routed_url).hostname
+
 	return row[title_field] or reference_name
 
 
@@ -345,7 +351,7 @@ def _notification_email(event, ctx, message=None) -> tuple[str, str]:
 	extras = product.get_email_extras(event.name) if product else {}
 	if site and event.name in GETTING_STARTED_EMAILS:
 		landing_route = product.landing_route if product else None
-		extras["site_url"] = site.url + (landing_route or "")
+		extras["site_url"] = site.routed_url + (landing_route or "")
 
 	return render_notification_email(event, ctx, extras)
 

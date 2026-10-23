@@ -109,6 +109,8 @@ A site's users have no Central account. When a plan change from the site stops t
 6. On `ready`, the page counts down 5 seconds and opens `Site.routed_url` on the product's Landing Route, such as `/raven`. The user can stay on the page.
 7. The page names only what changes, such as "Memory goes from 1 GB to 2 GB". It shows a plan title below the size only when the title is not the size.
 
+Every notification that refers to a Site, and every trial email, names the Site by the host of `Site.routed_url`. The "Get started" button opens the same host on the product's Landing Route.
+
 `PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
 
 ## Operator actions

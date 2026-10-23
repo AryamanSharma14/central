@@ -1,4 +1,5 @@
 from functools import cached_property
+from urllib.parse import urlsplit
 
 import frappe
 from frappe import _
@@ -85,8 +86,8 @@ class Trial:
 
 	@property
 	def address(self) -> str:
-		"""The site's address as the customer knows it."""
-		return self.site.rename_target if self.site.subdomain else self.site.name
+		"""The site's address as the customer knows it, the same one the notification emails name."""
+		return urlsplit(self.site.routed_url).hostname
 
 	def move_to(self, state: str, **values) -> None:
 		"""Set the trial state, with the fields that change with it. A new site is not saved yet."""
