@@ -105,8 +105,9 @@ A site's users have no Central account. When a plan change from the site stops t
 2. The URL is `/upgrading?action=<Resource Action>&site=<Site>&_signature=<signature>`. Frappe's `get_signed_params` signs it with the site secret. The link does not expire.
 3. `central/www/upgrading.py` checks the signature and renders the page. A wrong signature, or an action that does not resize the Site's server, shows "This link is not valid".
 4. The page asks `central.api.sites.plan_change_progress` every 3 seconds. The endpoint allows guests, checks the same signature, and allows 60 requests a minute for each action.
-5. The step comes from the Resource Action status: `saving`, `moving`, `starting`, `ready` or `failed`. The step is `ready` only when `Site.primary_url` answers a ping.
-6. On `ready`, the page counts down 5 seconds and opens `Site.primary_url`. The user can stay on the page.
+5. The step comes from the Resource Action status: `saving`, `moving`, `starting`, `ready` or `failed`. The step is `ready` only when `Site.routed_url` answers a ping. `Site.routed_url` is the chosen name when its Site Domain is `Active`, else `Site.primary_url`.
+6. On `ready`, the page counts down 5 seconds and opens `Site.routed_url` on the product's Landing Route, such as `/raven`. The user can stay on the page.
+7. The page names only what changes, such as "Memory goes from 1 GB to 2 GB". It shows a plan title below the size only when the title is not the size.
 
 `PlanChange` in `plan_change.py` owns the link and the progress. A developer bench also serves `/upgrading?preview=1`, which shows every step with sample data.
 

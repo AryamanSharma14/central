@@ -62,6 +62,14 @@ class Site(Document):
 		"""The address the console shows: the customer's subdomain once the rename has landed."""
 		return Site.get_primary_url(self.name, self.subdomain, self.renamed_at)
 
+	@property
+	def routed_url(self) -> str:
+		"""The customer's chosen name once its Site Domain is active, else the primary address. The
+		image serves every name in its zone, so the chosen name answers before the rename lands."""
+		if self.subdomain and frappe.db.get_value("Site Domain", self.rename_target, "status") == "Active":
+			return f"https://{self.rename_target}"
+		return self.primary_url
+
 	@staticmethod
 	def get_primary_url(name: str, subdomain: str | None, renamed_at: str | None) -> str:
 		if not subdomain or not renamed_at:

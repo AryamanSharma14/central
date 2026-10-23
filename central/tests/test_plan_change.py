@@ -94,6 +94,32 @@ class TestPlanChange(PlanChangeCase):
 		with patch("central.infrastructure.doctype.site.plan_change.is_site_reachable", return_value=True):
 			self.assertEqual(change.get_progress()["step"], "ready")
 
+	def test_the_page_opens_the_chosen_name_on_the_products_page(self):
+		"""The chosen name answers once its route is active, before a sign-in records the rename."""
+		product = frappe.get_doc(
+			{
+				"doctype": "Product",
+				"product_key": "raven",
+				"title": "Raven",
+				"signup_app": "raven",
+				"landing_route": "/raven",
+			}
+		).insert(ignore_if_duplicate=True)
+		site = self.site()
+		site.db_set({"subdomain": "acme", "product": product.name})
+		with patch(
+			"central.infrastructure.doctype.region.region.Region.get_zone",
+			return_value=self.region.proxy_domain,
+		):
+			site.route_subdomain()
+		frappe.db.set_value("Site Domain", site.rename_target, "status", "Active")
+
+		with patch("central.infrastructure.doctype.site.plan_change.is_site_reachable", return_value=False):
+			progress = PlanChange(self.site(), self.resize()).get_progress()
+
+		self.assertEqual(progress["site"], site.rename_target)
+		self.assertEqual(progress["site_url"], f"https://{site.rename_target}/raven")
+
 
 class TestPilotPlanChange(PlanChangeCase):
 	def setUp(self):
