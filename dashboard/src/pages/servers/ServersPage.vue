@@ -308,7 +308,9 @@ useServerLink(
 			v-model:target="pendingTerminate"
 			:loading="busy === pendingTerminate?.resource_id"
 			:error="terminateError"
-			:can-snapshot="terminateActions.snapshot"
+			:can-snapshot="
+				terminateActions.snapshot && !terminateActions.isAccessLocked
+			"
 			@confirm="confirmTerminate"
 		/>
 		<TakeSnapshotDialog v-model:server="pendingSnapshot" />

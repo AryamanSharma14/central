@@ -271,7 +271,10 @@ def is_pilot_offering(offering: str | None) -> bool:
 
 def take_automatic_snapshots() -> None:
 	"""Scheduler: one daily snapshot of each running server in a region that has
-	automatic snapshots on, unless its owner turned them off."""
+	automatic snapshots on, unless its owner turned them off. A free trial server gets none,
+	because a snapshot would hand its disk out before the trial converts."""
+	from central.signups.access import get_locked_servers_among
+
 	regions = frappe.get_all("Region", filters={"automatic_snapshots": 1, "status": "Active"}, pluck="name")
 	if not regions:
 		return
@@ -293,8 +296,9 @@ def take_automatic_snapshots() -> None:
 			pluck="server",
 		)
 	)
+	skipped = taken | get_locked_servers_among([server.name for server in servers])
 	for server in servers:
-		if server.name not in taken:
+		if server.name not in skipped:
 			_take_automatic_snapshot(server)
 
 

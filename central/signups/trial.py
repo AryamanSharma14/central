@@ -280,8 +280,16 @@ class Trial:
 
 	def delete(self) -> None:
 		"""Close the trial once its server is terminated. Until then, ask for a terminate each day,
-		so a refused terminate is not lost."""
+		so a refused terminate is not lost. A protected server is kept: only an operator can
+		protect a trial server, and Atlas refuses to terminate it."""
 		if not self.is_server_terminated():
+			if frappe.db.get_value("Virtual Machine", self.site.server, "is_termination_protected"):
+				self.record_error(
+					_(
+						"Termination protection is on, so this trial's server is kept. Turn it off to delete it."
+					)
+				)
+				return
 			if frappe.db.exists(
 				"Resource Action",
 				{

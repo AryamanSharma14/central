@@ -47,7 +47,7 @@ Central records the site when the region first reports its machine with an addre
 | Active | Central records the site and its creation request is a free trial | Sets Trial Ends On. When the Team added a payment method before Central recorded the site, the site converts at once. |
 | Converted | Central records the site and its creation request is not a free trial | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
-| Deleted | The server is Terminated: on Trial Deletes On, or when the customer terminates it earlier | On Trial Deletes On, asks for a normal terminate action each day until the server is Terminated. Sets the state when the server is Terminated, so the owner can start a new trial at once. |
+| Deleted | The server is Terminated: on Trial Deletes On, or when the customer terminates it earlier | On Trial Deletes On, asks for a normal terminate action each day until the server is Terminated. A server with termination protection on is kept, and Trial Error says why. Sets the state when the server is Terminated, so the owner can start a new trial at once. |
 
 The `Trial` class in `central/signups/trial.py` owns these states. Every change goes through `Trial.move_to`, which refuses a change that its transition table does not allow. The daily job `central.signups.trial.run_trials` moves each site. It sends each email once and records the last one in Trial Last Notice.
 
@@ -108,9 +108,10 @@ An open trial (Active or Ended) gives the customer the site, not the server. A f
 | Web console, SSH or TTY | `central.integrations.servers.get_console_url` |
 | Pilot sign-in, also "Open server" in the site | `VirtualMachine.get_bench_login_url` |
 | Snapshot, also the final snapshot on terminate | `central.api.snapshots.take_snapshot`, `submit_command` |
+| Termination protection | `VirtualMachine.set_termination_protection` |
 | GitHub connect for the server's Pilot | `GitHubConnectionAttempt.bind` |
 
-A System Manager keeps access. A Team SSH Key sync skips a locked server, so its keys never reach it. A trial server starts with no SSH keys. Site sign-in (`claim_site`, `login_site`) stays open. The console registry returns `is_access_locked` on each server, so the console hides these actions.
+A System Manager keeps access. A Team SSH Key sync skips a locked server, so its keys never reach it. The daily automatic snapshot skips a locked server too. A trial server starts with no SSH keys. Site sign-in (`claim_site`, `login_site`) stays open. The console registry returns `is_access_locked` on each server, so the console hides these actions.
 
 `central.api.pilot.get_server_access` returns `is_locked` for the server of the calling Pilot credential. It is for Pilot, which must refuse the site's config edits and config downloads while the server is locked. A credential whose server is not linked yet reads as locked.
 

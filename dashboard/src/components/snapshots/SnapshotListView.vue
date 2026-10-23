@@ -8,6 +8,7 @@ import {
 	type ListViewFilter,
 } from '@/components/common/list-view'
 import RowActionsMenu from '@/components/common/RowActionsMenu.vue'
+import { ACCESS_LOCKED_REASON } from '@/lib/capabilities'
 import { formatDate, money } from '@/lib/format'
 import {
 	SNAPSHOT_STATUS_THEME,
@@ -30,6 +31,8 @@ interface SnapshotListViewProps {
 	/** Search to open with, such as the server a link came from. */
 	initialSearch?: string
 	serverScoped?: boolean
+	/** The server runs a free trial, which takes no snapshots until it converts. */
+	isAccessLocked?: boolean
 }
 
 // Presentational: emits what the customer chose; the page owns the dialogs and calls.
@@ -195,9 +198,11 @@ function rowActions(row: VMSnapshotRow): SnapshotAction[] {
 		row-class="min-h-12 py-1.5"
 		:empty-state="{
 			title: 'No snapshots yet',
-			description: canManage
-				? 'Take a snapshot to save a copy of a server disk that you can use to create another server.'
-				: 'Snapshots save a copy of a server disk. Ask a team admin to take one or grant you permission to manage snapshots.',
+			description: isAccessLocked
+				? ACCESS_LOCKED_REASON
+				: canManage
+					? 'Take a snapshot to save a copy of a server disk that you can use to create another server.'
+					: 'Snapshots save a copy of a server disk. Ask a team admin to take one or grant you permission to manage snapshots.',
 		}"
 		@retry="emit('retry')"
 	>
