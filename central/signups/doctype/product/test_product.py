@@ -57,7 +57,8 @@ class IntegrationTestProduct(IntegrationTestCase):
 
 		self.start("raven-test")
 
-		self.configuration.assert_called_once_with("any-team", "raven")
+		team, product = self.configuration.call_args.args
+		self.assertEqual((team, product.signup_app), ("any-team", "raven"))
 
 	def test_a_disabled_or_unknown_product_is_refused_before_the_region_is_asked(self):
 		self.product("raven-off", enabled=0)
@@ -76,8 +77,9 @@ class IntegrationTestProduct(IntegrationTestCase):
 		self.assertEqual(get_product("raven-test").subtitle, "Chat for your team")
 		self.assertIsNone(get_product("raven-off"))
 
-	def test_the_operator_preview_asks_the_region_for_the_product_app(self):
+	def test_the_operator_preview_asks_the_region_for_the_product_app_and_version(self):
 		product = self.product("raven-test")
+		product.db_set("frappe_version", "version-16")
 
 		with (
 			patch("central.site_provisioning.signup_offering", return_value="pilot"),
@@ -89,8 +91,17 @@ class IntegrationTestProduct(IntegrationTestCase):
 			"pilot",
 			"par-2",
 			0,
-			extra_tags={"has_site": "1", "frappe_version": "develop", "app": "raven"},
+			extra_tags={"has_site": "1", "frappe_version": "version-16", "app": "raven"},
 		)
+
+	def test_a_new_product_runs_on_develop_and_takes_only_a_frappe_branch(self):
+		product = self.product("raven-version")
+		self.assertEqual(product.frappe_version, "develop")
+
+		for version in ("16", "v16", "version-16.1", "main"):
+			product.frappe_version = version
+			with self.subTest(version=version), self.assertRaises(frappe.ValidationError):
+				product.save()
 
 	def test_the_landing_route_is_a_path_on_the_site(self):
 		product = self.product("raven-landing")

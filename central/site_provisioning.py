@@ -10,12 +10,12 @@ from central.identity.doctype.team.team import Team
 from central.integrations.images import list_images
 from central.resource_actions import submit_request
 from central.server_models import DNS_LABEL, SiteCreation
-from central.signups.doctype.product.product import get_signup_product
+from central.signups.doctype.product.product import Product, get_signup_product
 
 SIGNUP_FLOW = "Signup"
-# A trial is a site the image already carries, on the Frappe version a signup runs. The
-# region tags what an image holds, and it matches a tag exactly, so an image that carries
-# no tag is never taken for a yes.
+# A trial is a site the image already carries, on the Frappe version a signup runs. A
+# product names its own version. The region tags what an image holds, and it matches a tag
+# exactly, so an image that carries no tag is never taken for a yes.
 SIGNUP_IMAGE_TAGS = {"has_site": "1", "frappe_version": "develop"}
 # Cargo tags an image with the signup app installed on its site. A product trial asks for
 # its app. A plain trial starts on the bare site, and the region cannot filter on a missing
@@ -30,9 +30,9 @@ def create_trial_site(team: str | None, subdomain: str, request_key: str, produc
 	the same creation path as a bought server, so a trial gets the same record, retry and errors."""
 
 	team = resolve_team(frappe.session.user, team)
-	signup_app = get_signup_product(product).signup_app
+	signup_product = get_signup_product(product)
 	subdomain = validated_subdomain(subdomain)
-	configuration = trial_configuration(team, signup_app)
+	configuration = trial_configuration(team, signup_product)
 	site = SiteCreation(product=product)
 
 	return submit_request(
@@ -124,9 +124,9 @@ def is_subdomain_taken(subdomain: str) -> bool:
 	return bool(domains) and bool(frappe.db.exists("Site Domain", {"name": ["in", domains]}))
 
 
-def trial_zone(team: str, signup_app: str | None = None) -> str:
-	"""The zone of the region a trial site of this team and app starts in."""
-	region = trial_configuration(team, signup_app)["region"]
+def trial_zone(team: str, product: Product | None = None) -> str:
+	"""The zone of the region a trial site of this team and product starts in."""
+	region = trial_configuration(team, product)["region"]
 	return frappe.get_cached_value("Region", region, "proxy_domain")
 
 
@@ -143,7 +143,7 @@ def trial_regions() -> list[str]:
 	)
 
 
-def trial_configuration(team: str, signup_app: str | None = None) -> dict:
+def trial_configuration(team: str, product: Product | None = None) -> dict:
 	"""The region, image and plan a trial site starts on: the first region that offers this team
 	a trial plan and has a trial image. The plan must match the shape the image was baked at,
 	or the region cold-boots instead of restoring a warm image."""
@@ -155,7 +155,7 @@ def trial_configuration(team: str, signup_app: str | None = None) -> dict:
 			continue
 
 		has_plan = True
-		if images := trial_images(team, region, offering, signup_app):
+		if images := trial_images(team, region, offering, product):
 			newest = max(images, key=lambda image: image["created_at"])
 			return {"region": region, "offering": offering, "image_id": newest["id"], "plan": plan}
 
@@ -164,10 +164,10 @@ def trial_configuration(team: str, signup_app: str | None = None) -> dict:
 	frappe.throw(_("No trial image is available right now. Please try again shortly."))
 
 
-def trial_images(team: str, region: str, offering: str, signup_app: str | None) -> list[dict]:
-	"""The region's trial images with the signup app installed, or with no app at all."""
-	if signup_app:
-		tags = product_image_tags(signup_app)
+def trial_images(team: str, region: str, offering: str, product: Product | None) -> list[dict]:
+	"""The region's trial images with the product's app installed, or with no app at all."""
+	if product:
+		tags = product_image_tags(product)
 		return list_images(team, region, offering, SIGNUP_FLOW, extra_tags=tags)["items"]
 
 	images = list_images(team, region, offering, SIGNUP_FLOW, extra_tags=SIGNUP_IMAGE_TAGS)["items"]
@@ -175,9 +175,13 @@ def trial_images(team: str, region: str, offering: str, signup_app: str | None) 
 	return [image for image in images if SIGNUP_APP_TAG not in image["tags"]]
 
 
-def product_image_tags(signup_app: str) -> dict[str, str]:
-	"""The tags of a trial image that has the product's app installed."""
-	return {**SIGNUP_IMAGE_TAGS, SIGNUP_APP_TAG: signup_app}
+def product_image_tags(product: Product) -> dict[str, str]:
+	"""The tags of a trial image that has the product's app installed on its Frappe version."""
+	return {
+		**SIGNUP_IMAGE_TAGS,
+		"frappe_version": product.frappe_version,
+		SIGNUP_APP_TAG: product.signup_app,
+	}
 
 
 def signup_offering() -> str:
