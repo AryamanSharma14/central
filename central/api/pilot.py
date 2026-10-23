@@ -71,8 +71,8 @@ def heartbeat() -> dict:
 @pilot_credential_auth
 def config() -> dict:
 	"""Discovery the pilot pulls on boot (and refreshes on a TTL): where Central's JWKS
-	lives and this deployment's audience id — all a bench needs to verify minted tokens —
-	plus the app update rollout settings.
+	lives and this deployment's audience id — all a bench needs to verify minted tokens.
+	It also returns the app update rollout settings.
 	No issuer is returned: it is Central's own URL (the same host the pilot already calls),
 	and the bench binds tokens by signature + audience, not issuer."""
 	from central.sso import jwks_url

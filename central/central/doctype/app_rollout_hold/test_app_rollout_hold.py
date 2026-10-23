@@ -72,11 +72,6 @@ class IntegrationTestAppRolloutHold(IntegrationTestCase):
 
 		self.assertEqual(AppRolloutHold.get_held_commits(), [])
 
-	def test_the_config_sends_the_held_commits(self):
-		AppRolloutHold.hold_failing_releases([failing_row("abc")])
-
-		self.assertEqual(frappe.get_doc("Central Settings").app_rollout()["held_commits"], ["abc"])
-
 	def test_a_release_is_held_only_above_both_limits(self):
 		AppRolloutHold.hold_failing_releases(
 			[

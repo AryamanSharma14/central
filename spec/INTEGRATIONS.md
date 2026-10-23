@@ -204,8 +204,8 @@ Pilot <── config: held_commits ───────────────
 
 1. After each app update, Pilot writes a `success` or `failed` line that Datum stores in `datum.logs` with `service = 'app_updates'`.
 2. An Insights alert for each region runs the query below on that table every 15 minutes. It returns each release with at least one failed update, and uses the last result of each server.
-3. The alert posts its rows to `hold_app_releases`. Each row has `app`, `to_commit`, `failed`, `total` and `error`. Central refuses the whole request when a row has a different shape, so a wrong alert setup fails in Insights and does not hold part of the batch.
-4. Central holds a release only when at least **Minimum Servers** updated to it and more than **Failure Percent** of them failed. Both are on the App Rollout tab of Central Settings, 5 and 20 by default. Central adds one **App Rollout Hold** for each new commit. The commit is the record name, so a later alert does not add a second hold.
+3. The alert posts its rows to `hold_app_releases` in the body `{"context": {"rows": [...]}}`, which Insights sends for a webhook alert. Each row has `app`, `to_commit`, `failed`, `total` and `error`. Central refuses the whole request when a row has a different shape, so a wrong alert setup fails in Insights and does not hold part of the batch.
+4. Central holds a release only when at least **Minimum Servers** updated to it and more than **Failure Percent** of them failed. Both are on the App Rollout tab of Central Settings, 5 and 20 by default. Central checks each alert alone, so it does not add the servers of one release in different regions. Central adds one **App Rollout Hold** for each new commit. The commit is the record name, so a later alert does not add a second hold.
 5. To offer the release again, an operator ticks **Released** on the hold. A later alert does not hold that commit again.
 
 The alert query:

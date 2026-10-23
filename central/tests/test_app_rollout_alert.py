@@ -3,9 +3,8 @@ from frappe.tests import IntegrationTestCase
 
 from central.api.integrations.insights import ALERT_ROLE, hold_app_releases
 from central.central.doctype.app_rollout_hold.app_rollout_hold import AppRolloutHold
+from central.central.doctype.app_rollout_hold.test_app_rollout_hold import failing_row
 from central.tests.test_iam import ensure_user
-
-FAILING_ROW = {"app": "erpnext", "to_commit": "abc", "failed": 4, "total": 5, "error": "Migration failed"}
 
 
 class TestAppRolloutAlert(IntegrationTestCase):
@@ -21,7 +20,7 @@ class TestAppRolloutAlert(IntegrationTestCase):
 	def test_a_user_without_the_role_cannot_hold_a_release(self):
 		frappe.set_user(ensure_user("alert.denied@example.test"))
 		with self.assertRaises(frappe.PermissionError):
-			hold_app_releases({"rows": [FAILING_ROW]})
+			hold_app_releases({"rows": [failing_row("abc")]})
 
 		frappe.set_user("Administrator")
 		self.assertEqual(self.get_holds(), [])
@@ -30,7 +29,7 @@ class TestAppRolloutAlert(IntegrationTestCase):
 		user = ensure_user("alert.allowed@example.test")
 		frappe.get_doc("User", user).add_roles(ALERT_ROLE)
 		frappe.set_user(user)
-		hold_app_releases({"rows": [FAILING_ROW]})
+		hold_app_releases({"rows": [failing_row("abc")]})
 
 		frappe.set_user("Administrator")
 		self.assertEqual(self.get_holds(), ["abc"])

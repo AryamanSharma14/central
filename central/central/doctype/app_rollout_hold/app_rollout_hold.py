@@ -60,28 +60,26 @@ class AppRolloutHold(Document):
 	@staticmethod
 	def _get_hold(row: object) -> dict:
 		if not isinstance(row, dict):
-			frappe.throw(_("An app rollout alert row must be an object, not {0}.").format(row))
+			frappe.throw(_("An app rollout alert row must be an object."))
 
 		for key in ("app", "to_commit"):
 			value = row.get(key)
 			if not isinstance(value, str) or not 1 <= len(value) <= TEXT_LIMIT:
-				frappe.throw(_("An app rollout alert row needs {0} as text: {1}").format(key, row))
+				frappe.throw(_("An app rollout alert row needs {0} as text.").format(key))
 
 		failed = row.get("failed")
 		total = row.get("total")
 		for value in (failed, total):
 			if isinstance(value, bool) or not isinstance(value, int):
-				frappe.throw(_("An app rollout alert row needs failed and total as numbers: {0}").format(row))
+				frappe.throw(_("An app rollout alert row needs failed and total as numbers."))
 
 		if total < 1 or not 0 <= failed <= total:
 			frappe.throw(
-				_(
-					"An app rollout alert row needs a total of at least 1, and failed between 0 and total: {0}"
-				).format(row)
+				_("An app rollout alert row needs a total of at least 1, and failed between 0 and total.")
 			)
 
 		if "error" not in row or not isinstance(row["error"], str | None):
-			frappe.throw(_("An app rollout alert row needs error as text: {0}").format(row))
+			frappe.throw(_("An app rollout alert row needs error as text."))
 
 		return {
 			"app": row["app"],
@@ -94,4 +92,5 @@ class AppRolloutHold(Document):
 
 
 def on_doctype_update() -> None:
+	frappe.db.add_index("App Rollout Hold", ["app"])
 	frappe.db.add_index("App Rollout Hold", ["released"])

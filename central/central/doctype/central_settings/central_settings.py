@@ -9,6 +9,14 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+# A Failure Percent of 100 would never hold, because a release is held only above it.
+APP_ROLLOUT_PERCENT_LIMITS = (
+	("app_rollout_start_percent", 1, 100),
+	("app_rollout_step_percent", 1, 100),
+	("app_rollout_max_percent", 0, 100),
+	("app_rollout_failure_percent", 1, 99),
+)
+
 
 class CentralSettings(Document):
 	"""Console feature flags, one Check each, read at page boot so the console can hide an area."""
@@ -99,27 +107,19 @@ class CentralSettings(Document):
 			frappe.throw(_("Common Site Config must fit in {0} bytes.").format(MAXIMUM_METADATA_BYTES))
 
 	def validate_app_rollout(self) -> None:
-		for fieldname in (
-			"app_rollout_start_percent",
-			"app_rollout_step_percent",
-			"app_rollout_failure_percent",
-		):
+		for fieldname, lowest, highest in APP_ROLLOUT_PERCENT_LIMITS:
 			value = self.get(fieldname)
-			if not 1 <= value <= 100:
+			if not lowest <= value <= highest:
 				label = _(self.meta.get_label(fieldname))
-				frappe.throw(_("{0} must be between 1 and 100, not {1}.").format(label, value))
+				frappe.throw(
+					_("{0} must be between {1} and {2}, not {3}.").format(label, lowest, highest, value)
+				)
 
 		for fieldname in ("app_rollout_interval_hours", "app_rollout_minimum_servers"):
 			value = self.get(fieldname)
 			if value < 1:
 				label = _(self.meta.get_label(fieldname))
 				frappe.throw(_("{0} must be at least 1, not {1}.").format(label, value))
-
-		if not 0 <= self.app_rollout_max_percent <= 100:
-			label = _(self.meta.get_label("app_rollout_max_percent"))
-			frappe.throw(
-				_("{0} must be between 0 and 100, not {1}.").format(label, self.app_rollout_max_percent)
-			)
 
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
