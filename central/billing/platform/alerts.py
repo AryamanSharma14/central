@@ -275,10 +275,8 @@ def _email(title: str, alerts: list[dict]) -> bool:
 
 def _raven_message(title: str, alerts: list[dict]) -> str:
 	"""The alerts as Raven message HTML: the title, then one line for each alert."""
-	lines = "".join(
-		f"<li><code>{kind}</code> {reference}: {detail}</li>"
-		for kind, reference, detail in map(_row, alerts[:MAX_ROWS])
-	)
+	rows = [_row(alert) for alert in alerts[:MAX_ROWS]]
+	lines = "".join(f"<li><code>{kind}</code> {reference}: {detail}</li>" for kind, reference, detail in rows)
 	hidden = len(alerts) - MAX_ROWS
 	footer = f"<p>{hidden} more alerts are in the Error Log.</p>" if hidden > 0 else ""
 	return f"<p><strong>{frappe.utils.escape_html(title)}</strong></p><ul>{lines}</ul>{footer}"
