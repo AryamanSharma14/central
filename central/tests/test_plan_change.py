@@ -133,3 +133,26 @@ class TestPilotPlanChange(PlanChangeCase):
 			result = billing_api.change_plan(plan="plan-2vcpu")
 
 		self.assertIn("/upgrading?", result["progress_url"])
+
+	def test_plans_with_a_smaller_disk_are_not_offered(self):
+		"""A plan change takes the plan's own disk, and a server's disk can't shrink."""
+		self.server.db_set({"disk_gigabytes": 25, "plan": None})
+		menu = {
+			"currency": "USD",
+			"plans": {
+				"general": [
+					{
+						"plan": f"plan-{disk}gb",
+						"title": f"{disk} GB",
+						"rate": 10,
+						"includes": [{"resource_type": "Disk", "quantity": disk, "unit": "GB"}],
+					}
+					for disk in (20, 25, 50)
+				]
+			},
+		}
+
+		with patch("central.billing.api.dashboard.catalog.get_eligible_plans", return_value=menu):
+			options = billing_api.get_plan_options()
+
+		self.assertEqual([plan["name"] for plan in options["plans"]], ["plan-25gb", "plan-50gb"])
