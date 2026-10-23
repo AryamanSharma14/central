@@ -222,7 +222,7 @@ const menu = computed(() => {
 
 		<div class="flex shrink-0 gap-2">
 			<Button
-				v-if="details && actions.terminate"
+				v-if="details && actions.terminate && !actions.isAccessLocked"
 				variant="ghost"
 				:icon="isProtected ? 'lucide-lock' : 'lucide-lock-open'"
 				:label="protectionLabel"

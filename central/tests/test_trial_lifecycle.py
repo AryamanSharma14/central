@@ -264,6 +264,18 @@ class TestTrialLifecycle(TrialOnAMachine):
 			frappe.db.count("Resource Action", {"server": self.server.name, "action": "terminate"}), 2
 		)
 
+	def test_a_protected_trial_server_is_kept_with_the_reason(self):
+		self.site().db_set({"trial_state": "Ended", "trial_deletes_on": nowdate()})
+		frappe.db.set_value("Virtual Machine", self.server.name, "is_termination_protected", 1)
+
+		site = self.run_on(0)
+
+		self.assertEqual(site.trial_state, "Ended")
+		self.assertIn("Termination protection is on", site.trial_error)
+		self.assertFalse(
+			frappe.db.exists("Resource Action", {"server": self.server.name, "action": "terminate"})
+		)
+
 	def test_a_failed_stop_leaves_the_reason_on_the_site(self):
 		self.site().db_set("trial_state", "Ended")
 		with (

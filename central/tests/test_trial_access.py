@@ -41,6 +41,30 @@ class TestTrialServerAccess(TrialOnAMachine):
 		with self.set_user(self.member), self.assertRaisesRegex(frappe.PermissionError, LOCKED):
 			take_snapshot(self.team.name, self.server.name)
 
+	def test_an_open_trial_refuses_termination_protection(self):
+		with (
+			self.set_user(self.member),
+			patch("central.integrations.servers.set_termination_protection") as protect,
+			self.assertRaisesRegex(frappe.PermissionError, LOCKED),
+		):
+			self.machine().set_termination_protection(True)
+
+		protect.assert_not_called()
+
+	def test_the_daily_snapshot_skips_an_open_trial(self):
+		from central.infrastructure.doctype.vm_snapshot import vm_snapshot
+
+		frappe.db.set_value("Region", self.server.region, "automatic_snapshots", 1)
+		frappe.db.set_value("Virtual Machine", self.server.name, "status", "Running")
+		with patch.object(vm_snapshot, "_take_automatic_snapshot") as take:
+			vm_snapshot.take_automatic_snapshots()
+			take.assert_not_called()
+
+			self.site().db_set("trial_state", "Converted")
+			vm_snapshot.take_automatic_snapshots()
+
+		self.assertEqual([call.args[0].name for call in take.call_args_list], [self.server.name])
+
 	def test_an_ended_trial_stays_locked(self):
 		self.site().db_set("trial_state", "Ended")
 
