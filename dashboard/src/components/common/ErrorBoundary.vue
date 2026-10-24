@@ -12,9 +12,13 @@ const failed = ref(false)
 const route = useRoute()
 const { getContactSupportOption } = useSupport()
 
-// The ticket names the page, so the customer does not have to.
+// The ticket names the page by its route pattern, such as /join/:token. The real path
+// can hold an invitation token, which must not reach a third-party URL.
 const supportAction = computed(() => {
-	const option = getContactSupportOption({ Page: route.fullPath })
+	const option = getContactSupportOption({
+		Page:
+			route.matched[route.matched.length - 1]?.path ?? String(route.name ?? ''),
+	})
 	return option
 		? { label: 'Contact support', onClick: option.onClick }
 		: undefined
