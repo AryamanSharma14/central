@@ -11,14 +11,17 @@ from central.api.teams import (
 	impersonate_team_owner,
 	invite_team_member,
 	restore_team,
+	suspend_team,
+	unsuspend_team,
 )
 from central.iam import can
 from central.services.ai import stop_team_keys
+from central.services.doctype.team_service.team_service import STORAGE_SERVICE
 from central.tests.test_team_management import create_user
 from central.tests.utils import ensure_server
 
 
-class TestTeamArchiveAndImpersonation(IntegrationTestCase):
+class TestTeamLifecycle(IntegrationTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.owner = create_user("archive.owner@example.test")
@@ -220,3 +223,71 @@ class TestTeamArchiveAndImpersonation(IntegrationTestCase):
 
 		frappe.set_user(outsider)
 		self.assertEqual(my_teams(view_as=self.team.name), [])
+
+	def test_an_operator_suspends_a_team_and_its_servers_stop(self):
+		running = ensure_server("suspend-running", self.team.name, atlas_vm_id="atlas-1")
+		ensure_server("suspend-stopped", self.team.name, status="Stopped", atlas_vm_id="atlas-2")
+
+		frappe.set_user(self.operator)
+		with self.assertRaises(frappe.ValidationError):
+			suspend_team(self.team.name, " ")
+		bucket = frappe.get_doc(
+			{
+				"doctype": "Team Service",
+				"name": f"{self.team.name}-bucket",
+				"team": self.team.name,
+				"add_on_service": STORAGE_SERVICE,
+				"status": "Active",
+			}
+		)
+		bucket.db_insert()
+		with (
+			patch("central.resource_actions.submit_command") as submit_command,
+			patch("central.services.ai.set_team_suspended") as set_team_suspended,
+			patch("central.notification.engine.dispatch") as dispatch,
+			patch(
+				"central.services.doctype.team_service.team_service.TeamService.rotate_credentials",
+				autospec=True,
+			) as rotate_credentials,
+		):
+			suspend_team(self.team.name, "Phishing report")
+
+		submit_command.assert_called_once_with("stop", self.team.name, running)
+		self.assertEqual([call.args[0].name for call in rotate_credentials.call_args_list], [bucket.name])
+		set_team_suspended.assert_called_once_with(self.team.name, True)
+		dispatch.assert_called_once_with(self.team.name, "team_suspended", affected_user=self.owner)
+		self.assertEqual(frappe.db.get_value("Team", self.team.name, "status"), "Suspended")
+		self.assertFalse(can(self.admin, self.team.name, "team:edit"))
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment", {"reference_name": self.team.name, "content": ("like", "%Phishing report%")}
+			)
+		)
+
+		frappe.set_user(self.admin)
+		listed = next(team for team in my_teams() if team["name"] == self.team.name)
+		self.assertEqual(listed["status"], "Suspended")
+
+	def test_an_operator_unsuspends_a_team_and_its_servers_stay_stopped(self):
+		frappe.set_user(self.operator)
+		with patch("central.services.ai.set_team_suspended"), patch("central.notification.engine.dispatch"):
+			suspend_team(self.team.name, "Abuse")
+		with (
+			patch("central.resource_actions.submit_command") as submit_command,
+			patch("central.services.ai.set_team_suspended") as set_team_suspended,
+			patch("central.notification.engine.dispatch") as dispatch,
+		):
+			unsuspend_team(self.team.name)
+
+		submit_command.assert_not_called()
+		set_team_suspended.assert_called_once_with(self.team.name, False)
+		dispatch.assert_called_once_with(self.team.name, "team_unsuspended", affected_user=self.owner)
+		self.assertEqual(frappe.db.get_value("Team", self.team.name, "status"), "Active")
+		self.assertTrue(can(self.admin, self.team.name, "team:edit"))
+
+	def test_only_an_operator_can_suspend_or_unsuspend(self):
+		frappe.set_user(self.owner)
+		with self.assertRaises(frappe.PermissionError):
+			suspend_team(self.team.name, "Testing")
+		with self.assertRaises(frappe.PermissionError):
+			unsuspend_team(self.team.name)

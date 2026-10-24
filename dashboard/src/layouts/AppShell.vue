@@ -16,6 +16,7 @@ import Sidebar from '@/components/navigation/Sidebar.vue'
 import NotificationsPanel from '@/components/notifications/NotificationsPanel.vue'
 import OnboardingDialog from '@/components/onboarding/OnboardingDialog.vue'
 import SettingsModal from '@/components/settings/SettingsModal.vue'
+import SuspendedTeamNotice from '@/components/team/SuspendedTeamNotice.vue'
 import { useBreadcrumbs } from '@/composables/useBreadcrumbs'
 import { useIsMobile } from '@/composables/useIsMobile'
 import { useNotificationsRealtime } from '@/composables/useNotifications'
@@ -24,6 +25,7 @@ import {
 	searchOpen,
 	useSearchShortcut,
 } from '@/composables/useSearch'
+import { useSession } from '@/composables/useSession'
 import { useSettingsShortcut } from '@/composables/useSettings'
 import { teamSwitcherOpen } from '@/composables/useTeamSwitcher'
 
@@ -33,6 +35,7 @@ const SearchDialog = defineAsyncComponent(
 const searchMounted = ref(false)
 
 useNotificationsRealtime()
+const { isActiveTeamSuspended } = useSession()
 useSearchShortcut()
 useSettingsShortcut()
 
@@ -82,7 +85,8 @@ const breadcrumbs = computed(
 			class="min-h-0 flex-1 overflow-hidden"
 			style="view-transition-name: page"
 		>
-			<router-view />
+			<SuspendedTeamNotice v-if="isActiveTeamSuspended" />
+			<router-view v-else />
 		</main>
 
 		<MobileNav>
@@ -119,7 +123,8 @@ const breadcrumbs = computed(
 			class="min-h-0 flex-1 overflow-hidden"
 			style="view-transition-name: page"
 		>
-			<router-view />
+			<SuspendedTeamNotice v-if="isActiveTeamSuspended" />
+			<router-view v-else />
 		</div>
 	</DesktopShell>
 

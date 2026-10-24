@@ -19,14 +19,14 @@ function startSession(
 	pathname,
 	storage,
 	storageBlocked = false,
-	{ search = '', tabStorage = new Map(), extraTeams = [] } = {},
+	{ search = '', tabStorage = new Map(), extraTeams = [], teams } = {},
 ) {
 	const navigations = []
 	const rosterReads = []
 	const rosterParams = []
 	const addresses = []
 	const exports = {}
-	const roster = [
+	const roster = teams ?? [
 		{ name: 'team-a', label: 'Acme', status: 'Active' },
 		{ name: 'team-b', label: 'Pied Piper', status: 'Active' },
 		...extraTeams,
@@ -194,4 +194,18 @@ test('switching to another team ends the impersonation', () => {
 	session.setActiveTeam('team-a')
 
 	assert.equal(tabStorage.has('central.console.viewAs'), false)
+})
+
+test('a suspended team is listed but an active team is selected first', () => {
+	const storage = new Map()
+	const { session } = startSession('/dashboard/servers', storage, false, {
+		teams: [
+			{ name: 'team-a', label: 'Acme', status: 'Suspended' },
+			{ name: 'team-b', label: 'Pied Piper', status: 'Active' },
+		],
+	})
+
+	assert.equal(session.activeTeam.value, 'team-b')
+	assert.equal(session.isActiveTeamSuspended.value, false)
+	assert.equal(session.teams.value.length, 2)
 })
