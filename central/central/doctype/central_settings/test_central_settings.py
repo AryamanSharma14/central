@@ -71,13 +71,12 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 		settings.save()
 
 	def test_help_links_send_an_empty_url_as_none_so_the_console_hides_it(self):
-		url = "https://support.test/helpdesk/my-tickets/new"
-		self.addCleanup(
-			frappe.db.set_single_value,
-			"Central Settings",
-			"support_ticket_url",
-			frappe.db.get_single_value("Central Settings", "support_ticket_url"),
-		)
+		url = "https://support.test/help/my-tickets/new"
+		saved = {
+			fieldname: frappe.db.get_single_value("Central Settings", fieldname)
+			for fieldname in ("support_ticket_url", "feedback_url")
+		}
+		self.addCleanup(frappe.db.set_single_value, "Central Settings", saved)
 		frappe.db.set_single_value("Central Settings", {"support_ticket_url": url, "feedback_url": ""})
 
 		links = frappe.get_cached_doc("Central Settings").help_links()
