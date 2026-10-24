@@ -22,6 +22,7 @@ from central.billing.gateways.base import (
 	NormalisedEvent,
 	PaymentResult,
 	RefundResult,
+	VerifiedPayment,
 	WebhookNotFound,
 	header_value,
 )
@@ -265,6 +266,45 @@ class RazorpayAdapter(GatewayAdapter):
 		crediting path must read it from here, never from the request."""
 		return self._client().payment.fetch(payment_id)
 
+	def verify_payment(self, payment_id: str) -> VerifiedPayment:
+		try:
+			return _verified(self._client().payment.fetch(payment_id))
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
+
+	def find_order_payment(self, order_id: str) -> VerifiedPayment | None:
+		"""An in-app order is an order (`order_`); a hosted one is a Payment Link (`plink_`)."""
+		if order_id.startswith("plink_"):
+			return self.checkout_payment(order_id)
+		try:
+			payments = (self._client().order.payments(order_id) or {}).get("items") or []
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
+		captured = next((p for p in payments if p.get("status") == "captured"), None)
+		return _verified(captured) if captured else None
+
+	def checkout_payment(self, session_id: str) -> VerifiedPayment | None:
+		link = self.get_checkout_session(session_id)
+		if link.get("status") != "paid":
+			return None
+		captured = next((p for p in link.get("payments") or [] if p.get("status") == "captured"), None)
+		if not captured:
+			return None
+		return VerifiedPayment(
+			payment_id=captured.get("payment_id"),
+			captured=True,
+			amount=frappe.utils.flt(link.get("amount_paid")) / 100,
+			currency=(link.get("currency") or "").upper(),
+			order_id=session_id,
+		)
+
+	@staticmethod
+	def payment_from_event(payload: dict) -> VerifiedPayment | None:
+		"""The payment entity of a signed Razorpay event. Its `notes` are never read:
+		Checkout lets the payer set them."""
+		entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity")
+		return _verified(entity) if entity and entity.get("id") else None
+
 	def create_order(
 		self, amount, currency: str, receipt: str, notes: dict | None = None, customer: str | None = None
 	) -> dict:
@@ -378,3 +418,14 @@ class RazorpayAdapter(GatewayAdapter):
 
 	def get_mandate_status(self, mandate_reference: str) -> str:
 		return self._client().invoice.fetch(mandate_reference).get("status")
+
+
+def _verified(payment: dict) -> VerifiedPayment:
+	"""A Razorpay payment entity, read back as what the gateway says was paid."""
+	return VerifiedPayment(
+		payment_id=payment.get("id"),
+		captured=payment.get("status") == "captured",
+		amount=frappe.utils.flt(payment.get("amount")) / 100,
+		currency=(payment.get("currency") or "").upper(),
+		order_id=payment.get("order_id"),
+	)

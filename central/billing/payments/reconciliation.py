@@ -38,6 +38,10 @@ _UNSETTLED_INVOICE = ("Open", "Overdue")
 
 GRACE_MINUTES = 30
 ALERT_AFTER_HOURS = 24
+# A customer-present checkout (UPI collect, 3DS) may complete slowly; fail it only after this.
+CHECKOUT_OPEN_HOURS = 24
+# A top-up nobody paid within this long is expired, so it stops being asked about.
+TOP_UP_EXPIRES_HOURS = 7 * 24
 # A gateway forgets an idempotency key after about a day. Inside that window, re-sending
 # a charge is deduped by the gateway; outside it, the same request would be a second one.
 KEY_REPLAY_HOURS = 24
@@ -141,6 +145,7 @@ def run_reconciliation(now=None) -> list:
 
 	unsettled = _captured_unsettled_attempts(cutoff)
 	results += [reconcile_captured_attempt(name, now=now) for name in unsettled]
+	results += reconcile_top_up_orders(now=now)
 	return results
 
 
@@ -177,10 +182,7 @@ def _resolve_unanswered(attempt, now=None) -> dict:
 	age_hours = frappe.utils.time_diff_in_hours(now, started)
 
 	if not attempt.payment_method:
-		# A customer-present checkout that was never completed. No money can move
-		# without the customer, and there is nothing to re-send.
-		_resolve_failed(attempt, "checkout never completed")
-		return {"attempt": attempt.name, "resolved": "Failed", "reason": "no_txn"}
+		return _resolve_checkout(attempt, age_hours)
 
 	if age_hours >= KEY_REPLAY_HOURS:
 		_alert_ops(attempt, "no transaction id, too old to re-send safely")
@@ -197,7 +199,54 @@ def _resolve_unanswered(attempt, now=None) -> dict:
 	return {"attempt": attempt.name, "resolved": status, "replayed": True}
 
 
-def _resolve_paid(attempt):
+def _resolve_checkout(attempt, age_hours: float) -> dict:
+	"""A customer-present checkout we never heard back from. Ask the gateway about the
+	order we created for it: the payer may have paid slowly (UPI collect, 3DS), so the
+	attempt is failed only once the checkout has had a day to complete."""
+	payment = None
+	if attempt.gateway_order_id:
+		payment = _adapter(attempt.gateway).find_order_payment(attempt.gateway_order_id)
+	if payment:
+		attempt.gateway_transaction_id = payment.payment_id
+		_resolve_paid(attempt, payment)
+		return {"attempt": attempt.name, "resolved": "paid", "reason": "checkout_paid"}
+	if age_hours < CHECKOUT_OPEN_HOURS:
+		return {"attempt": attempt.name, "unresolved": "awaiting_payer"}
+	_resolve_failed(attempt, "checkout never completed")
+	return {"attempt": attempt.name, "resolved": "Failed", "reason": "no_txn"}
+
+
+def reconcile_top_up_orders(now=None) -> list[dict]:
+	"""Credit top-ups whose payment landed but whose callback and webhook were both lost,
+	and expire the ones nobody paid."""
+	from central.billing.doctype.top_up_order.top_up_order import TopupOrder
+	from central.billing.gateways.base import GatewayUnsupported
+
+	now = frappe.utils.get_datetime(now or frappe.utils.now_datetime())
+	results = []
+	for name in frappe.get_all(
+		"Top-up Order",
+		filters={
+			"status": "Created",
+			"gateway_order_id": ["is", "set"],
+			"creation": ["<=", frappe.utils.add_to_date(now, minutes=-GRACE_MINUTES)],
+		},
+		pluck="name",
+	):
+		order = frappe.get_doc("Top-up Order", name)
+		try:
+			payment = _adapter(order.gateway).find_order_payment(order.gateway_order_id)
+		except GatewayUnsupported:
+			payment = None
+		if payment:
+			results.append({"top_up_order": name, **order.credit_wallet(payment)})
+		elif frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
+			order.db_set("status", "Expired")
+			results.append({"top_up_order": name, "expired": True})
+	return results
+
+
+def _resolve_paid(attempt, payment=None):
 	"""Settle through the same idempotent path a webhook uses; tag provenance."""
 	from central.billing.payments import charges
 
@@ -205,7 +254,7 @@ def _resolve_paid(attempt):
 	attempt.completed_at = frappe.utils.now_datetime()
 	attempt.resolved_by = "Reconciliation"
 	attempt.save(ignore_permissions=True)
-	charges._settle_invoice(attempt)  # idempotent: a duplicate webhook would no-op too
+	charges._settle_invoice(attempt, payment)
 
 
 def _resolve_failed(attempt, reason: str):

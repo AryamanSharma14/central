@@ -42,6 +42,31 @@ class PaymentResult:
 	raw: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class VerifiedPayment:
+	"""A payment as the gateway reports it, from a server-side read or a signed webhook.
+
+	`order_id` is the gateway object Central created for the payer (a Razorpay order, a
+	Stripe PaymentIntent). `receipt` is Central's own reference, where only Central can set
+	it (Stripe metadata). Never fill either from a field the payer can set, such as Razorpay
+	payment notes."""
+
+	payment_id: str
+	captured: bool
+	amount: float  # major units
+	currency: str
+	order_id: str | None = None
+	receipt: str | None = None
+
+	def covers(self, amount, currency: str) -> bool:
+		"""Whether this payment is captured, in `currency`, for at least `amount`."""
+		return (
+			self.captured
+			and (self.currency or "").upper() == (currency or "").upper()
+			and frappe.utils.flt(self.amount, 2) + 0.005 >= frappe.utils.flt(amount, 2)
+		)
+
+
 @dataclass
 class RefundResult:
 	success: bool
@@ -252,6 +277,23 @@ class GatewayAdapter(ABC):
 	def get_checkout_session(self, session_id: str) -> dict:
 		"""Retrieve a hosted-checkout session to confirm it was paid (server-side)."""
 		raise GatewayUnsupported(f"{type(self).__name__} does not support get_checkout_session")
+
+	def verify_payment(self, payment_id: str) -> VerifiedPayment:
+		"""Read one payment back from the gateway (server-side)."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support verify_payment")
+
+	def find_order_payment(self, order_id: str) -> VerifiedPayment | None:
+		"""The captured payment on a gateway order Central created, or None while it has none."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support find_order_payment")
+
+	def checkout_payment(self, session_id: str) -> VerifiedPayment | None:
+		"""The payment on a hosted checkout, or None while it is unpaid. `order_id` is the session."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support checkout_payment")
+
+	@staticmethod
+	def payment_from_event(payload: dict) -> VerifiedPayment | None:
+		"""The payment a verified webhook body carries, or None if it carries none."""
+		return None
 
 	def create_customer(self, team) -> str:
 		raise GatewayUnsupported(f"{type(self).__name__} does not support create_customer")

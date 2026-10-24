@@ -12,7 +12,7 @@ from central.billing.gateways.base import PaymentResult
 from central.billing.payments import charges, collection, payments
 from central.billing.tests.test_stripe_adapter import make_stripe_gateway
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
-from central.billing.tests.utils import ensure_team, make_plan
+from central.billing.tests.utils import ensure_team, make_plan, stripe_intent
 
 TEAM = "team-fallback"
 PLAN = "bundle-fallback-test"
@@ -105,7 +105,7 @@ class FallbackTestBase(IntegrationTestCase):
 		payload = {
 			"id": f"evt_{txn_id}",
 			"type": "payment_intent.payment_failed",
-			"data": {"object": {"id": txn_id}},
+			"data": {"object": stripe_intent(txn_id, "payment_intent.payment_failed")},
 		}
 		return (
 			frappe.get_doc(

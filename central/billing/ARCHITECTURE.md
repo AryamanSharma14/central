@@ -134,7 +134,8 @@ Project ──team, ──title, ──enabled, ──spending_limit          (c
 ```
 Invoice ──team, ──items─→ [C]Invoice Line Item
 Invoice Line Item ──project, ──project_title                  (snapshot tag, stamped at generation; see §2.1)
-Payment Attempt ──invoice, ──team, ──gateway, ──payment_method
+Payment Attempt ──invoice, ──team, ──gateway, ──payment_method, gateway_order_id   (on-session and hosted payments)
+Top-up Order ──team, ──gateway, ──ledger_entry, gateway_order_id    (a wallet top-up, stored before the payer acts)
 Refund ──payment_attempt, ──invoice, ──team
 Credit Ledger Entry ──team, ──currency                        (append-only)
 Credit Wallet ──team                           (lock anchor / cached balance — one per (team,currency))
@@ -512,6 +513,17 @@ charges.pay_invoice → create_invoice_payment_order (via gateway adapter)
   → webhook arrives → apply_webhook → Payment Attempt Paid → Invoice Paid
   → failure → collection.collect_invoice walks primary → backup methods (escalate, don't repeat)
 ```
+**How a payment is matched to what Central asked for.** Before the payer acts, Central stores a row for the payment: a Payment Attempt for an invoice, a Top-up Order for a wallet top-up. Its name is the receipt sent to the gateway, and the gateway's order id (a Razorpay order, a Stripe PaymentIntent or Checkout Session, a PayPal order, a Razorpay Payment Link) is stored on it. The webhook, every confirm route, the pilot poll and reconciliation read the payment back as a `VerifiedPayment` (a server-side read or a signed webhook body) and find the row by the gateway's ids, or by `metadata.receipt` on Stripe, which only the secret key can set. Razorpay payment notes are never read, because Checkout lets the payer set them. The payment must be captured, in the row's currency, for at least its amount:
+
+| Case | Result |
+|---|---|
+| No stored row | Nothing is settled or credited. The event is Ignored. |
+| Short or another currency | Nothing is settled. The invoice gets a comment and an Error Log entry. |
+| More than is due | The invoice is Paid and the surplus goes to the wallet. |
+| The invoice is no longer Open or Overdue | The payment goes to the wallet, once per payment id, and an operator is told. |
+
+Reconciliation asks the gateway about the stored order of an unanswered on-session attempt, and fails it only after `CHECKOUT_OPEN_HOURS`. It credits a Top-up Order that was paid but never confirmed, and expires one nobody paid after `TOP_UP_EXPIRES_HOURS`.
+
 Method resolution is team-wide, not scoped by anything — `collection.ordered_methods`
 returns the team's active methods, priority order. `charges._resolve_method` (manual
 "pay now") and `collection.next_method_for`/`collect_invoice` (the real auto-charge
@@ -529,22 +541,25 @@ stateDiagram-v2
     Day7 --> PastDue: still unpaid
     PastDue --> Suspended: grace elapsed
     Suspended --> Current: paid
+    Suspended --> Terminated: an operator decides
     Day1 --> Current: paid
     Day3 --> Current: paid
     Day7 --> Current: paid
     PastDue --> Current: paid
     note right of Suspended
-        Running servers are stopped and
-        the customer cannot start them
+        Central stops the team's running
+        servers. Paying starts them again.
     end note
 ```
 ```
 daily run_dunning → process_invoice_dunning(invoice)
-  → retry_payment on Day 1/3/7 → account_standing past_due
-  → day 14: subscriptions.suspend_for_nonpayment: every subscription Suspended, running servers stopped
-  → day 44: termination_due action; platform.alerts.termination_due pages an operator, nothing is deleted
-Invoice.on_update (settled, no other Overdue invoice) → subscriptions.restore_after_payment
-  → every subscription Current, servers dunning stopped are started
+  → retry_payment on Day 1/3/7 → account_standing past_due → suspend → termination due
+  → suspend: subscriptions.suspend_for_nonpayment moves every subscription of the team to
+    Suspended, stops its running servers and flags them stopped_for_nonpayment
+  → paid: Invoice.on_update → subscriptions.restore_after_payment (standing Current, start
+    what dunning stopped) once the team has no other overdue invoice
+  → termination due: platform.alerts.termination_due pages an operator; nothing is deleted
+  → while behind on payment a team cannot create, resize up or subscribe (PAYMENT_OVERDUE)
 ```
 Billing stops and starts a server as the system (`resource_actions.submit_billing_command`), because a payment can arrive by webhook as Guest. `submit_command` refuses a customer `start` while the server's subscription is Suspended.
 

@@ -145,15 +145,19 @@ def finish_razorpay_topup(team: str, gateway: str, order_id: str, amount: float)
 	payment_id = f"pay_e2e{frappe.generate_hash(length=14)}"
 	signature = hmac.new(secret.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
 
-	# confirm_topup now reads the captured amount back from the gateway (the
-	# callback signature doesn't bind the amount) — but our payment id is synthetic,
-	# so Razorpay has nothing to fetch. Stub just that read; everything else is real.
+	# confirm_topup reads the payment back from the gateway (the callback signature
+	# doesn't bind the amount) — but our payment id is synthetic, so Razorpay has
+	# nothing to fetch. Stub just that read, as the payment for the stored order.
 	from unittest.mock import patch
 
+	from central.billing.gateways.base import VerifiedPayment
 	from central.billing.gateways.razorpay_adapter import RazorpayAdapter
 
-	captured = {"status": "captured", "amount": round(frappe.utils.flt(amount) * 100), "currency": "INR"}
-	with patch.object(RazorpayAdapter, "get_payment", return_value=captured):
+	order = frappe.db.get_value(
+		"Top-up Order", {"gateway_order_id": order_id}, ["total", "currency"], as_dict=True
+	)
+	captured = VerifiedPayment(payment_id, True, order.total, order.currency, order_id=order_id)
+	with patch.object(RazorpayAdapter, "verify_payment", return_value=captured):
 		return confirm_topup(
 			team=team,
 			amount=amount,
@@ -323,19 +327,26 @@ def deliver_webhook(attempt: str) -> dict:
 
 	att = frappe.get_doc("Payment Attempt", attempt)
 	adapter_key = frappe.db.get_value("Payment Gateway", att.gateway, "adapter_key")
+	minor = round(frappe.utils.flt(att.amount) * 100)
 	if adapter_key == "Stripe":
 		event_type = "payment_intent.succeeded"
-		payload = {
-			"id": f"evt_e2e{frappe.generate_hash(10)}",
-			"type": event_type,
-			"data": {"object": {"id": att.gateway_transaction_id}},
+		intent = {
+			"id": att.gateway_transaction_id,
+			"object": "payment_intent",
+			"status": "succeeded",
+			"amount_received": minor,
+			"currency": (att.currency or "").lower(),
 		}
+		payload = {"id": f"evt_e2e{frappe.generate_hash(10)}", "type": event_type, "data": {"object": intent}}
 	else:
 		event_type = "payment.captured"
-		payload = {
-			"event": event_type,
-			"payload": {"payment": {"entity": {"id": att.gateway_transaction_id}}},
+		entity = {
+			"id": att.gateway_transaction_id,
+			"status": "captured",
+			"amount": minor,
+			"currency": att.currency,
 		}
+		payload = {"event": event_type, "payload": {"payment": {"entity": entity}}}
 
 	event = frappe.get_doc(
 		{

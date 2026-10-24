@@ -37,4 +37,5 @@ def on_doctype_update() -> None:
 	# The billing run, its dashboards and the money reports filter on these.
 	frappe.db.add_index("Payment Attempt", ["invoice"])
 	frappe.db.add_index("Payment Attempt", ["team"])
+	frappe.db.add_index("Payment Attempt", ["gateway_order_id"])
 	frappe.db.add_index("Payment Attempt", ["status", "creation"])

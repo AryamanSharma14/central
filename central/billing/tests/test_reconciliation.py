@@ -50,7 +50,14 @@ class ReconTestBase(IntegrationTestCase):
 		self._purge()
 
 	def _purge(self):
-		for dt in ("Payment Attempt", "Invoice", "Payment Method"):
+		for dt in (
+			"Payment Attempt",
+			"Invoice",
+			"Payment Method",
+			"Top-up Order",
+			"Credit Ledger Entry",
+			"Credit Wallet",
+		):
 			frappe.db.delete(dt, {"team": TEAM})
 		frappe.db.commit()
 
@@ -160,15 +167,42 @@ class TestReconcile(ReconTestBase):
 		self.assertEqual(frappe.db.get_value("Payment Attempt", attempt, "status"), "Failed")
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
 
-	def test_uncompleted_checkout_is_failed_safely(self):
+	def test_uncompleted_checkout_is_failed_after_a_day(self):
 		inv = self._open_invoice()
 		# No payment method: a customer-present checkout the customer never finished.
 		# No money can have moved, and there is nothing to re-send.
-		attempt = self._ambiguous_attempt(inv, txn=None)
+		attempt = self._ambiguous_attempt(inv, txn=None, minutes_old=25 * 60)
 		with gateway_status("succeeded") as adapter:
 			reconciliation.reconcile_attempt(attempt)
 			adapter.get_transaction_status.assert_not_called()
 		self.assertEqual(frappe.db.get_value("Payment Attempt", attempt, "status"), "Failed")
+
+	def test_a_slow_checkout_is_left_open(self):
+		"""A UPI collect or 3DS checkout can take a while; it is not failed in its first day."""
+		inv = self._open_invoice()
+		attempt = self._ambiguous_attempt(inv, txn=None)
+		frappe.db.set_value("Payment Attempt", attempt, "gateway_order_id", "order_slow")
+		with gateway_status("created") as adapter:
+			adapter.find_order_payment.return_value = None
+			out = reconciliation.reconcile_attempt(attempt)
+		self.assertEqual(out["unresolved"], "awaiting_payer")
+		self.assertEqual(frappe.db.get_value("Payment Attempt", attempt, "status"), "Initiated")
+
+	def test_a_checkout_paid_without_a_callback_is_settled(self):
+		from central.billing.gateways.base import VerifiedPayment
+
+		inv = self._open_invoice()
+		attempt = self._ambiguous_attempt(inv, txn=None)
+		frappe.db.set_value("Payment Attempt", attempt, "gateway_order_id", "order_paid")
+		with gateway_status("created") as adapter:
+			adapter.find_order_payment.return_value = VerifiedPayment(
+				"pay_late", True, 1000, "INR", order_id="order_paid"
+			)
+			reconciliation.reconcile_attempt(attempt)
+		self.assertEqual(
+			frappe.db.get_value("Payment Attempt", attempt, "gateway_transaction_id"), "pay_late"
+		)
+		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Paid")
 
 
 class TestUnansweredCharge(ReconTestBase):
@@ -305,3 +339,36 @@ class TestScan(ReconTestBase):
 		with gateway_status("succeeded"):
 			reconciliation.run_reconciliation()
 		self.assertEqual(frappe.db.get_value("Payment Attempt", old, "status"), "Captured")
+
+
+class TestTopUpReconciliation(ReconTestBase):
+	"""A top-up whose callback and webhook were both lost is credited from the gateway."""
+
+	def _order(self, order_id, hours_old=1):
+		from central.billing.doctype.top_up_order.top_up_order import TopupOrder
+
+		order = TopupOrder.start(TEAM, GATEWAY, "INR", 700, credit=700)
+		order.record_gateway_order(order_id)
+		old = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-hours_old)
+		frappe.db.set_value("Top-up Order", order.name, "creation", old, update_modified=False)
+		return order.name
+
+	def test_a_paid_top_up_is_credited(self):
+		from central.billing.gateways.base import VerifiedPayment
+		from central.billing.revenue import credits
+
+		order = self._order("pi_lost")
+		with gateway_status("succeeded") as adapter:
+			adapter.find_order_payment.return_value = VerifiedPayment(
+				"pi_lost", True, 700, "INR", order_id="pi_lost"
+			)
+			reconciliation.reconcile_top_up_orders()
+		self.assertEqual(frappe.db.get_value("Top-up Order", order, "status"), "Credited")
+		self.assertEqual(credits.get_balance(TEAM)["balance"], 700)
+
+	def test_an_unpaid_top_up_expires(self):
+		order = self._order("pi_never", hours_old=8 * 24)
+		with gateway_status("requires_payment_method") as adapter:
+			adapter.find_order_payment.return_value = None
+			reconciliation.reconcile_top_up_orders()
+		self.assertEqual(frappe.db.get_value("Top-up Order", order, "status"), "Expired")
