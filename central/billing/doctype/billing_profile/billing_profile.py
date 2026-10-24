@@ -133,6 +133,8 @@ class BillingProfile(Document):
 		self.sync_tier_fields()
 
 	def on_update(self):
+		# Before held invoices are released: releasing re-taxes them from the Tax Profile.
+		self.apply_output_tax_on_country_change()
 		self.release_held_invoices()
 		self.refresh_gst_status_on_change()
 		self.enqueue_profile_sync()
@@ -218,6 +220,16 @@ class BillingProfile(Document):
 			reason=self.promotion_basis,
 			amount=self.override_max_spend,
 		)
+
+	def apply_output_tax_on_country_change(self):
+		"""The output tax follows the country, so a corrected signup country is taxed right."""
+		if not (self.has_value_changed("country") or self.has_value_changed("currency")):
+			return
+		if not frappe.db.exists("Tax Profile", self.team):
+			return  # created with the right values when the profile is provisioned
+		from central.billing.payments.provisioning import apply_output_tax_for_country
+
+		apply_output_tax_for_country(self.team)
 
 	def refresh_gst_status_on_change(self):
 		"""A new GSTIN starts with no status and is looked up in the background."""

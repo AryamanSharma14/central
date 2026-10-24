@@ -127,16 +127,36 @@ def ensure_tax_profile(team: str):
 	if frappe.db.exists("Tax Profile", team):
 		return frappe.get_doc("Tax Profile", team)
 
+	return frappe.get_doc({"doctype": "Tax Profile", "team": team, **_output_tax_for(team)}).insert(
+		ignore_permissions=True
+	)
+
+
+def apply_output_tax_for_country(team: str) -> None:
+	"""Make the output tax follow the billing country, until the team is first invoiced.
+
+	The signup IP decides the first country, and the customer may correct it in the
+	billing profile before any invoice is issued. After that the country is locked
+	(`BillingProfile.lock_country_and_currency_after_invoicing`), so the tax is too.
+	Only the country-derived fields change; internal, SEZ and TDS settings are kept."""
+	if frappe.db.exists("Invoice", {"team": team}):
+		return
+	profile = ensure_tax_profile(team)
+	values = _output_tax_for(team)
+	if all(profile.get(field) == value for field, value in values.items()):
+		return
+	profile.update(values)
+	profile.save(ignore_permissions=True)
+
+
+def _output_tax_for(team: str) -> dict:
 	profile = (
 		frappe.db.get_value("Billing Profile", team, ["country", "currency"], as_dict=True) or frappe._dict()
 	)
 	india = (profile.country or "").strip() == "India" or profile.currency == "INR"
-	values = (
-		{"output_tax_type": "GST", "output_tax_rate": settings.default_gst_rate()}
-		if india
-		else {"output_tax_type": "None", "output_tax_rate": 0}
-	)
-	return frappe.get_doc({"doctype": "Tax Profile", "team": team, **values}).insert(ignore_permissions=True)
+	if india:
+		return {"output_tax_type": "GST", "output_tax_rate": settings.default_gst_rate()}
+	return {"output_tax_type": "None", "output_tax_rate": 0}
 
 
 def apply_gst_category(team: str, category: str | None) -> None:
