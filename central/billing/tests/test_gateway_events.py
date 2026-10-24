@@ -52,7 +52,14 @@ class TestGatewayEvents(ChargeTestBase):
 	def test_a_cancelled_authorisation_fails_the_attempt_with_its_reason(self):
 		attempt = self._authorised_attempt(self._open_invoice(), "pi_cancel")
 		event = self._event(
-			"evt_cancel", "payment_intent.canceled", {"id": "pi_cancel", "cancellation_reason": "automatic"}
+			"evt_cancel",
+			"payment_intent.canceled",
+			{
+				"id": "pi_cancel",
+				"object": "payment_intent",
+				"status": "canceled",
+				"cancellation_reason": "automatic",
+			},
 		)
 		with patch("central.billing.payments.collection.collect_invoice") as collect:
 			webhooks.handle_webhook_event(event)

@@ -258,6 +258,8 @@ class RazorpayAdapter(GatewayAdapter):
 		"""HMAC-verify the raw webhook body. No DB writes; first security gate."""
 		secret = self.get_credential("webhook_secret")
 		signature = header_value(headers, "X-Razorpay-Signature")
+		if not secret or not signature:
+			return False  # the SDK would accept a signature made with an empty secret
 		body = payload.decode() if isinstance(payload, bytes) else payload
 		try:
 			self._client().utility.verify_webhook_signature(body, signature, secret)
@@ -266,9 +268,14 @@ class RazorpayAdapter(GatewayAdapter):
 			return False
 
 	def parse_webhook_event(self, payload: dict, headers: dict | None = None) -> NormalisedEvent:
-		"""Razorpay carries the dedupe id in the X-Razorpay-Event-Id header."""
+		"""The dedupe id is built from the signed body. Razorpay's X-Razorpay-Event-Id
+		header is outside the signature, so a replayed body could carry a new one."""
+		entities = payload.get("payload") or {}
+		entity_ids = ":".join(
+			f"{kind}={(entities[kind].get('entity') or {}).get('id')}" for kind in sorted(entities)
+		)
 		return NormalisedEvent(
-			gateway_event_id=header_value(headers, "X-Razorpay-Event-Id"),
+			gateway_event_id=f"{payload.get('event')}:{payload.get('created_at')}:{entity_ids}"[:140],
 			event_type=payload.get("event"),
 			payload=payload,
 		)

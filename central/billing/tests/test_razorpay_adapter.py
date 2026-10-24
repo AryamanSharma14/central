@@ -148,10 +148,12 @@ class TestRazorpayAdapter(GatewayAdapterContract, IntegrationTestCase):
 	def parse_event_inputs(self):
 		payload = {
 			"event": "payment.captured",
+			"created_at": 1700000000,
 			"payload": {"payment": {"entity": {"id": "pay_x", "order_id": "order_x"}}},
 		}
+		# The header id is outside the signature, so the dedupe id comes from the body.
 		headers = {"X-Razorpay-Event-Id": "evt_r1"}
-		return payload, headers, "evt_r1", "payment.captured"
+		return payload, headers, "payment.captured:1700000000:payment=pay_x", "payment.captured"
 
 	def setup_inputs(self):
 		return "Team-1", {"customer_id": "cust_x", "max_amount": 5000}

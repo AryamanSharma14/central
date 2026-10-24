@@ -263,6 +263,17 @@ class PaymentGateway(Document):
 				_("Validate the gateway credentials before enabling it."),
 				title=_("Gateway Not Validated"),
 			)
+		# A webhook with no secret to check it against would be accepted from anyone.
+		if self.is_enabled and not self._has_webhook_secret():
+			frappe.throw(
+				_("Register the webhook, or enter its secret, before enabling the gateway."),
+				title=_("Webhook Secret Missing"),
+			)
+
+	def _has_webhook_secret(self) -> bool:
+		"""Whether a webhook secret is set: typed now, stored (the field then holds a mask),
+		or in site config."""
+		return bool(self.webhook_secret or self.get_adapter().get_credential("webhook_secret"))
 
 	# --- admin actions -------------------------------------------------------
 

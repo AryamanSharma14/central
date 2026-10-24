@@ -73,9 +73,12 @@ class TestStripeWebhookReceiver(IntegrationTestCase):
 		self.assertEqual(enqueue.call_count, 1)  # no second job
 
 
-R_EVENT_ID = "evt_razorpay_webhook_1"
-R_PAYLOAD = b'{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_x"}}}}'
-R_HEADERS = {"X-Razorpay-Signature": "sig", "X-Razorpay-Event-Id": R_EVENT_ID}
+R_PAYLOAD = (
+	b'{"event":"payment.captured","created_at":1700000000,"payload":{"payment":{"entity":{"id":"pay_x"}}}}'
+)
+# Built from the signed body; the X-Razorpay-Event-Id header is outside the signature.
+R_EVENT_ID = "payment.captured:1700000000:payment=pay_x"
+R_HEADERS = {"X-Razorpay-Signature": "sig", "X-Razorpay-Event-Id": "evt_razorpay_webhook_1"}
 
 
 @contextmanager
@@ -108,6 +111,12 @@ class TestRazorpayWebhookReceiver(IntegrationTestCase):
 		self.assertEqual(frappe.local.response.http_status_code, 200)
 		self.assertEqual(self._events(), 1)
 		self.assertEqual(enqueue.call_count, 1)
+
+	def test_a_replay_with_a_new_header_id_is_deduped(self):
+		with razorpay_signature(valid=True), patch("frappe.enqueue"):
+			process_webhook("Razorpay", R_PAYLOAD, R_HEADERS)
+			process_webhook("Razorpay", R_PAYLOAD, {**R_HEADERS, "X-Razorpay-Event-Id": "evt_forged_new"})
+		self.assertEqual(self._events(), 1)
 
 	def test_invalid_signature_returns_400_with_zero_db_writes(self):
 		with razorpay_signature(valid=False), patch("frappe.enqueue") as enqueue:
@@ -254,3 +263,58 @@ class TestWalletTopupWebhookBackstop(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			charges.apply_webhook(self._store_event(pid, amount_paisa=100).name)
 		self.assertEqual(len(self._credits_for(pid)), 0)
+
+
+class TestFailedWebhookIsKept(IntegrationTestCase):
+	"""A handler that raises leaves its work undone, the event Failed with the error, and
+	the hourly sweep applies it again."""
+
+	def setUp(self):
+		from central.billing.tests.test_stripe_adapter import make_stripe_gateway
+
+		self.gateway = make_stripe_gateway().name
+		frappe.db.delete("Webhook Event", {"gateway": self.gateway})
+		self.event = frappe.get_doc(
+			{
+				"doctype": "Webhook Event",
+				"gateway": self.gateway,
+				"gateway_event_id": "evt_crash",
+				"event_type": "payment_intent.succeeded",
+				"raw_payload": "{}",
+				"status": "Received",
+			}
+		).insert(ignore_permissions=True)
+
+	def test_a_crash_marks_the_event_failed_and_undoes_its_writes(self):
+		from central.billing.payments import webhooks
+
+		def crash(event_name):
+			frappe.db.set_value("Webhook Event", event_name, "processed_at", frappe.utils.now_datetime())
+			raise RuntimeError("handler bug")
+
+		with patch("central.billing.payments.charges.apply_webhook", side_effect=crash):
+			webhooks.handle_webhook_event(self.event.name)
+
+		row = frappe.db.get_value(
+			"Webhook Event", self.event.name, ["status", "retry_count", "processed_at", "error"], as_dict=True
+		)
+		self.assertEqual((row.status, row.retry_count, row.processed_at), ("Failed", 1, None))
+		self.assertIn("handler bug", row.error)
+
+	def test_the_sweep_retries_a_failed_event(self):
+		from central.billing.payments import webhooks
+
+		with patch("central.billing.payments.charges.apply_webhook", side_effect=RuntimeError("down")):
+			webhooks.handle_webhook_event(self.event.name)
+		with patch("central.billing.payments.charges.apply_webhook") as apply:
+			retried = webhooks.retry_failed_webhooks()
+		self.assertIn(self.event.name, retried)
+		apply.assert_called_once_with(self.event.name)
+
+	def test_an_event_that_keeps_failing_waits_for_an_operator(self):
+		from central.billing.payments import webhooks
+
+		frappe.db.set_value(
+			"Webhook Event", self.event.name, {"status": "Failed", "retry_count": webhooks.MAX_TRIES}
+		)
+		self.assertNotIn(self.event.name, webhooks.retry_failed_webhooks())
