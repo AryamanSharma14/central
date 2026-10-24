@@ -42,11 +42,14 @@ test('Switch the theme', async ({ page, users }) => {
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 })
 
-test('Asks before deleting the team', async ({ page, users }) => {
+test('Asks the owner to type the team name before archiving', async ({ page, users }) => {
 	const me = await users.signIn()
 
 	await openSettings(page, me, 'Team')
-	await page.getByRole('button', { name: 'Delete', exact: true }).click()
+	await page.getByRole('button', { name: 'Archive', exact: true }).click()
 
-	await expect(page.getByRole('dialog', { name: 'Delete team' })).toContainText("This can't be undone")
+	const dialog = page.getByRole('dialog', { name: 'Archive team' })
+	await expect(dialog.getByText('All servers are terminated')).toBeVisible()
+	await expect(dialog.getByRole('button', { name: 'Archive team' })).toBeDisabled()
+	await expect(dialog.getByLabel(/^Type .* to confirm$/)).toBeVisible()
 })

@@ -574,5 +574,37 @@
   "in_app_body": "{{ context.address }} is ready. Open it from Frappe Cloud to set it up. Your free trial ends on {{ context.ends_on }}.",
   "action_label": "View site",
   "action_route": "/servers/{{ server }}"
+ },
+ {
+  "action_label": null,
+  "action_route": null,
+  "category": "Team",
+  "create_in_app": 0,
+  "direct_recipients": "Affected User",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "event_type": "team_impersonated",
+  "in_app_body": "A member of Frappe Cloud support opened {{ team_name }} as its owner to work on your account.\n\nIf you did not expect this, contact support at support.frappe.io.",
+  "in_app_title": "Frappe Cloud support opened your team",
+  "modified": "2026-10-24 00:00:00",
+  "name": "team_impersonated",
+  "required_cap": "team:manage_members",
+  "severity": "Warning"
+ },
+ {
+  "action_label": null,
+  "action_route": null,
+  "category": "Team",
+  "create_in_app": 0,
+  "direct_recipients": "Affected User",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "event_type": "team_archived",
+  "in_app_body": "{{ team_name }} is archived. Its members can no longer open it. Its invoices and records are kept.\n\nTo use the team again, contact support at support.frappe.io.",
+  "in_app_title": "Your team is archived",
+  "modified": "2026-10-24 00:00:00",
+  "name": "team_archived",
+  "required_cap": "team:delete",
+  "severity": "Info"
  }
 ]
