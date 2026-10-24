@@ -88,7 +88,8 @@ const teamsCall = useCall<Team[], { view_as?: string }>({
 		if (impersonatedTeam && !names.includes(impersonatedTeam))
 			clearImpersonation()
 		if (!activeTeam.value || !names.includes(activeTeam.value)) {
-			selectTeam(teams[0]?.name ?? null)
+			const usable = teams.find((team) => team.status === 'Active') ?? teams[0]
+			selectTeam(usable?.name ?? null)
 		}
 	},
 })
@@ -135,6 +136,11 @@ export function useSession() {
 				(teamsCall.data ?? []).find(
 					(t) => t.is_impersonated && t.name === activeTeam.value,
 				) ?? null,
+		),
+		isActiveTeamSuspended: computed(
+			() =>
+				(teamsCall.data ?? []).find((t) => t.name === activeTeam.value)
+					?.status === 'Suspended',
 		),
 		endImpersonation,
 		setActiveTeam: switchTeam,

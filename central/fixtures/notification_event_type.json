@@ -606,5 +606,37 @@
   "name": "team_archived",
   "required_cap": "team:delete",
   "severity": "Info"
+ },
+ {
+  "action_label": null,
+  "action_route": null,
+  "category": "Team",
+  "create_in_app": 0,
+  "direct_recipients": "Affected User",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "modified": "2026-10-24 00:00:00",
+  "required_cap": "team:delete",
+  "event_type": "team_suspended",
+  "name": "team_suspended",
+  "severity": "Warning",
+  "in_app_title": "Your team is suspended",
+  "in_app_body": "Frappe Cloud support suspended {{ team_name }}. Its members cannot open it, its running servers are stopped and its storage bucket keys no longer work. Its data is kept.\n\nTo find out why, or to ask for it back, contact support at support.frappe.io."
+ },
+ {
+  "action_label": null,
+  "action_route": null,
+  "category": "Team",
+  "create_in_app": 0,
+  "direct_recipients": "Affected User",
+  "docstatus": 0,
+  "doctype": "Notification Event Type",
+  "modified": "2026-10-24 00:00:00",
+  "required_cap": "team:delete",
+  "event_type": "team_unsuspended",
+  "name": "team_unsuspended",
+  "severity": "Success",
+  "in_app_title": "Your team is active again",
+  "in_app_body": "{{ team_name }} is active again, and its members can open it.\n\nServers that were stopped stay stopped. Start them from Frappe Cloud when you need them. Rotate the key of each storage bucket to get a key that works."
  }
 ]

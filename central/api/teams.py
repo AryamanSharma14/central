@@ -166,6 +166,20 @@ def restore_team(team: str) -> dict[str, Any]:
 
 
 @frappe.whitelist(methods=["POST"])
+def suspend_team(team: str, reason: str) -> dict[str, Any]:
+	"""Operator action: suspend the team, for example for abuse."""
+	frappe.get_doc("Team", team).suspend(reason)
+	return {"team": team, "status": "Suspended"}
+
+
+@frappe.whitelist(methods=["POST"])
+def unsuspend_team(team: str) -> dict[str, Any]:
+	"""Operator action: give the team's members access again."""
+	frappe.get_doc("Team", team).unsuspend()
+	return {"team": team, "status": "Active"}
+
+
+@frappe.whitelist(methods=["POST"])
 def impersonate_team_owner(team: str, reason: str, notify_owner: bool | int = 0) -> dict[str, str]:
 	"""Operator action: the console address that opens as this team."""
 	url = frappe.get_doc("Team", team).get_impersonation_url(reason, bool(frappe.utils.cint(notify_owner)))

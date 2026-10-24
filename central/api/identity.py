@@ -33,7 +33,8 @@ def my_teams(view_as: str | None = None) -> list[dict[str, Any]]:
 	"""Teams the signed-in user can switch between in the console — the teams they
 	are an active member of, each with a display label, the owner email, the
 	caller's own role, how many people are in it, when it was created, and the
-	onboarding steps the caller still has to answer as its owner.
+	onboarding steps the caller still has to answer as its owner. A suspended team is listed with
+	its `status`, so the console can say why it cannot open it.
 
 	An operator who impersonates a team owner passes `view_as`, and that team is added
 	with `is_impersonated` set."""
@@ -46,13 +47,21 @@ def my_teams(view_as: str | None = None) -> list[dict[str, Any]]:
 		frappe.qb.from_(member)
 		.join(team)
 		.on(team.name == member.parent)
-		.select(team.name, team.team_name, team.team_logo, team.owner_user, team.creation, member.role)
+		.select(
+			team.name,
+			team.team_name,
+			team.team_logo,
+			team.owner_user,
+			team.creation,
+			team.status,
+			member.role,
+		)
 		.where(
 			(member.parenttype == "Team")
 			& (member.parentfield == "members")
 			& (member.user == user)
 			& (member.status == "Active")
-			& (team.status == "Active")
+			& team.status.isin(("Active", "Suspended"))
 		)
 		.orderby(team.team_name)
 	).run(as_dict=True)
@@ -71,6 +80,7 @@ def my_teams(view_as: str | None = None) -> list[dict[str, Any]]:
 				"role": r.role,
 				"members": 0,
 				"created": r.creation,
+				"status": r.status,
 			},
 		)
 		if _role_rank(r.role) < _role_rank(entry["role"]):
@@ -115,6 +125,7 @@ def _get_impersonated_team(name: str) -> dict[str, Any]:
 		"role": "Owner",
 		"members": 0,
 		"created": team.creation,
+		"status": team.status,
 		"is_impersonated": True,
 	}
 

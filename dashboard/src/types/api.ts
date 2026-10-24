@@ -20,6 +20,8 @@ export interface Team {
 	created: string | null
 	/** The steps the caller still has to answer as owner. Empty for a team they do not own. */
 	onboarding: OnboardingStepKey[]
+	/** A suspended team is listed so the console can say why it cannot open it. */
+	status: 'Active' | 'Suspended'
 	/** Set when a System Manager opened the console as this team's owner. */
 	is_impersonated?: boolean
 }

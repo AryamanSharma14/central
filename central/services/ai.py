@@ -49,6 +49,12 @@ def stop_team_keys(team: str) -> None:
 			client.revoke_key(team, key["name"])
 
 
+def set_team_suspended(team: str, suspended: bool) -> None:
+	"""Pause or resume every key of a team at Grove. Unlike revoking, this can be undone."""
+	if get_ai_service(team):
+		GroveClient.from_settings().update_team(team, suspended=suspended)
+
+
 def register_team(team: str) -> dict:
 	"""Register the team at Grove under the team id, then send the name of its tier. Grove keeps
 	nothing else about the team."""
