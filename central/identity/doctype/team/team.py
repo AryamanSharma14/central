@@ -8,6 +8,7 @@ from frappe.utils import now_datetime
 
 from central.billing import settings as billing_settings
 from central.iam import can, clear_grants_cache, user_has_operator_bypass
+from central.identity.doctype.team.archive import get_archive_blockers
 from central.identity.doctype.team.tenant import (
 	allocate_tenant_id,
 	prepare_tenant_id_series,
@@ -39,7 +40,7 @@ class Team(Document):
 		onboarding_steps: DF.Table[TeamOnboardingStep]
 		owner_user: DF.Link
 		referrer: DF.SmallText | None
-		status: DF.Literal["Active", "Suspended"]
+		status: DF.Literal["Active", "Suspended", "Archived"]
 		team_logo: DF.AttachImage | None
 		team_name: DF.Data
 		tenant_id: DF.Int
@@ -158,6 +159,64 @@ class Team(Document):
 			role.flags.from_team_delete = True
 			# Team deletion already passed team:delete and owns this dependent cleanup.
 			role.delete(ignore_permissions=True, force=True)
+
+	# Internal; the HTTP surface is central.api.teams.archive_team.
+	def archive(self) -> None:
+		"""Close the team. Its records stay for billing and audit, and every member loses access."""
+		self._require_capability("team:delete")
+		if self.status != "Active":
+			frappe.throw(_("Only an active team can be archived."))
+		if blockers := get_archive_blockers(self.name):
+			frappe.throw(_("Before you archive this team, clear: {0}.").format(", ".join(blockers)))
+
+		from central.notification.engine import dispatch
+		from central.services.ai import stop_team_keys
+
+		# Grove bills AI usage outside Central, so the keys stop before members lose access.
+		stop_team_keys(self.name)
+		for invitation in frappe.get_all(
+			"Team Invitation", {"team": self.name, "status": "Pending"}, pluck="name"
+		):
+			frappe.get_doc("Team Invitation", invitation).revoke()
+
+		self.status = "Archived"
+		self.flags.from_team_archive = True
+		self.save()
+		self.add_comment("Info", _("{0} archived this team.").format(frappe.session.user))
+		dispatch(self.name, "team_archived", affected_user=self.owner_user)
+
+	# Internal; the HTTP surface is central.api.teams.restore_team.
+	def restore(self) -> None:
+		"""Operator action: open an archived team again. AI keys stay revoked."""
+		frappe.only_for("System Manager")
+		if self.status != "Archived":
+			frappe.throw(_("Only an archived team can be restored."))
+
+		self.status = "Active"
+		self.save()
+		self.add_comment("Info", _("{0} restored this team.").format(frappe.session.user))
+
+	# Internal; the HTTP surface is central.api.teams.impersonate_team_owner.
+	def get_impersonation_url(self, reason: str, notify_owner: bool = False) -> str:
+		"""Operator action: open the console as this team. The reason stays on the team for staff.
+		The owner gets an email only when the operator asks for one."""
+		frappe.only_for("System Manager")
+		reason = (reason or "").strip()
+		if not reason:
+			frappe.throw(_("Enter why you are opening this team."))
+
+		if notify_owner:
+			from central.notification.engine import dispatch
+
+			dispatch(self.name, "team_impersonated", affected_user=self.owner_user)
+
+		comment = (
+			_("{0} impersonated the team owner and emailed them. Reason: {1}")
+			if notify_owner
+			else _("{0} impersonated the team owner. Reason: {1}")
+		)
+		self.add_comment("Info", comment.format(frappe.session.user, reason))
+		return f"/dashboard/servers?view_as={self.name}"
 
 	# Internal; the HTTP surface is central.api.teams.invite_team_member.
 	def invite_member(
@@ -463,7 +522,11 @@ class Team(Document):
 		if not previous:
 			return
 
-		if self._metadata_changed(previous):
+		if self.status != previous.status and not self.flags.from_team_archive:
+			frappe.throw(
+				_("Only Frappe Cloud staff can change the status of a team."), frappe.PermissionError
+			)
+		if self.team_name != previous.team_name:
 			self._require_capability("team:edit")
 		if self._onboarding_state(self) != self._onboarding_state(previous):
 			self._require_current_owner(previous.owner_user)
@@ -475,9 +538,6 @@ class Team(Document):
 		validate_tenant_id(self.tenant_id)
 		if not self.is_new() and self.has_value_changed("tenant_id"):
 			frappe.throw(_("The tenant ID cannot be changed."), frappe.CannotChangeConstantError)
-
-	def _metadata_changed(self, previous) -> bool:
-		return self.team_name != previous.team_name or self.status != previous.status
 
 	def _members_changed(self, previous) -> bool:
 		return self.owner_user != previous.owner_user or self._member_state(self) != self._member_state(

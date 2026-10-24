@@ -29,11 +29,14 @@ def my_capabilities(team: str | None = None) -> list[str]:
 
 
 @frappe.whitelist(methods=["GET"])
-def my_teams() -> list[dict[str, Any]]:
+def my_teams(view_as: str | None = None) -> list[dict[str, Any]]:
 	"""Teams the signed-in user can switch between in the console — the teams they
 	are an active member of, each with a display label, the owner email, the
 	caller's own role, how many people are in it, when it was created, and the
-	onboarding steps the caller still has to answer as its owner."""
+	onboarding steps the caller still has to answer as its owner.
+
+	An operator who impersonates a team owner passes `view_as`, and that team is added
+	with `is_impersonated` set."""
 	user = frappe.session.user
 
 	team = frappe.qb.DocType("Team")
@@ -73,6 +76,9 @@ def my_teams() -> list[dict[str, Any]]:
 		if _role_rank(r.role) < _role_rank(entry["role"]):
 			entry["role"] = r.role
 
+	if view_as and user_has_operator_bypass(user):
+		teams[view_as] = _get_impersonated_team(view_as)
+
 	if not teams:
 		return []
 
@@ -97,6 +103,20 @@ def my_teams() -> list[dict[str, Any]]:
 		teams[row.parent]["onboarding"].append(row.step)
 
 	return list(teams.values())
+
+
+def _get_impersonated_team(name: str) -> dict[str, Any]:
+	team = frappe.get_doc("Team", name)
+	return {
+		"name": team.name,
+		"label": team.team_name or team.owner_user,
+		"logo": team.team_logo,
+		"owner": team.owner_user,
+		"role": "Owner",
+		"members": 0,
+		"created": team.creation,
+		"is_impersonated": True,
+	}
 
 
 def _pending_onboarding_steps(teams: list[str]) -> list[dict[str, Any]]:
