@@ -252,7 +252,7 @@ flowchart LR
 | daily | `revenue.credits.run_credit_expiry` | write off expired promotional credit |
 | daily | `platform.invariants.run_invariant_audit` | audit the cross-table money invariants |
 | hourly | `payments.reconciliation.run_reconciliation` | charged-but-never-webhooked gateway scan |
-| hourly | `platform.alerts.run_operator_alerts` | page operators (invariants, failed webhooks, stale attempts, held invoices) |
+| hourly | `platform.alerts.run_operator_alerts` | alert operators (invariants, readiness, failed webhooks, stale attempts, unsettled captures, held invoices, failed refunds, failed accounting syncs) |
 | monthly | `revenue.invoicing.draft_monthly_invoices` | waive internal teams' unpaid invoices, then draft the just-closed month as page jobs on the `billing` queue |
 | hourly | `revenue.invoicing.collect_due_invoices` | open and collect every Draft whose month has closed, as page jobs; record progress on the Billing Run |
 | hourly | `ingester.erpnext_sync.retry_failed_syncs` | retry Sales Invoice push (backoff window elapsed) |
@@ -349,6 +349,21 @@ failure on our side — a 429, a dead worker, a contained run error — calls
 an accounting fact AR aging depends on) forward to today + the standard window. It is
 monotonic and self-limiting: a successful ask stops pushing, so a broken gateway defers
 *escalation*, not collection.
+
+### Operator alerts
+
+`platform.alerts.notify_operators(title, alerts)` sends every billing alert for operators. No other billing code mails operators. Customer notifications use `platform.notifications` and do not change with these settings.
+
+Configure it in **Billing Settings → Operator Alerts**:
+
+| Field | Purpose |
+|---|---|
+| Alert Channel | `Raven` (default), `Email`, or `Raven and Email`. |
+| Alert Email Addresses | One address per line. Required when the channel includes Email. Central never mails the System Manager role. |
+| Raven Site URL, Raven Channel ID | The Raven site and the channel that gets the alerts. |
+| Bot API Key, Bot API Secret | The API key of a bot user that is a member of the channel. The alert is posted as this user through `raven.api.raven_message.send_message`. |
+
+When a Raven post fails, or Raven is not configured, the alert goes to the email addresses once and the failure is written to the Error Log. Use **Send Test Alert** on the form to check the saved settings. The hourly digest keeps one Error Log row for each digest it sends, and it does not send the same digest again for `REPEAT_AFTER_HOURS`.
 
 ### Lifecycle / install hooks
 - `after_install` / `after_migrate` / `before_tests` → `catalog.taxonomy_setup.ensure_catalog_masters` (idempotent seed of catalog masters, ADR 0007), `settings.ensure_snapshot_settings`, `platform.constraints.ensure_constraints`, `gateways.setup.ensure_gateway_records`, `navigation.ensure_workspace_sidebars`. `after_install` and `before_tests` also run `settings.ensure_welcome_credit_amounts`.
