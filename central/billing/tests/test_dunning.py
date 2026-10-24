@@ -33,6 +33,7 @@ DUE = "2026-06-01"
 @contextmanager
 def declining_gateway(failure_code="card_declined", decline_code=None):
 	adapter = MagicMock()
+	adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 	adapter.charge.return_value = PaymentResult(
 		success=False,
 		status="Failed",

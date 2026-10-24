@@ -8,6 +8,7 @@ ported from the working press implementation; the structure is the new adapter
 model. The UPI Autopay mandate *lifecycle* (cap = trust tier) is issue #08.
 """
 
+import hashlib
 from typing import ClassVar
 
 import frappe
@@ -159,32 +160,44 @@ class RazorpayAdapter(GatewayAdapter):
 		a live token is the proof. No separate micro-charge."""
 		return bool(payment_method.gateway_method_id)
 
-	def charge(self, invoice, payment_method, idempotency_key: str) -> PaymentResult:
-		"""Off-session recurring charge against a mandate token.
-
-		An order carries the idempotency key as its (unique) receipt; the
-		recurring payment is created against the token. Declines come back as a
-		failed result; transient/network errors raise GatewayTimeout so a retry
-		reuses the same receipt.
-		"""
-		client = self._client()
-		amount_paise = round((invoice.amount or 0) * 100)
-		currency = (invoice.currency or "").upper()
+	def prepare_charge(self, invoice, receipt: str) -> str | None:
+		"""The order a recurring charge is made against. Razorpay has no idempotency key
+		for charges, so the order id, stored before the payment is created, is what lets
+		a retry find the payment instead of making a second one."""
 		try:
-			order = client.order.create(
+			order = self._client().order.create(
 				{
-					"amount": amount_paise,
-					"currency": currency,
-					"receipt": idempotency_key,
+					"amount": round((invoice.amount or 0) * 100),
+					"currency": (invoice.currency or "").upper(),
+					"receipt": receipt[:40],  # a label for the dashboard, capped by Razorpay
 					"payment_capture": 1,  # settle the charge, don't leave it authorized
 					"notes": {"invoice": invoice.get("name")},
 				}
 			)
+		except _TRANSIENT as e:
+			raise GatewayTimeout(str(e)) from e
+		return order["id"]
+
+	def charge(self, invoice, payment_method, idempotency_key: str) -> PaymentResult:
+		"""Off-session recurring charge against a mandate token, on the stored order.
+
+		A payment the order already has is returned rather than repeated: captured is
+		success, one still in progress is unknown (GatewayTimeout, so reconciliation asks
+		again later). Only an order with no live payment is charged. Declines come back
+		as a failed result."""
+		order_id = invoice.get("order_id")
+		if not order_id:
+			raise GatewayError("A Razorpay charge needs the order prepare_charge created and Central stored.")
+		client = self._client()
+		try:
+			existing = (client.order.payments(order_id) or {}).get("items") or []
+			if earlier := _settled_or_live(existing):
+				return earlier
 			payment = client.payment.createRecurring(
 				{
-					"amount": amount_paise,
-					"currency": currency,
-					"order_id": order["id"],
+					"amount": round((invoice.amount or 0) * 100),
+					"currency": (invoice.currency or "").upper(),
+					"order_id": order_id,
 					"customer_id": invoice.get("customer_id"),
 					"token": payment_method.gateway_method_id,
 					"recurring": "1",
@@ -218,15 +231,18 @@ class RazorpayAdapter(GatewayAdapter):
 	) -> RefundResult:
 		"""Refund to the source. A UPI payment goes back to the bank account behind the UPI ID.
 
-		Razorpay has no idempotency key for refunds; the receipt carries ours so a
-		refund can be matched to the request that made it.
+		Sent with `X-Refund-Idempotency`, so a retried refund is not made twice.
 		"""
 		client = self._client()
 		body = {"amount": round((amount or 0) * 100)}
+		options = {}
 		if idempotency_key:
-			body["receipt"] = idempotency_key
+			body["receipt"] = idempotency_key[:40]
+			# Razorpay dedupes a refund by this header: the same key and body returns the
+			# first refund instead of making another.
+			options["headers"] = {"X-Refund-Idempotency": _refund_key(idempotency_key)}
 		try:
-			refund = client.payment.refund(payment_attempt.gateway_transaction_id, body)
+			refund = client.payment.refund(payment_attempt.gateway_transaction_id, body, **options)
 		except _TRANSIENT as e:
 			raise GatewayTimeout(str(e)) from e
 
@@ -429,3 +445,21 @@ def _verified(payment: dict) -> VerifiedPayment:
 		currency=(payment.get("currency") or "").upper(),
 		order_id=payment.get("order_id"),
 	)
+
+
+def _settled_or_live(payments: list[dict]) -> PaymentResult | None:
+	"""The answer an order's earlier payments already give, or None to charge."""
+	for payment in payments:
+		if payment.get("status") == "captured":
+			return PaymentResult(
+				success=True, status="Captured", gateway_transaction_id=payment.get("id"), raw=dict(payment)
+			)
+	if any(p.get("status") in ("created", "authorized") for p in payments):
+		raise GatewayTimeout("An earlier payment on this order is still in progress.")
+	return None
+
+
+def _refund_key(key: str) -> str:
+	"""Razorpay takes 10 to 40 characters of letters, digits, `_` and `-`, and the key must
+	not repeat across the sites that share one Razorpay account: a SHA-1 of both is 40."""
+	return hashlib.sha1(f"{frappe.local.site}:{key}".encode()).hexdigest()

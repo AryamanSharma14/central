@@ -20,6 +20,7 @@ GATEWAY = "Stripe"
 @contextmanager
 def gateway_status(status):
 	adapter = MagicMock()
+	adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 	adapter.get_transaction_status.return_value = status
 	with patch("central.billing.gateways.registry.get_adapter", return_value=adapter):
 		yield adapter
@@ -29,6 +30,7 @@ def gateway_status(status):
 def charge_result(success=True, txn_id="pi_x"):
 	"""A gateway that answers a (re-sent) charge."""
 	adapter = MagicMock()
+	adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 	adapter.charge.return_value = PaymentResult(
 		success=success,
 		status="Captured" if success else "Failed",

@@ -176,8 +176,16 @@ def _charge_claimed_attempt(attempt_name: str) -> dict:
 		currency=attempt.currency,
 		customer_id=method.gateway_customer_id,
 		name=attempt.invoice,
+		order_id=attempt.gateway_order_id,
 	)
 	try:
+		if not attempt.gateway_order_id:
+			# A gateway without a charge idempotency key (Razorpay) needs its order stored
+			# before the payment is made, so a retry finds that payment instead of a new one.
+			charge_input.order_id = adapter.prepare_charge(charge_input, attempt.name)
+			if charge_input.order_id:
+				attempt.db_set("gateway_order_id", charge_input.order_id)
+				_persist()
 		result = adapter.charge(charge_input, method, attempt.idempotency_key)
 	except GatewayTimeout as e:
 		# Transient: leave the attempt initiated so a retry reuses the same key.

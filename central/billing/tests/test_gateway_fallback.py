@@ -262,6 +262,7 @@ class TestOneInvoiceIsNeverChargedTwiceAcrossRails(IntegrationTestCase):
 		from central.billing.payments import collection
 
 		adapter = MagicMock()
+		adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 		adapter.charge.return_value = PaymentResult(
 			success=False,
 			status="Failed",
@@ -284,6 +285,7 @@ class TestOneInvoiceIsNeverChargedTwiceAcrossRails(IntegrationTestCase):
 		from central.billing.payments import collection
 
 		adapter = MagicMock()
+		adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 		adapter.charge.return_value = PaymentResult(
 			success=False, status="Failed", failure_code="card_declined", failure_reason="declined"
 		)
@@ -302,6 +304,7 @@ class TestOneInvoiceIsNeverChargedTwiceAcrossRails(IntegrationTestCase):
 
 		frappe.db.delete("Billing Notification Log", {"team": TEAM})
 		adapter = MagicMock()
+		adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 		adapter.charge.return_value = PaymentResult(
 			success=False, status="Failed", failure_code="card_declined", failure_reason="declined"
 		)

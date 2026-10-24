@@ -34,6 +34,7 @@ def stub_charges(results):
 	"""Patch the adapter so each successive charge() returns the next scripted
 	(success, txn_id) result."""
 	adapter = MagicMock()
+	adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 	adapter.charge.side_effect = [_result(s, t) for s, t in results]
 	with patch("central.billing.gateways.registry.get_adapter", return_value=adapter):
 		yield adapter

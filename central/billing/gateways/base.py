@@ -278,6 +278,12 @@ class GatewayAdapter(ABC):
 		"""Retrieve a hosted-checkout session to confirm it was paid (server-side)."""
 		raise GatewayUnsupported(f"{type(self).__name__} does not support get_checkout_session")
 
+	def prepare_charge(self, invoice, receipt: str) -> str | None:
+		"""Create, before any money moves, the gateway object an off-session charge runs
+		against, and return its id for the caller to store. None where the charge needs
+		none (Stripe dedupes the charge itself by its idempotency key)."""
+		return None
+
 	def read_saved_card(self, setup_reference: str) -> dict:
 		"""The card a setup saved, read from the gateway, or `{}` while it is not finished.
 		Keys: payment_method, customer, mandate, brand, last4, exp_month, exp_year."""

@@ -51,6 +51,7 @@ def run_workers(n, fn):
 @contextmanager
 def stub_adapter(success=True, txn_id="pi_x"):
 	adapter = MagicMock()
+	adapter.prepare_charge.return_value = None  # Stripe-like: no order to store
 	adapter.charge.return_value = PaymentResult(
 		success=success,
 		status="Captured" if success else "Failed",
@@ -371,6 +372,24 @@ class TestDurableIntent(ChargeTestBase):
 		self.assertEqual(seen["attempt"].status, "Initiated")
 		self.assertEqual(seen["attempt"].amount, 1000.0)
 		self.assertEqual(seen["attempt"].idempotency_key, seen["key"])
+
+	def test_a_gateway_order_is_stored_before_the_charge(self):
+		"""A gateway with no charge idempotency key (Razorpay) charges on an order whose id
+		is already on the attempt, so a retry finds the payment instead of making another."""
+		inv = self._open_invoice(1000)
+		seen = {}
+
+		def spy_charge(charge_input, method, key):
+			seen["stored"] = frappe.db.get_value("Payment Attempt", {"invoice": inv}, "gateway_order_id")
+			seen["sent"] = charge_input.order_id
+			return PaymentResult(success=True, status="Captured", gateway_transaction_id="pay_spy")
+
+		with stub_adapter(success=True) as adapter:
+			adapter.prepare_charge.return_value = "order_rzp"
+			adapter.charge.side_effect = spy_charge
+			charges.pay_invoice(inv)
+
+		self.assertEqual(seen, {"stored": "order_rzp", "sent": "order_rzp"})
 
 	def test_gateway_error_leaves_a_resolvable_attempt(self):
 		# An error the adapter doesn't map (auth failure, bad response, a crash) used
