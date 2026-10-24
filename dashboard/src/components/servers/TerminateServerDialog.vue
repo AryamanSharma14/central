@@ -63,6 +63,7 @@ const snapshotNote = computed(() => {
 		size="md"
 		:loading="loading"
 		:disabled="isProtected"
+		:confirm-text="isProtected ? undefined : name"
 		:error="error"
 		@confirm="emit('confirm', $event, takeSnapshot)"
 	>
