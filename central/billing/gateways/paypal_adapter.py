@@ -35,6 +35,8 @@ PAYPAL_WEBHOOK_EVENTS = [
 
 
 class PayPalAdapter(GatewayAdapter):
+	webhook_events = tuple(PAYPAL_WEBHOOK_EVENTS)
+
 	def _base(self) -> str:
 		return (self.gateway.get("api_base") if hasattr(self.gateway, "get") else None) or (
 			"https://api-m.sandbox.paypal.com"

@@ -164,6 +164,28 @@ class TestStripeAdapter(GatewayAdapterContract, IntegrationTestCase):
 			"https://site/api/method/central.billing.payments.webhooks.stripe",
 		)
 
+	def test_get_webhook_reads_url_status_and_events(self):
+		adapter = self.make_adapter()
+		endpoint = frappe._dict(url="https://site/x", status="enabled", enabled_events=["charge.refunded"])
+		with patch.object(stripe.WebhookEndpoint, "retrieve", return_value=endpoint):
+			webhook = adapter.get_webhook("we_1")
+		self.assertEqual(webhook, {"url": "https://site/x", "is_active": True, "events": ["charge.refunded"]})
+
+	def test_an_endpoint_in_another_account_is_not_found(self):
+		from central.billing.gateways.base import WebhookNotFound
+
+		adapter = self.make_adapter()
+		missing = stripe.error.InvalidRequestError("No such webhook endpoint", "id", code="resource_missing")
+		with patch.object(stripe.WebhookEndpoint, "retrieve", side_effect=missing):
+			with self.assertRaises(WebhookNotFound):
+				adapter.get_webhook("we_old")
+
+	def test_update_webhook_events_replaces_the_event_list(self):
+		adapter = self.make_adapter()
+		with patch.object(stripe.WebhookEndpoint, "modify") as modify:
+			adapter.update_webhook_events("we_1", "https://site/x", ["payment_intent.canceled"])
+		modify.assert_called_once_with("we_1", enabled_events=["payment_intent.canceled"])
+
 	def test_create_customer_returns_id(self):
 		adapter = self.make_adapter()
 		with patch.object(stripe.Customer, "create", return_value=frappe._dict(id="cus_new")) as create:

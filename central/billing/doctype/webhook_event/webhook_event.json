@@ -12,6 +12,8 @@
   "gateway_event_id",
   "event_type",
   "status",
+  "payment_attempt",
+  "payment_method",
   "column_break_main",
   "processed_at",
   "error",
@@ -49,6 +51,24 @@
    "options": "Received\nProcessed\nFailed\nIgnored"
   },
   {
+   "description": "The charge this event is about, when the handler found it.",
+   "fieldname": "payment_attempt",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Payment Attempt",
+   "options": "Payment Attempt",
+   "read_only": 1
+  },
+  {
+   "description": "The card or mandate this event is about, when the handler found it.",
+   "fieldname": "payment_method",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Payment Method",
+   "options": "Payment Method",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_main",
    "fieldtype": "Column Break"
   },
@@ -74,7 +94,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-02 00:00:00.000000",
+ "modified": "2026-10-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Webhook Event",

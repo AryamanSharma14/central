@@ -95,12 +95,15 @@ def _store_and_enqueue(gateway, event, payload: bytes):
 def handle_webhook_event(event_name: str):
 	"""Background state transition for a stored Webhook Event.
 
-	Charge settlement (Open -> Paid) lives in charges.apply_webhook; mandate
-	lifecycle in mandates.apply_mandate_event. This is the dispatch point.
+	Charge settlement (Open -> Paid) lives in charges.apply_webhook, mandate
+	lifecycle in mandates.apply_mandate_event, and card events in
+	payments.apply_payment_method_event. This is the dispatch point.
 	"""
-	from central.billing.payments import charges, mandates
+	from central.billing.payments import charges, mandates, payments
 
 	event_type = frappe.db.get_value("Webhook Event", event_name, "event_type") or ""
 	if event_type.startswith("mandate."):
 		return mandates.apply_mandate_event(event_name)
+	if event_type.startswith(("payment_method.", "setup_intent.")):
+		return payments.apply_payment_method_event(event_name)
 	return charges.apply_webhook(event_name)

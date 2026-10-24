@@ -371,7 +371,28 @@ When a Raven post fails, or Raven is not configured, the alert goes to the email
 - `override_doctype_dashboards["Currency"]` → `api.dashboard_overrides.currency_dashboard`.
 
 ### Inbound webhooks (`payments/webhooks.py`)
-`@stripe` / `@razorpay` (whitelisted, signature-first) → `process_webhook` → adapter `verify_webhook_signature`/`parse_webhook_event` → `handle_webhook_event` → `charges.apply_webhook` (settle the Payment Attempt). Raw payload persisted to **Webhook Event** for dedupe/replay.
+`@stripe` / `@razorpay` (whitelisted, signature-first) → `process_webhook` → adapter `verify_webhook_signature`/`parse_webhook_event` → `handle_webhook_event`. Raw payload persisted to **Webhook Event** for dedupe/replay.
+
+`handle_webhook_event` sends each event to one handler. The handler links the Webhook Event to the Payment Attempt or Payment Method it is about, so the record's Connections show its event history.
+
+| Events | Handler | Effect |
+|---|---|---|
+| `payment_intent.*`, `payment.*` | `charges.apply_webhook` | Authorised, Captured or Failed. `payment_intent.canceled` fails the attempt with Stripe's cancellation reason. |
+| `charge.dispute.*` | `disputes.apply_dispute` | Note on the invoice; a lost dispute cancels the invoice without a second refund. |
+| `mandate.updated` | `mandates.apply_mandate_event` | A revoked mandate cancels its Payment Method. |
+| `payment_method.detached` | `payments.apply_payment_method_event` | The card is cancelled and leaves the charge order. |
+| `setup_intent.setup_failed` | `payments.apply_payment_method_event` | A comment on the card. The card stays Pending Validation, because the customer can retry on the same SetupIntent. |
+| `charge.refunded`, `refund.processed` | none | Stored only. |
+
+**Subscribed events.** Each adapter's `webhook_events` lists the events Central subscribes to. `test_payment_gateway.TestWebhookEventList` fails when a handled event is not in that list.
+
+**Webhook endpoint.** On the Payment Gateway form:
+
+- **Register Webhook** (or **Re-register Webhook** when an endpoint exists) checks the keys and creates a new endpoint and a new signing secret. The old endpoint is not deleted at the gateway. When no new endpoint is registered, for example on a local site, the current endpoint and secret are kept.
+- **Webhook Events → Pull** reads the endpoint from the gateway and fills the Webhook Events table. Each event is OK, Missing (Central needs it, the gateway does not send it) or Not Used.
+- **Webhook Events → Update** sets the endpoint's events to the adapter's list. The signing secret does not change.
+
+When you save new keys, Central reads the stored endpoint with them. If the keys can see it (same account), Central adds any missing events. If they cannot (another account, or Stripe test keys changed to live keys), Central registers a new endpoint. Central never deletes an endpoint at the gateway, because another site can use the same account. A PayPal gateway that settles through Razorpay has no webhook of its own.
 
 ### API entry points (`@frappe.whitelist`): see §5 per package.
 

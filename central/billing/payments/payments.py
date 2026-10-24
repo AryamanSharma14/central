@@ -332,3 +332,55 @@ def expire_payment_methods(now=None) -> dict:
 				reference_name=m.name,
 			)
 	return {"expired": expired}
+
+
+def apply_payment_method_event(event_name: str) -> dict:
+	"""Record a card event from the gateway on the Payment Method it is about.
+
+	A card detached at the gateway can no longer be charged, so it is cancelled and
+	drops out of the charge order. A failed card setup is only noted on the card: the
+	customer can retry on the same setup, so one failed try does not fail the card.
+	"""
+	from central.billing.payments import charges
+
+	event = frappe.get_doc("Webhook Event", event_name)
+	payload = frappe.parse_json(event.raw_payload) if event.raw_payload else {}
+	gateway_object = (payload.get("data") or {}).get("object") or {}
+	is_detached = event.event_type == "payment_method.detached"
+	reference = "gateway_method_id" if is_detached else "setup_reference"
+	method = (
+		frappe.db.get_value(
+			"Payment Method", {"gateway": event.gateway, reference: gateway_object["id"]}, "name"
+		)
+		if gateway_object.get("id")
+		else None
+	)
+	if not method:
+		charges._mark_event(event, "Ignored")
+		return {"handled": False, "reason": "no_matching_method"}
+
+	event.payment_method = method
+	result = _cancel_detached(method) if is_detached else _note_setup_failure(method, gateway_object)
+	charges._mark_event(event, "Processed")
+	return {"handled": True, "result": result, "payment_method": method}
+
+
+def _cancel_detached(payment_method: str) -> str:
+	method = frappe.get_doc("Payment Method", payment_method, for_update=True)
+	if method.status not in ("Active", "Paused"):
+		return method.status
+
+	transition(method, "Cancelled", actor="webhook", reason="detached at the gateway")
+	method.is_default = 0
+	method.save(ignore_permissions=True)
+	densify_priorities(method.team)
+	return "Cancelled"
+
+
+def _note_setup_failure(payment_method: str, setup_intent: dict) -> str:
+	error = setup_intent.get("last_setup_error") or {}
+	reason = error.get("message") or error.get("code") or "no reason given"
+	frappe.get_doc("Payment Method", payment_method).add_comment(
+		"Info", f"Card setup failed at the gateway: {reason}"
+	)
+	return "noted"

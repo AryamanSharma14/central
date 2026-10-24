@@ -23,6 +23,7 @@ def apply_dispute(event, payload: dict) -> dict:
 	attempt = _attempt_for(dispute.get("payment_intent"))
 	if not attempt:
 		return {"handled": False, "reason": "no_matching_attempt"}
+	event.payment_attempt = attempt.name
 	invoice = frappe.get_doc("Invoice", attempt.invoice)
 	amount = frappe.utils.flt(dispute.get("amount")) / 100
 	reason = dispute.get("reason") or "unknown"
