@@ -166,50 +166,54 @@ def _discard_abandoned_setups(team: str, gateway: str):
 		frappe.delete_doc("Payment Method", name, ignore_permissions=True, force=True)
 
 
-def confirm_payment_method(
-	payment_method: str,
-	gateway_method_id: str,
-	display_label: str | None = None,
-	expiry_month: int | None = None,
-	expiry_year: int | None = None,
-	gateway_customer_id: str | None = None,
-	gateway_mandate_id: str | None = None,
-	card_network: str | None = None,
-) -> dict:
-	"""Confirm a card the customer authorised on the frontend.
+class CardNotSaved(frappe.ValidationError):
+	"""The gateway has not saved the card for this setup yet."""
 
-	Stores the gateway method handle, then runs the micro-charge + auto-refund
-	validation. The method becomes `active` only on a successful micro-charge;
-	a failure (or decline) leaves it `failed`. The first active method for a
-	team becomes its default.
+
+def confirm_payment_method(payment_method: str) -> Document:
+	"""Confirm a card the customer saved at the gateway.
+
+	1. The card is read from the gateway by the setup Central stored for this method;
+	   nothing the browser sends decides the card, its label, its expiry or its mandate.
+	2. A card saved to another gateway customer fails the method.
+	3. The micro-charge validation runs; the method becomes Active only on success, and
+	   the first active method for a team becomes its default.
 	"""
 	method = frappe.get_doc("Payment Method", payment_method)
-	method.gateway_method_id = gateway_method_id
-	if gateway_customer_id:
-		method.gateway_customer_id = gateway_customer_id
-	if gateway_mandate_id:
-		method.gateway_mandate_id = gateway_mandate_id
-	if card_network:
-		# What the gateway reported the card to be. We never read the number ourselves.
-		method.card_network = card_network.title()
-	if display_label:
-		method.display_label = display_label
-	if expiry_month:
-		method.expiry_month = expiry_month
-	if expiry_year:
-		method.expiry_year = expiry_year
+	card = _adapter(method.gateway).read_saved_card(method.setup_reference) if method.setup_reference else {}
+	if not card:
+		frappe.throw(_("The card has not been saved yet. Finish adding it, then try again."), CardNotSaved)
+	if card.get("customer") and method.gateway_customer_id and card["customer"] != method.gateway_customer_id:
+		return _fail_method(method, "card saved to another gateway customer")
+
+	method.update(
+		{
+			"gateway_method_id": card["payment_method"],
+			"gateway_mandate_id": card.get("mandate") or method.gateway_mandate_id,
+			"card_network": card.get("brand"),
+			"display_label": f"{card.get('brand') or 'Card'} ···· {card['last4']}"
+			if card.get("last4")
+			else card.get("brand"),
+			"expiry_month": card.get("exp_month"),
+			"expiry_year": card.get("exp_year"),
+		}
+	)
 	method.save(ignore_permissions=True)
 
 	if not _adapter(method.gateway).validate_payment_method(method):
-		transition(method, "Failed", actor=frappe.session.user, reason="validation failed")
-		method.save(ignore_permissions=True)
-		return method
+		return _fail_method(method, "validation failed")
 
 	transition(method, "Active", actor=frappe.session.user)
 	method.validated_at = frappe.utils.now_datetime()
 	method.save(ignore_permissions=True)
 	densify_priorities(method.team)
 	method.reload()  # pick up priority / is_default set by densify
+	return method
+
+
+def _fail_method(method, reason: str) -> Document:
+	transition(method, "Failed", actor=frappe.session.user, reason=reason)
+	method.save(ignore_permissions=True)
 	return method
 
 

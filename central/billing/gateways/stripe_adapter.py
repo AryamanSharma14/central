@@ -507,28 +507,27 @@ class StripeAdapter(GatewayAdapter):
 
 		return {"checkout_url": session.get("url"), "session_id": session.get("id")}
 
-	def get_setup_result(self, session_id: str) -> dict:
-		"""Read a completed setup Checkout session back to the saved card: the gateway
-		payment-method id + card display fields, or `{}` while still pending."""
+	def read_saved_card(self, setup_reference: str) -> dict:
+		"""The card a SetupIntent (`seti_`) or a setup Checkout Session (`cs_`) saved, read
+		from Stripe: payment method, customer, mandate and display fields. `{}` while the
+		customer has not finished."""
 		self._configure()
+		intent_id = setup_reference
+		if setup_reference.startswith("cs_"):
+			intent_id = _to_dict(stripe.checkout.Session.retrieve(setup_reference)).get("setup_intent")
+			if not intent_id:
+				return {}
 
-		session = _to_dict(stripe.checkout.Session.retrieve(session_id))
-
-		setup_intent_id = session.get("setup_intent")
-
-		if not setup_intent_id:
-			return {}
-
-		intent = _to_dict(stripe.SetupIntent.retrieve(setup_intent_id))
+		intent = _to_dict(stripe.SetupIntent.retrieve(intent_id))
 		method_id = intent.get("payment_method")
-
 		if intent.get("status") != "succeeded" or not method_id:
 			return {}
 
 		card = (_to_dict(stripe.PaymentMethod.retrieve(method_id)).get("card")) or {}
-
 		return {
 			"payment_method": method_id,
+			"customer": intent.get("customer"),
+			"mandate": intent.get("mandate"),
 			"brand": (card.get("brand") or "card").title(),
 			"last4": card.get("last4"),
 			"exp_month": card.get("exp_month"),

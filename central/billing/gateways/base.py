@@ -278,6 +278,11 @@ class GatewayAdapter(ABC):
 		"""Retrieve a hosted-checkout session to confirm it was paid (server-side)."""
 		raise GatewayUnsupported(f"{type(self).__name__} does not support get_checkout_session")
 
+	def read_saved_card(self, setup_reference: str) -> dict:
+		"""The card a setup saved, read from the gateway, or `{}` while it is not finished.
+		Keys: payment_method, customer, mandate, brand, last4, exp_month, exp_year."""
+		raise GatewayUnsupported(f"{type(self).__name__} does not support read_saved_card")
+
 	def verify_payment(self, payment_id: str) -> VerifiedPayment:
 		"""Read one payment back from the gateway (server-side)."""
 		raise GatewayUnsupported(f"{type(self).__name__} does not support verify_payment")

@@ -282,18 +282,13 @@ def add_payment_method(
 @pilot_credential_auth
 def confirm_payment_method(
 	payment_method: str,
-	gateway_method_id: str | None = None,
-	display_label: str | None = None,
-	expiry_month: int | None = None,
-	expiry_year: int | None = None,
 	razorpay_payment_id: str | None = None,
 	razorpay_order_id: str | None = None,
 	razorpay_signature: str | None = None,
-	razorpay_token_id: str | None = None,
 ) -> dict:
 	"""Finalize the payment method the gateway SDK/Checkout tokenised. Routes by the
-	method's gateway: Stripe runs the card micro-charge validation; Razorpay verifies
-	the Checkout callback signature and activates the mandate/token."""
+	method's gateway: Stripe reads the saved card and runs the micro-charge validation;
+	Razorpay verifies the Checkout callback and reads the token from the payment."""
 	from central.billing.payments import mandates, payments
 
 	method_row = frappe.db.get_value("Payment Method", payment_method, ["team", "gateway"], as_dict=True)
@@ -307,17 +302,10 @@ def confirm_payment_method(
 				"razorpay_payment_id": razorpay_payment_id,
 				"razorpay_order_id": razorpay_order_id,
 				"razorpay_signature": razorpay_signature,
-				"razorpay_token_id": razorpay_token_id,
 			},
 		)
 	else:
-		method = payments.confirm_payment_method(
-			payment_method,
-			gateway_method_id=gateway_method_id,
-			display_label=display_label,
-			expiry_month=expiry_month,
-			expiry_year=expiry_year,
-		)
+		method = payments.confirm_payment_method(payment_method)
 
 	return {"payment_method": method.name, "status": method.status}
 
@@ -375,30 +363,20 @@ def create_payment_method_checkout(redirect_url: str, gateway: str | None = None
 	}
 
 
-def _activate_setup(method_name: str, gateway: str, session_id: str) -> dict:
+def _activate_setup(method_name: str) -> dict:
 	"""Read a completed hosted setup back and validate the card (micro-charge) → Active.
 	Returns `{status, active, label}`; `pending` while the gateway hasn't saved it yet."""
-	from central.billing.gateways.registry import get_adapter
 	from central.billing.payments import payments
 
-	result = get_adapter(frappe.get_doc("Payment Gateway", gateway)).get_setup_result(session_id)
-	if not result.get("payment_method"):
+	try:
+		method = payments.confirm_payment_method(method_name)
+	except payments.CardNotSaved:
+		frappe.clear_last_message()
 		return {"status": "pending", "active": False}
-	label = (
-		f"{result.get('brand') or 'Card'} ···· {result['last4']}"
-		if result.get("last4")
-		else result.get("brand")
-	)
-	method = payments.confirm_payment_method(
-		method_name,
-		gateway_method_id=result["payment_method"],
-		display_label=label,
-		expiry_month=result.get("exp_month"),
-		expiry_year=result.get("exp_year"),
-	)
 	return {"status": method.status, "active": method.status == "Active", "label": method.display_label}
 
 
+# nosemgrep: guest-whitelisted-method -- pilot_credential_auth verifies the caller below.
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 @pilot_credential_auth
 def confirm_payment_method_checkout(reference: str) -> dict:
@@ -417,7 +395,7 @@ def confirm_payment_method_checkout(reference: str) -> dict:
 
 	# confirm gates on capability; team fixed by credential
 	with _as_operator():
-		result = _activate_setup(method_name, method_row.gateway, method_row.setup_reference)
+		result = _activate_setup(method_name)
 	if result["status"] == "pending":
 		result["message"] = "Awaiting card entry."
 	return result
@@ -460,7 +438,7 @@ def reconcile_payment_setup() -> dict:
 			if not row.setup_reference:
 				continue
 			try:
-				if _activate_setup(row.name, row.gateway, row.setup_reference).get("active"):
+				if _activate_setup(row.name).get("active"):
 					activated += 1
 			except Exception:
 				frappe.clear_last_message()  # a decline/gateway hiccup must not break the tab load
