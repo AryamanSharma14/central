@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
+import ContactSupportLink from '@/components/common/ContactSupportLink.vue'
 import RotatingText from '@/components/common/RotatingText.vue'
 import SetupJourney from '@/components/onboarding/SetupJourney.vue'
 import { useProduct } from '@/composables/useProduct'
@@ -52,13 +53,11 @@ const failureDetail = computed(() => {
 		.join(' ')
 })
 
-const supportMailto = computed(() => {
-	const reference = journey.value?.reference
-	const subject = reference
-		? `Site setup failed (${reference})`
-		: 'Site setup failed'
-	return `mailto:cloud@frappe.io?subject=${encodeURIComponent(subject)}`
-})
+const supportContext = computed(() => ({
+	Topic: 'Site setup failed',
+	Product: title.value,
+	Reference: journey.value?.reference,
+}))
 
 function tryAgain() {
 	router.push({ path: '/onboarding/site', query: carriedQuery(route.query) })
@@ -116,12 +115,8 @@ function tryAgain() {
 			>
 				<template #description>
 					<span v-if="failureDetail" class="block">{{ failureDetail }}</span>
-					If this keeps happening, email
-					<a
-						class="text-ink-gray-8 underline underline-offset-2 hover:text-ink-gray-9"
-						:href="supportMailto"
-						>cloud@frappe.io</a
-					>.
+					If this keeps happening,
+					<ContactSupportLink :context="supportContext" />.
 				</template>
 			</Alert>
 			<ErrorMessage v-if="error" class="mt-4" :message="error" />

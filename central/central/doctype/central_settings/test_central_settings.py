@@ -69,3 +69,17 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 		settings = frappe.get_doc("Central Settings")
 		settings.common_site_config = '{"raven_push_notification_server_url": "https://relay.test"}'
 		settings.save()
+
+	def test_help_links_send_an_empty_url_as_none_so_the_console_hides_it(self):
+		url = "https://support.test/helpdesk/my-tickets/new"
+		self.addCleanup(
+			frappe.db.set_single_value,
+			"Central Settings",
+			"support_ticket_url",
+			frappe.db.get_single_value("Central Settings", "support_ticket_url"),
+		)
+		frappe.db.set_single_value("Central Settings", {"support_ticket_url": url, "feedback_url": ""})
+
+		links = frappe.get_cached_doc("Central Settings").help_links()
+
+		self.assertEqual(links, {"support_ticket_url": url, "feedback_url": None})

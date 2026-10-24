@@ -3,6 +3,7 @@ import { Alert, Button, LoadingIndicator } from 'frappe-ui'
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ContactSupportLink from '@/components/common/ContactSupportLink.vue'
 import { useSession } from '@/composables/useSession'
 import { settingsOpen } from '@/composables/useSettings'
 import {
@@ -139,7 +140,7 @@ onBeforeUnmount(() => window.removeEventListener('focus', onFocus))
 					>{{ activeTeamLabel }}</span
 				>
 				loses access. Invoices and records are kept. To use the team again,
-				contact support.
+				<ContactSupportLink :context="{ Team: activeTeamLabel }" />.
 			</p>
 
 			<div

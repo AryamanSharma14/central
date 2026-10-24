@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { Button } from 'frappe-ui'
+import { computed } from 'vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useSession } from '@/composables/useSession'
+import { useSupport } from '@/composables/useSupport'
 
 const { activeTeamLabel } = useSession()
+const { getTicketUrl } = useSupport()
+const ticketUrl = computed(() => getTicketUrl({ Team: activeTeamLabel.value }))
 </script>
 
 <template>
@@ -15,8 +19,9 @@ const { activeTeamLabel } = useSession()
 		>
 			<template #action>
 				<Button
+					v-if="ticketUrl"
 					label="Contact support"
-					href="https://support.frappe.io"
+					:href="ticketUrl"
 					icon-right="lucide-external-link"
 				/>
 			</template>

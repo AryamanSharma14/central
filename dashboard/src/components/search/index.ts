@@ -172,7 +172,7 @@ export function useSearchIndex() {
 			const title = server.title || server.resource_id
 
 			// Locked actions are disabled, and the filter below leaves disabled ones out.
-			return getServerMenuGroups(server, allowed, run, { opensSite: !!site })
+			return getServerMenuGroups(server, allowed, run, { site: site?.name })
 				.flat()
 				.flatMap(withSubmenuItems)
 				.filter((option) => !option.disabled)

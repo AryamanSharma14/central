@@ -2,6 +2,7 @@ import { type ColorScheme, useColorScheme } from 'frappe-ui'
 import { computed, h } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { openSettings } from '@/composables/useSettings'
+import { useSupport } from '@/composables/useSupport'
 
 const themeOptions: { label: string; icon: string; value: ColorScheme }[] = [
 	{ label: 'System', icon: 'lucide-monitor', value: 'system' },
@@ -12,6 +13,10 @@ const themeOptions: { label: string; icon: string; value: ColorScheme }[] = [
 export const useAppMenu = () => {
 	const { currentUser, logout } = useAuth()
 	const { colorScheme, setColorScheme } = useColorScheme()
+	const { getContactSupportOption, feedbackOption } = useSupport()
+	const helpMenuItems = [getContactSupportOption(), feedbackOption].filter(
+		(option) => option !== null,
+	)
 
 	const logoutAndRedirect = async () => {
 		await logout()
@@ -43,16 +48,18 @@ export const useAppMenu = () => {
 			label: 'Theme',
 			icon: 'lucide-sun-moon',
 			submenu: themeMenuItems.value,
-			slots: {
-				suffix: () =>
-					h('span', { class: 'flex size-4 items-center justify-center' }, [
-						h('span', {
-							class: 'lucide-chevron-right size-3.5 text-ink-gray-6',
-							'aria-hidden': 'true',
-						}),
-					]),
-			},
+			slots: { suffix: submenuChevron },
 		},
+		...(helpMenuItems.length
+			? [
+					{
+						label: 'Help',
+						icon: 'lucide-circle-help',
+						submenu: helpMenuItems,
+						slots: { suffix: submenuChevron },
+					},
+				]
+			: []),
 		{ label: 'Sign out', icon: 'lucide-log-out', onClick: logoutAndRedirect },
 	])
 
@@ -62,4 +69,13 @@ export const useAppMenu = () => {
 		currentUser,
 		logoutAndRedirect,
 	}
+}
+
+function submenuChevron() {
+	return h('span', { class: 'flex size-4 items-center justify-center' }, [
+		h('span', {
+			class: 'lucide-chevron-right size-3.5 text-ink-gray-6',
+			'aria-hidden': 'true',
+		}),
+	])
 }

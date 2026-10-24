@@ -33,6 +33,7 @@ class CentralSettings(Document):
 		enable_pdf_print_service: DF.Check
 		enable_public_ipv4: DF.Check
 		enable_public_ipv6: DF.Check
+		feedback_url: DF.Data | None
 		github_app_id: DF.Data | None
 		github_app_slug: DF.Data | None
 		github_client_id: DF.Data | None
@@ -47,6 +48,7 @@ class CentralSettings(Document):
 		public_network_throughput_mibps: DF.Int
 		sign_in_code_attempts: DF.Int
 		sign_in_codes_per_email: DF.Int
+		support_ticket_url: DF.Data | None
 		require_payment_method: DF.Check
 		trial_days: DF.Int
 		trial_deletion_days: DF.Int
@@ -108,6 +110,13 @@ class CentralSettings(Document):
 			"public_ipv4": bool(self.enable_public_ipv4),
 			"public_ipv6": bool(self.enable_public_ipv6),
 			"firewall": bool(self.enable_firewall),
+		}
+
+	def help_links(self) -> dict[str, str | None]:
+		"""The console's Help menu links for window boot. An empty URL hides its menu item."""
+		return {
+			"support_ticket_url": self.support_ticket_url or None,
+			"feedback_url": self.feedback_url or None,
 		}
 
 	def require_new_server_network_options(
