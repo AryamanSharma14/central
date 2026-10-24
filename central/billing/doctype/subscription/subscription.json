@@ -21,6 +21,7 @@
   "billing_cycle",
   "column_break_state",
   "account_standing",
+  "stopped_for_nonpayment",
   "start_date",
   "section_break_payment",
   "default_payment_method",
@@ -103,6 +104,14 @@
    "in_list_view": 1,
    "label": "Account Standing",
    "options": "Current\nPast Due\nSuspended"
+  },
+  {
+   "default": "0",
+   "description": "Dunning stopped this server for an unpaid invoice. Paying the invoice starts it again.",
+   "fieldname": "stopped_for_nonpayment",
+   "fieldtype": "Check",
+   "label": "Stopped for Non-payment",
+   "read_only": 1
   },
   {
    "fieldname": "start_date",

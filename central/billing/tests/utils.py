@@ -438,6 +438,24 @@ def complete_billing_profile(team, currency="INR"):
 	return team
 
 
+def give_team_a_card(team, gateway="Stripe"):
+	"""An active card, so the team passes the payment gate that every purchase runs."""
+	if frappe.db.exists("Payment Method", {"team": team, "status": "Active"}):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Payment Method",
+			"team": team,
+			"gateway": gateway,
+			"method_type": "Card",
+			"status": "Active",
+			"gateway_method_id": f"pm_{team}",
+			"gateway_customer_id": f"cus_{team}",
+			"is_default": 1,
+		}
+	).insert(ignore_permissions=True)
+
+
 def make_billing_subscription(team, cluster, plan, start_date=None, clear_changes=True, **kwargs):
 	"""Provision a billable subscription for billing tests under the VirtualMachine model:
 	ensure the cluster's Region is connection-configured, and the team's Billing

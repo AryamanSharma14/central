@@ -27,7 +27,7 @@ from central.billing.doctype.billing_profile.billing_profile import (
 	is_complete,
 	require_billing_profile,
 )
-from central.billing.payments.settlement import wallet_funds
+from central.billing.payments.settlement import can_pay_by_hand, is_behind_on_payment, wallet_funds
 from central.billing.revenue.tax import is_internal_team
 from central.errors import throw_action_error
 from central.iam import can, resolve_team
@@ -176,6 +176,12 @@ def submit_command(
 		)
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
+	if action == "start" and frappe.db.exists(
+		"Subscription", {"server_id": server.name, "stopped_for_nonpayment": 1}
+	):
+		throw_action_error(
+			"PAYMENT_OVERDUE", message=_("This server was stopped because an invoice is unpaid.")
+		)
 	if action == "start" and frappe.db.exists("Site", {"server": server.name, "trial_state": "Ended"}):
 		if has_active_payment_method(team):
 			frappe.throw(_("This trial has ended. Choose Keep this site to start it on its paid plan."))
@@ -399,10 +405,14 @@ def require_server_slot(team: str) -> None:
 def require_payment_method_or_credit(team: str, rate: float) -> None:
 	"""Refuse a server that neither credit nor a way to pay covers.
 
-	1. Credit that covers the rate is enough.
-	2. Otherwise the billing profile must be complete, and the team needs an active payment
-	   method or must pay each invoice by hand (Manual Checkout).
-	3. With Central Settings' payment method requirement off, a complete profile is enough."""
+	1. A team with an overdue invoice, or a subscription Past Due or Suspended, buys nothing.
+	2. Credit that covers the rate is enough.
+	3. With Central Settings' payment method requirement off, a complete profile is enough.
+	4. Otherwise the billing profile must be complete, and the team needs an active payment
+	   method, or must be on Manual Checkout with one invoice already paid."""
+	if is_behind_on_payment(team):
+		throw_action_error("PAYMENT_OVERDUE")
+
 	if wallet_funds(team, rate):
 		return
 
@@ -410,8 +420,7 @@ def require_payment_method_or_credit(team: str, rate: float) -> None:
 		require_billing_profile(team, "create servers")
 		return
 
-	collection_mode = frappe.db.get_value("Billing Profile", team, "collection_mode")
-	if is_complete(team) and (collection_mode == "Manual Checkout" or has_active_payment_method(team)):
+	if is_complete(team) and (has_active_payment_method(team) or can_pay_by_hand(team)):
 		return
 
 	throw_action_error("PAYMENT_METHOD_REQUIRED")

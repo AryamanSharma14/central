@@ -10,21 +10,20 @@ Settings, so the stages are read per run rather than fixed here:
                   failure reason.
   Day 7 (exhausted)   invoice -> Overdue, standing -> past_due. KEEP RUNNING
                       (grace) — being late is not yet being cut off.
-  Day 14 (continued)  suspend directive on the entitlement-token channel (cap 0
-                      + suspend) -> standing suspended -> the Agent stops the
-                      resource (data preserved).
-  Day 44 (~30d suspended)   terminate directive -> the Agent terminates.
+  Day 14 (continued)  every server subscription -> suspended, and Central stops
+                      the team's running servers (data preserved). Paying the
+                      invoice returns the team to current and starts them again
+                      (`subscriptions.restore_after_payment`).
+  Day 44 (~30d suspended)   termination is due: the operator alerts page a person,
+                            who decides. Nothing is deleted automatically.
 
-Only a deliberate directive ever stops a resource. Central being unreachable
-does not — the Agent keeps running on a stale token (see entitlement.enforcement
-_state on the Agent).
+Only dunning stops a server for non-payment, and only a payment starts it again.
 """
 
 import frappe
 
 from central.billing import settings
 from central.billing.catalog import subscriptions
-from central.billing.catalog.entitlements import issue_token
 from central.billing.states import transition
 
 
@@ -204,12 +203,6 @@ def _is_retry_due(invoice: str, schedule: list, now) -> bool:
 	return not frappe.db.exists("Payment Attempt", {"invoice": invoice, "creation": [">=", start]})
 
 
-def _active_directive(team: str, field: str) -> bool:
-	"""True if the team's latest token already carries this directive."""
-	name = frappe.db.get_value("Entitlement Token", {"team": team}, "name", order_by="creation desc")
-	return bool(name and frappe.db.get_value("Entitlement Token", name, field))
-
-
 def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 	"""Drive one invoice through the dunning stages for the current date.
 
@@ -269,29 +262,27 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 		if sub:
 			standing = _advance_standing(anchor, "Past Due")
 
-	# --- Day 14: suspend directive -> Agent stops --------------------------
+	# --- Day 14: suspend -> stop the team's running servers ------------------
 	if "Suspend" in reached and sub:
-		standing = _advance_standing(anchor, "Suspended")
-		if standing == "Suspended" and not _active_directive(sub.team, "suspend"):
-			issue_token(sub.team, {}, suspend=True)
-			_notify(inv, f"Suspended for non-payment (day {days}); resource stopped, data preserved.")
+		if subscriptions.suspend_for_nonpayment(inv.team):
+			standing = "Suspended"
+			_notify(inv, f"Suspended for non-payment (day {days}); running servers stopped, data preserved.")
 			from central.notification import engine
 
 			engine.dispatch(
 				inv.team,
 				"server_suspended",
-				message=f"A server was suspended after {days} days overdue on invoice {invoice_name}. "
-				"Data is preserved — settle the invoice to restore it.",
+				message=f"Servers were stopped after {days} days overdue on invoice {invoice_name}. "
+				"Data is preserved. Pay the invoice to start them again.",
 				reference_doctype="Invoice",
 				reference_name=invoice_name,
 			)
 			actions.append("suspend")
 
-	# --- Day 44: terminate directive -> Agent terminates -------------------
-	if "Terminate" in reached and sub and not _active_directive(sub.team, "terminate"):
-		issue_token(sub.team, {}, suspend=True, terminate=True)
-		_notify(inv, f"Terminated after the suspension window (day {days}).")
-		actions.append("terminate")
+	# --- Day 44: termination is due. An operator decides; nothing is deleted here.
+	# platform/alerts.termination_due pages them while the invoice stays unpaid.
+	if "Terminate" in reached and sub:
+		actions.append("termination_due")
 
 	return {"invoice": invoice_name, "days_overdue": days, "actions": actions, "standing": standing}
 

@@ -16,6 +16,7 @@ from central.billing.tests.utils import (
 	complete_billing_profile,
 	ensure_atlas_instance,
 	ensure_team,
+	give_team_a_card,
 	make_plan,
 	run_enqueued_inline,
 	set_team_tier,
@@ -60,6 +61,7 @@ class TestResizeComposed(IntegrationTestCase):
 		ensure_atlas_instance(CLUSTER)
 		ensure_team(TEAM)
 		complete_billing_profile(TEAM, currency="INR")
+		give_team_a_card(TEAM)
 		_ensure_tier_level("t1")
 		set_team_tier(TEAM, max_spend=1_000_000)
 		for resource_type, rate in (("Compute", 500), ("Memory", 250), ("Disk", 10)):
@@ -438,6 +440,28 @@ class TestResizeComposed(IntegrationTestCase):
 		frappe.db.set_value("Plan", plan, "is_active", 0)
 		with patch("frappe.enqueue", side_effect=run_enqueued_inline):
 			result = subscriptions.begin_resize(sub, plan=plan, disk_gigabytes=200)
+		self.assertTrue(result["resized"])
+
+	def test_resize_up_needs_a_way_to_pay_and_resize_down_does_not(self):
+		def rows(shape):
+			# Fresh rows: insert writes child-row keys into the dicts it is given.
+			return [{key: row[key] for key in ("resource_type", "quantity", "unit")} for row in shape]
+
+		big_rows, small_rows = rows(BIG), rows(SMALL)
+		big = self._provision(rows(BIG))
+		frappe.db.set_value("Virtual Machine", self._ready(big), "atlas_vm_id", "vm-resize-big")
+		small = self._provision(rows(SMALL))
+		self._ready(small)
+		frappe.db.delete("Payment Method", {"team": TEAM})
+
+		with patch("frappe.enqueue") as enqueue:
+			with self.assertRaises(frappe.ValidationError) as caught:
+				subscriptions.begin_resize(small, includes=big_rows, sub_category="General")
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_METHOD_REQUIRED")
+		enqueue.assert_not_called()
+
+		with patch("frappe.enqueue", side_effect=run_enqueued_inline):
+			result = subscriptions.begin_resize(big, includes=small_rows, sub_category="General")
 		self.assertTrue(result["resized"])
 
 	def test_begin_resize_refuses_an_extra_priced_row(self):

@@ -8,7 +8,12 @@ import frappe
 
 from central.billing.catalog import subscriptions
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
-from central.billing.tests.utils import complete_billing_profile, ensure_team, make_metered_plan
+from central.billing.tests.utils import (
+	complete_billing_profile,
+	ensure_team,
+	give_team_a_card,
+	make_metered_plan,
+)
 
 
 def _ensure_resource_type(name: str) -> str:
@@ -122,6 +127,7 @@ class TestServiceSubjectProvisioning(IntegrationTestCase):
 	def setUp(self):
 		ensure_team(self.TEAM)
 		complete_billing_profile(self.TEAM, currency="INR")
+		give_team_a_card(self.TEAM)
 		frappe.db.delete("Subscription", {"team": self.TEAM})
 		_ensure_resource_type("PDF Render")
 		self.plan = make_metered_plan("Svc PDF Render", resource_type="PDF Render", unit="Nos")
@@ -234,6 +240,12 @@ class TestServiceSubjectProvisioning(IntegrationTestCase):
 		)
 		self.assertEqual(frappe.db.get_value("Subscription", res["subscription"], "plan"), retired)
 
+	def test_a_team_with_no_way_to_pay_cannot_subscribe(self):
+		frappe.db.delete("Payment Method", {"team": self.TEAM})
+		with self.assertRaises(frappe.ValidationError) as caught:
+			subscriptions.provision_service_subscription(self.TEAM, self.plan, cluster="mumbai")
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_METHOD_REQUIRED")
+
 	def test_plan_without_a_rate_in_team_currency_refused(self):
 		"""A segment with no rate bills nothing, so even an operator cannot open one."""
 		from central.billing.catalog.pricing import set_catalog_rates
@@ -259,6 +271,7 @@ class TestDualModeIngestion(IntegrationTestCase):
 		self.metering = metering
 		ensure_team(self.TEAM)
 		complete_billing_profile(self.TEAM, currency="INR")
+		give_team_a_card(self.TEAM)
 		frappe.db.delete("Subscription", {"team": self.TEAM})
 		frappe.db.delete("Usage Rollup", {"team": self.TEAM})
 
@@ -418,6 +431,7 @@ class TestServiceAPI(IntegrationTestCase):
 		for t in (self.TEAM, self.OTHER):
 			ensure_team(t)
 			complete_billing_profile(t, currency="INR")
+			give_team_a_card(t)
 			frappe.db.delete("Subscription", {"team": t})
 		frappe.db.delete("Usage Rollup", {"team": self.TEAM})
 		self.plan = _make_metered_family("SM API Family", "PDF API", "SM PDF API Plan")
@@ -511,6 +525,7 @@ class TestPrepaidSettlement(IntegrationTestCase):
 		self.metering = metering
 		ensure_team(self.TEAM)
 		complete_billing_profile(self.TEAM, currency="INR")
+		give_team_a_card(self.TEAM)
 		frappe.db.delete("Subscription", {"team": self.TEAM})
 		frappe.db.delete("Usage Rollup", {"team": self.TEAM})
 		self.plan = _make_metered_family(
