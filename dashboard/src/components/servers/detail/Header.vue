@@ -159,7 +159,10 @@ const menu = computed(() => {
 		props.server,
 		props.actions,
 		(verb) => handlers[verb]?.(),
-		{ opensSite: !!props.siteUrl, isOnServerPage: true },
+		{
+			site: props.siteUrl ? new URL(props.siteUrl).host : null,
+			isOnServerPage: true,
+		},
 	)
 	if (!operatorItems.value.length) return groups
 

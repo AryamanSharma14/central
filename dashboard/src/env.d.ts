@@ -26,6 +26,11 @@ interface Window {
 	invitation_expiry_days?: number
 	/** Upload limit in bytes, from System Settings. */
 	max_file_size?: number
+	/** Help menu links from Central Settings. Null when an operator left one empty. */
+	help_links?: {
+		support_ticket_url?: string | null
+		feedback_url?: string | null
+	}
 	features?: {
 		addons?: boolean
 		storage?: boolean

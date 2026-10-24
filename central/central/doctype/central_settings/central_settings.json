@@ -10,6 +10,10 @@
   "wildcard_domain",
   "column_break_regions",
   "central_id",
+  "help_section",
+  "support_ticket_url",
+  "column_break_help",
+  "feedback_url",
   "feature_flags_tab",
   "addons_section",
   "enable_addons",
@@ -97,6 +101,29 @@
    "fieldtype": "Int",
    "label": "Central ID",
    "non_negative": 1
+  },
+  {
+   "fieldname": "help_section",
+   "fieldtype": "Section Break",
+   "label": "Help"
+  },
+  {
+   "description": "The helpdesk customer portal's new ticket page, such as https://support.frappe.io/help/my-tickets/new. Leave empty to hide Contact support.",
+   "fieldname": "support_ticket_url",
+   "fieldtype": "Data",
+   "label": "Support Ticket URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "column_break_help",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Feedback form opened from the console Help menu. Leave empty to hide Share feedback.",
+   "fieldname": "feedback_url",
+   "fieldtype": "Data",
+   "label": "Feedback URL",
+   "options": "URL"
   },
   {
    "fieldname": "feature_flags_tab",
@@ -446,7 +473,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 22:37:00.000000",
+ "modified": "2026-10-24 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",

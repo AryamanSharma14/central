@@ -220,7 +220,7 @@ useServerLink(
 							:can-terminate="canTerminateServer"
 							:can-snapshot="canSnapshotServer"
 							:can-open-console="canOpenConsole"
-							:opens-site="!!pin.site"
+							:site="pin.site?.name"
 							:busy="busy === pin.server.resource_id"
 							:opening="
 								opening === pin.server.resource_id ||

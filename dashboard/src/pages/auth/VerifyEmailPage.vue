@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Button, ErrorMessage } from 'frappe-ui'
+import { Button } from 'frappe-ui'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AuthErrorMessage from '@/components/auth/AuthErrorMessage.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
 import TermsNotice from '@/components/auth/TermsNotice.vue'
@@ -116,7 +117,11 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 					:validator="requiredError('Full name')"
 					:submitted="nameSubmitted"
 				/>
-				<ErrorMessage v-if="error" :message="error" />
+				<AuthErrorMessage
+					v-if="error"
+					:message="error"
+					page="Set up your profile"
+				/>
 				<Button
 					type="submit"
 					variant="solid"
@@ -151,7 +156,7 @@ onBeforeUnmount(() => clearInterval(resendTimer))
 					@complete="verify"
 				/>
 				<p v-if="notice" class="text-p-sm text-ink-gray-6">{{ notice }}</p>
-				<ErrorMessage v-if="error" :message="error" />
+				<AuthErrorMessage v-if="error" :message="error" page="Verify email" />
 				<Button
 					type="submit"
 					variant="solid"

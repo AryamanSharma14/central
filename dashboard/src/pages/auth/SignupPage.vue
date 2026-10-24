@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Button, ErrorMessage } from 'frappe-ui'
+import { Button } from 'frappe-ui'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AuthErrorMessage from '@/components/auth/AuthErrorMessage.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
 import TermsNotice from '@/components/auth/TermsNotice.vue'
@@ -77,7 +78,7 @@ async function submit() {
 				:validator="emailError"
 				:submitted="submitted"
 			/>
-			<ErrorMessage v-if="error" :message="error" />
+			<AuthErrorMessage v-if="error" :message="error" page="Sign up" />
 			<Button
 				type="submit"
 				variant="solid"
