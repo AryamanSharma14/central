@@ -211,6 +211,40 @@ class TestServiceSubjectProvisioning(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			subscriptions.provision_service_subscription(self.TEAM, server_plan, cluster="mumbai")
 
+	def test_retired_plan_refused_for_a_new_subscriber(self):
+		retired = _make_metered_family("SM Retired Family", "Tokens Old", "SM Tokens Old", rate=0.01)
+		frappe.db.set_value("Plan", retired, "is_active", 0)
+		with self.assertRaisesRegex(frappe.ValidationError, "no longer offered"):
+			subscriptions.provision_service_subscription(self.TEAM, retired, cluster="mumbai")
+
+	def test_retired_plan_kept_by_its_subscriber(self):
+		plan = _make_metered_family("SM Kept Family", "Tokens Kept", "SM Tokens Kept", rate=0.01)
+		first = subscriptions.provision_service_subscription(self.TEAM, plan, cluster="mumbai")
+		frappe.db.set_value("Plan", plan, "is_active", 0)
+
+		again = subscriptions.provision_service_subscription(self.TEAM, plan, cluster="mumbai")
+		self.assertTrue(again["reused"])
+		self.assertEqual(again["subscription"], first["subscription"])
+
+	def test_operator_may_use_a_retired_plan(self):
+		retired = _make_metered_family("SM Operator Family", "Tokens Op", "SM Tokens Op", rate=0.01)
+		frappe.db.set_value("Plan", retired, "is_active", 0)
+		res = subscriptions.provision_service_subscription(
+			self.TEAM, retired, cluster="mumbai", allow_unlisted_plan=True
+		)
+		self.assertEqual(frappe.db.get_value("Subscription", res["subscription"], "plan"), retired)
+
+	def test_plan_without_a_rate_in_team_currency_refused(self):
+		"""A segment with no rate bills nothing, so even an operator cannot open one."""
+		from central.billing.catalog.pricing import set_catalog_rates
+
+		plan = _make_metered_family("SM Usd Family", "Tokens Usd", "SM Tokens Usd", rate=0.01)
+		set_catalog_rates("Plan", plan, [{"cluster": "", "currency": "USD", "rate": 0.01}])
+		with self.assertRaisesRegex(frappe.ValidationError, "no price in INR"):
+			subscriptions.provision_service_subscription(
+				self.TEAM, plan, cluster="mumbai", allow_unlisted_plan=True
+			)
+
 
 class TestDualModeIngestion(IntegrationTestCase):
 	"""Usage lands as one rollup row per period in both reporting modes (ADR 0015):

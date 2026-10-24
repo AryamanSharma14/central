@@ -21,6 +21,7 @@ from frappe.utils import flt
 COMPUTE = "Compute"
 MEMORY = "Memory"
 DISK = "Disk"
+SHAPE_RESOURCES = (COMPUTE, MEMORY, DISK)
 
 # The storage ladder a composed config snaps to (GB). Mirrors the configurator's
 # storage choices; the slider offers the rungs inside the profile's [disk_min,
@@ -83,6 +84,7 @@ def validate_composition(sub_category: str, includes) -> None:
 	if not profile:
 		frappe.throw(_("Unknown optimisation profile {0}.").format(frappe.bold(sub_category)))
 
+	validate_shape_rows(includes)
 	qty = composition_quantities(includes)
 	vcpu = qty.get(COMPUTE, 0.0)
 	ram = qty.get(MEMORY, 0.0)
@@ -117,6 +119,28 @@ def validate_composition(sub_category: str, includes) -> None:
 				_num(disk), sub_category, profile.disk_max
 			)
 		)
+
+
+def validate_shape_rows(includes) -> None:
+	"""A customer-designed shape is exactly one Compute, Memory and Disk row, each above zero.
+
+	Every row is priced, so an extra or negative row would change the price without
+	changing the server."""
+	seen = set()
+	for row in includes or []:
+		resource_type = row["resource_type"] if isinstance(row, dict) else row.resource_type
+		quantity = row["quantity"] if isinstance(row, dict) else row.quantity
+		if resource_type not in SHAPE_RESOURCES or resource_type in seen:
+			frappe.throw(
+				_("A custom server is made of one CPU, one memory and one disk size. Remove {0}.").format(
+					frappe.bold(resource_type)
+				)
+			)
+		if flt(quantity) <= 0:
+			frappe.throw(_("{0} must be greater than zero.").format(_(resource_type)))
+		seen.add(resource_type)
+	if seen != set(SHAPE_RESOURCES):
+		frappe.throw(_("Choose a CPU, memory and disk size for a custom server."))
 
 
 def _num(value) -> str:

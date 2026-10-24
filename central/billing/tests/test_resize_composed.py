@@ -415,6 +415,41 @@ class TestResizeComposed(IntegrationTestCase):
 		enqueue.assert_not_called()  # rejected up front, nothing queued
 		self.assertFalse(frappe.db.exists("Resource Action", {"resource_id": server}))
 
+	def test_begin_resize_refuses_a_retired_plan(self):
+		"""A team keeps a retired plan it runs, but cannot move onto one."""
+		sub = self._provision()
+		server = self._ready(sub)
+		plan = make_plan("resize-retired", rates=[{"cluster": "", "currency": "INR", "rate": 100}])
+		frappe.db.set_value("Plan", plan, "is_active", 0)
+		with patch("frappe.enqueue") as enqueue:
+			with self.assertRaisesRegex(frappe.ValidationError, "not available"):
+				subscriptions.begin_resize(sub, plan=plan)
+		enqueue.assert_not_called()
+		self.assertFalse(frappe.db.exists("Resource Action", {"resource_id": server}))
+
+	def test_begin_resize_grows_the_disk_of_a_retired_plan_it_runs(self):
+		plan = make_plan(
+			"resize-retired-own",
+			rates=[{"cluster": "", "currency": "INR", "rate": 3000}],
+			sub_category="General",
+		)
+		sub = subscriptions.create_subscription(TEAM, CLUSTER, plan=plan).name
+		self._ready(sub)
+		frappe.db.set_value("Plan", plan, "is_active", 0)
+		with patch("frappe.enqueue", side_effect=run_enqueued_inline):
+			result = subscriptions.begin_resize(sub, plan=plan, disk_gigabytes=200)
+		self.assertTrue(result["resized"])
+
+	def test_begin_resize_refuses_an_extra_priced_row(self):
+		sub = self._provision()
+		self._ready(sub)
+		includes = [*BIG, {"resource_type": "Snapshot", "quantity": -10000, "unit": "GB"}]
+		with patch("frappe.enqueue") as enqueue:
+			with self.assertRaisesRegex(frappe.ValidationError, "Remove"):
+				subscriptions.begin_resize(sub, includes=includes, sub_category="General")
+		enqueue.assert_not_called()
+		self.assertEqual(len(self._segments(sub)), 1)
+
 	def test_begin_resize_returns_the_action_already_running(self):
 		sub = self._provision()
 		self._ready(sub)

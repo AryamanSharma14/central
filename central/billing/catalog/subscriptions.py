@@ -279,6 +279,7 @@ def provision_service_subscription(
 	default_payment_method: str | None = None,
 	gateway: str | None = None,
 	changed_by: str | None = None,
+	allow_unlisted_plan: bool = False,
 ):
 	"""Subscribe a team to a team-level metered service (ADR 0013/0015).
 
@@ -292,15 +293,21 @@ def provision_service_subscription(
 	upgrading to a different plan in the same family re-locks the SAME subject (a
 	`Plan Changed` segment) and keeps its usage history continuous — never forking into a
 	parallel subject. Re-subscribing the identical plan is idempotent. Returns the
-	subscription + the synthesized subject + the locked handles."""
+	subscription + the synthesized subject + the locked handles.
+
+	A team that already runs a plan keeps it (grandfathering). Moving onto a plan, or
+	starting one, needs a plan the catalog lists today, unless an operator route passes
+	`allow_unlisted_plan`."""
 	category = _assert_service_plan(plan)
 
 	subject = _service_subject_id(team, category, cluster)
 	existing = frappe.db.get_value(
 		"Subscription", {"service_subject": subject, "enabled": 1}, ["name", "plan"], as_dict=True
 	)
+	reused = bool(existing) and existing.plan == plan
+	if not reused:
+		_require_sellable_service_plan(team, plan, cluster, allow_unlisted_plan)
 	if existing:
-		reused = existing.plan == plan
 		if not reused:
 			# Same family, different plan → an upgrade/downgrade: re-lock in place.
 			change_plan(existing.name, plan, changed_by=changed_by)
@@ -350,7 +357,7 @@ def provision_service_subscription(
 
 
 def _assert_service_plan(plan: str) -> str:
-	"""A team-level service plan is any active Plan whose family is not provisioned as a
+	"""A team-level service plan is a Plan whose family is not provisioned as a
 	whole Server (servers go through the VM create/resize flow, ADR 0007). Metered
 	families (AI Tokens, PDF, storage) and non-Server bundles qualify. Returns its
 	Plan Category (the service family)."""
@@ -365,6 +372,23 @@ def _assert_service_plan(plan: str) -> str:
 			frappe.ValidationError,
 		)
 	return category
+
+
+def _require_sellable_service_plan(team: str, plan: str, cluster: str | None, allow_unlisted: bool) -> None:
+	"""Refuse a service plan that is retired or has no price for this team.
+
+	An operator may place a team on a retired plan on purpose, but never on an unpriced
+	one: a segment with no rate bills nothing."""
+	if not allow_unlisted and not frappe.db.get_value("Plan", plan, "is_active"):
+		frappe.throw(
+			frappe._("This plan is no longer offered. Choose a plan from the list."), frappe.ValidationError
+		)
+	currency = frappe.db.get_value("Billing Profile", team, "currency")
+	if frappe.get_doc("Plan", plan).get_rate(currency, cluster) is None:
+		frappe.throw(
+			frappe._("This plan has no price in {0} for this region. Choose another plan.").format(currency),
+			frappe.ValidationError,
+		)
 
 
 def _service_subject_id(team: str, category: str, cluster: str | None) -> str:
@@ -434,6 +458,15 @@ def begin_resize(
 	if is_live and not server.atlas_vm_id:
 		frappe.throw(frappe._("This server has no verified regional identity."))
 
+	# The customer names the target, so it must be one their catalog offers today, and a
+	# custom shape is checked row by row before it is priced.
+	if plan and plan != doc.plan:
+		_require_offered_plan(doc, plan, server.region if server else doc.cluster)
+	elif includes:
+		from central.billing.catalog.composition import validate_shape_rows
+
+		validate_shape_rows(includes)
+
 	# A plan's own disk is what a new server is created with. Resize keeps the
 	# current disk, or grows it, and refuses a plan whose disk is smaller.
 	original_plan = plan
@@ -494,6 +527,24 @@ def begin_resize(
 		request_payload=configuration.model_dump(),
 	)
 	return {"queued": True, "resized": True, **action.customer_status()}
+
+
+def _require_offered_plan(doc, plan: str, region: str | None) -> None:
+	"""Refuse a resize target the team's own catalog does not list for this region.
+
+	The catalog is what create offers: active server plans, priced in the team's
+	currency, allowed by its tier and within its headroom. A team keeps a retired plan it
+	already runs, but cannot move onto one."""
+	from central.billing.catalog.server_plans import get_server_plans
+
+	catalog = get_server_plans(doc.team, cluster=region, exclude_subscription=doc.name, for_resize=1)
+	offered = {row["plan"] for rows in catalog["plans"].values() for row in rows}
+	if plan not in offered:
+		frappe.throw(
+			frappe._(
+				"This plan is not available for this server. Choose a plan from the list, or contact support to review your spending limit."
+			)
+		)
 
 
 def apply_resize_billing(action) -> None:
@@ -710,8 +761,12 @@ def _validate_resize_shape(
 		MEMORY,
 		composition_quantities,
 		validate_composition,
+		validate_shape_rows,
 	)
 
+	# A preset's rows come from its own Plan; any other shape came from the customer.
+	if not preset_plan:
+		validate_shape_rows(rows)
 	if not server_id:
 		validate_composition(profile, rows)
 		return
