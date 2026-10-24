@@ -15,13 +15,21 @@ const compiled = typescript.transpileModule(source, {
 }).outputText
 const storageKey = 'central.console.activeTeam'
 
-function startSession(pathname, storage, storageBlocked = false) {
+function startSession(
+	pathname,
+	storage,
+	storageBlocked = false,
+	{ search = '', tabStorage = new Map(), extraTeams = [] } = {},
+) {
 	const navigations = []
 	const rosterReads = []
+	const rosterParams = []
+	const addresses = []
 	const exports = {}
 	const roster = [
-		{ name: 'team-a', label: 'Acme' },
-		{ name: 'team-b', label: 'Pied Piper' },
+		{ name: 'team-a', label: 'Acme', status: 'Active' },
+		{ name: 'team-b', label: 'Pied Piper', status: 'Active' },
+		...extraTeams,
 	]
 	const localStorage = {
 		getItem: (key) => storage.get(key) ?? null,
@@ -36,6 +44,7 @@ function startSession(pathname, storage, storageBlocked = false) {
 		'@/api/methods': { API: { myTeams: 'my_teams' }, method: (value) => value },
 		'frappe-ui': {
 			useCall(options) {
+				rosterParams.push(options.params())
 				options.onSuccess(roster)
 				return {
 					data: roster,
@@ -49,15 +58,33 @@ function startSession(pathname, storage, storageBlocked = false) {
 		exports,
 		require: (name) => dependencies[name],
 		localStorage,
+		sessionStorage: {
+			getItem: (key) => tabStorage.get(key) ?? null,
+			setItem: (key, value) => tabStorage.set(key, value),
+			removeItem: (key) => tabStorage.delete(key),
+		},
+		URL,
 		window: {
 			location: {
 				pathname,
+				href: `https://cloud.example${pathname}${search}`,
 				reload: () => navigations.push('reload'),
 				replace: (path) => navigations.push(path),
+				assign: (path) => navigations.push(path),
+			},
+			history: {
+				state: null,
+				replaceState: (_state, _title, url) => addresses.push(String(url)),
 			},
 		},
 	})
-	return { session: exports.useSession(), navigations, rosterReads }
+	return {
+		session: exports.useSession(),
+		navigations,
+		rosterReads,
+		rosterParams,
+		addresses,
+	}
 }
 
 test('switching preserves a section and boots with the new team before reads start', () => {
@@ -118,4 +145,53 @@ test('a team the caller just created is selected without leaving the page', asyn
 	assert.equal(storage.get(storageKey), 'team-b')
 	assert.deepEqual(rosterReads, ['my_teams'])
 	assert.deepEqual(navigations, [])
+})
+
+test('an operator opened from Desk sees the impersonated team for this tab only', () => {
+	const storage = new Map([[storageKey, 'team-a']])
+	const tabStorage = new Map()
+	const { session, rosterParams, addresses } = startSession(
+		'/dashboard/servers',
+		storage,
+		false,
+		{
+			search: '?view_as=team-c',
+			tabStorage,
+			extraTeams: [
+				{
+					name: 'team-c',
+					label: 'Customer',
+					status: 'Active',
+					is_impersonated: true,
+				},
+			],
+		},
+	)
+
+	assert.equal(rosterParams[0].view_as, 'team-c')
+	assert.equal(session.activeTeam.value, 'team-c')
+	assert.equal(session.impersonatedTeam.value?.label, 'Customer')
+	// The address loses view_as, and the operator's own stored team stays as it was.
+	assert.deepEqual(addresses, ['https://cloud.example/dashboard/servers'])
+	assert.equal(storage.get(storageKey), 'team-a')
+	assert.equal(tabStorage.get('central.console.viewAs'), 'team-c')
+})
+
+test('switching to another team ends the impersonation', () => {
+	const tabStorage = new Map([['central.console.viewAs', 'team-c']])
+	const { session } = startSession('/dashboard/llm', new Map(), false, {
+		tabStorage,
+		extraTeams: [
+			{
+				name: 'team-c',
+				label: 'Customer',
+				status: 'Active',
+				is_impersonated: true,
+			},
+		],
+	})
+
+	session.setActiveTeam('team-a')
+
+	assert.equal(tabStorage.has('central.console.viewAs'), false)
 })
