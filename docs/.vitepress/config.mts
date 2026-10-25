@@ -7,7 +7,7 @@ import { sidebar } from './sidebar'
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const base = process.env.DOCS_BASE || '/'
 // The Frappe Cloud v2 console. The header link to it stays hidden while this is empty.
-const consoleUrl = ''
+const consoleUrl = 'https://dashboard.frappe.io'
 
 const config = defineDocsConfig({
 	rootDir,
