@@ -952,41 +952,57 @@ def get_checkout_status(reference: str) -> dict:
 	Only the session id is read from `reference`; the record it settles is the one
 	Central stored for that session, and it must belong to the credential's team. On
 	the first observed payment a top-up credits the wallet, and an invoice settles."""
-	from central.billing.doctype.top_up_order.top_up_order import TopupOrder
 	from central.billing.gateways.registry import get_adapter
 
-	session_id = (reference or "").split("|")[1] if "|" in (reference or "") else reference
-	order = frappe.db.get_value(
-		"Top-up Order", {"gateway_order_id": session_id}, ["name", "team"], as_dict=True
-	)
-	attempt = (
-		None
-		if order
-		else frappe.db.get_value(
-			"Payment Attempt", {"gateway_order_id": session_id}, ["name", "team", "invoice"], as_dict=True
-		)
-	)
-	record = order or attempt
-	if not record:
-		frappe.throw(_("No checkout found for this reference."), frappe.DoesNotExistError)
+	session_id = _checkout_session_id(reference)
+	doctype, record = _checkout_record(session_id)
 	_assert_owns(record.team)
 
-	gateway = frappe.db.get_value("Top-up Order" if order else "Payment Attempt", record.name, "gateway")
+	gateway = frappe.db.get_value(doctype, record.name, "gateway")
 	payment = get_adapter(frappe.get_doc("Payment Gateway", gateway)).checkout_payment(session_id)
 	if not payment:
 		return {"status": "pending", "success": False, "message": "Awaiting payment."}
+	if doctype == "Top-up Order":
+		return _credit_checkout_top_up(record, payment)
+	return _settle_checkout_invoice(record, payment)
 
-	if order:
-		from central.billing.revenue import credits
 
-		frappe.get_doc("Top-up Order", order.name).credit_wallet(payment)
-		return {
-			"status": "paid",
-			"success": True,
-			"message": "Wallet topped up.",
-			"balance": credits.get_balance(order.team)["balance"],
-		}
+def _checkout_session_id(reference: str | None) -> str:
+	"""The session id inside a checkout reference (`gateway|session|purpose|target`).
 
+	An empty id would match every stored record whose gateway order id is still unset."""
+	parts = (reference or "").split("|")
+	session_id = (parts[1] if len(parts) > 1 else parts[0]).strip()
+	if not session_id:
+		frappe.throw(_("No checkout found for this reference."), frappe.DoesNotExistError)
+	return session_id
+
+
+def _checkout_record(session_id: str) -> tuple[str, dict]:
+	"""The Top-up Order or Payment Attempt Central stored for this hosted session."""
+	for doctype, fields in (
+		("Top-up Order", ["name", "team"]),
+		("Payment Attempt", ["name", "team", "invoice"]),
+	):
+		record = frappe.db.get_value(doctype, {"gateway_order_id": session_id}, fields, as_dict=True)
+		if record:
+			return doctype, record
+	frappe.throw(_("No checkout found for this reference."), frappe.DoesNotExistError)
+
+
+def _credit_checkout_top_up(order, payment) -> dict:
+	from central.billing.revenue import credits
+
+	frappe.get_doc("Top-up Order", order.name).credit_wallet(payment)
+	return {
+		"status": "paid",
+		"success": True,
+		"message": "Wallet topped up.",
+		"balance": credits.get_balance(order.team)["balance"],
+	}
+
+
+def _settle_checkout_invoice(attempt, payment) -> dict:
 	from central.billing.payments.charges import settle_checkout_attempt
 
 	settle_checkout_attempt(attempt.name, payment)

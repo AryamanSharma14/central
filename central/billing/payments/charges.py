@@ -375,7 +375,7 @@ def settle_checkout_attempt(attempt: str, payment) -> dict:
 	if not (
 		att.gateway_order_id
 		and payment.order_id == att.gateway_order_id
-		and payment.covers(att.amount, att.currency)
+		and payment.is_enough_for(att.amount, att.currency)
 	):
 		frappe.throw(_("Payment confirmation failed."), frappe.ValidationError)
 	if att.status in _TERMINAL_ATTEMPT:
@@ -576,7 +576,8 @@ def _mark_invoice_paid(
 
 	1. A payment that lands on an invoice no longer unpaid is late money: it goes to the
 	   wallet, and an operator is told.
-	2. A payment in another currency, or for less than is due, settles nothing.
+	2. A payment in another currency, or for less than is due, settles nothing: it goes to
+	   the wallet too, so captured money is never left without a ledger entry.
 	3. Otherwise the invoice is Paid, and anything paid above what was due goes to the wallet.
 	"""
 	invoice_tbl = frappe.qb.DocType("Invoice")
@@ -592,9 +593,7 @@ def _mark_invoice_paid(
 		)
 		return False
 	if (currency or "").upper() != (inv.currency or "").upper() or frappe.utils.flt(amount) + 0.005 < due:
-		_flag_payment(
-			inv, f"Payment {payment_id} of {currency} {amount} does not cover {inv.currency} {due}."
-		)
+		_to_wallet(inv, amount, currency, payment_id, adapter_key, f"did not cover {inv.currency} {due}")
 		return False
 	surplus = frappe.utils.flt(frappe.utils.flt(amount) - due, 2)
 	if surplus > 0:

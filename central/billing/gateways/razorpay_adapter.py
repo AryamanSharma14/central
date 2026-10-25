@@ -193,28 +193,9 @@ class RazorpayAdapter(GatewayAdapter):
 			existing = (client.order.payments(order_id) or {}).get("items") or []
 			if earlier := _settled_or_live(existing):
 				return earlier
-			payment = client.payment.createRecurring(
-				{
-					"amount": round((invoice.amount or 0) * 100),
-					"currency": (invoice.currency or "").upper(),
-					"order_id": order_id,
-					"customer_id": invoice.get("customer_id"),
-					"token": payment_method.gateway_method_id,
-					"recurring": "1",
-				}
-			)
+			payment = client.payment.createRecurring(_recurring_charge(invoice, payment_method, order_id))
 		except razorpay.errors.BadRequestError as e:
-			# The Razorpay SDK collapses the API error to its description string —
-			# it exposes neither the error code nor the granular reason. Those arrive
-			# on the `payment.failed` webhook (see charges.apply_webhook), which is the
-			# authoritative decline record. Capture what the exception carries here.
-			return PaymentResult(
-				success=False,
-				status="Failed",
-				failure_code=getattr(e, "code", None) or type(e).__name__,
-				failure_reason=str(e),
-				raw={"description": str(e)},
-			)
+			return _declined(e)
 		except _TRANSIENT as e:
 			raise GatewayTimeout(str(e)) from e
 
@@ -470,3 +451,27 @@ def _refund_key(key: str) -> str:
 	"""Razorpay takes 10 to 40 characters of letters, digits, `_` and `-`, and the key must
 	not repeat across the sites that share one Razorpay account: a SHA-1 of both is 40."""
 	return hashlib.sha1(f"{frappe.local.site}:{key}".encode()).hexdigest()
+
+
+def _recurring_charge(invoice, payment_method, order_id: str) -> dict:
+	return {
+		"amount": round((invoice.amount or 0) * 100),
+		"currency": (invoice.currency or "").upper(),
+		"order_id": order_id,
+		"customer_id": invoice.get("customer_id"),
+		"token": payment_method.gateway_method_id,
+		"recurring": "1",
+	}
+
+
+def _declined(error) -> PaymentResult:
+	"""A charge Razorpay refused. The SDK keeps only the description string; the error code
+	and the granular reason arrive on the `payment.failed` webhook (see
+	charges.apply_webhook), which is the authoritative decline record."""
+	return PaymentResult(
+		success=False,
+		status="Failed",
+		failure_code=getattr(error, "code", None) or type(error).__name__,
+		failure_reason=str(error),
+		raw={"description": str(error)},
+	)

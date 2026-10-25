@@ -58,7 +58,7 @@ class VerifiedPayment:
 	order_id: str | None = None
 	receipt: str | None = None
 
-	def covers(self, amount, currency: str) -> bool:
+	def is_enough_for(self, amount, currency: str) -> bool:
 		"""Whether this payment is captured, in `currency`, for at least `amount`."""
 		return (
 			self.captured

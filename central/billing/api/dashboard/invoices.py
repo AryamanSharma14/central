@@ -744,35 +744,7 @@ def create_topup_order(
 	if amount <= 0:
 		frappe.throw(_("Top-up amount must be greater than zero."), frappe.ValidationError)
 	currency = _team_currency(team)
-	display_paypal = False
-	if method == "paypal":
-		pp = frappe.get_doc("Payment Gateway", _paypal_gateway_for_currency(currency))
-		if pp.is_paypal_via_razorpay():
-			gw = _enabled_gateway_for_currency(currency, "Razorpay")
-			if not gw:
-				frappe.throw(
-					_(
-						"PayPal through Razorpay needs an enabled Razorpay gateway that supports {0}. Choose another payment method, or contact support."
-					).format(currency),
-					frappe.ValidationError,
-				)
-			display_paypal = True
-		else:
-			gw = pp.name
-	elif instrument:
-		# The recharge surface: the customer picked an instrument and that decides the
-		# rail (ADR 0023). Resolving by currency default instead would put every INR
-		# top-up on one provider, including the card ones Stripe should take.
-		from central.billing.payments import instruments as instrument_catalogue
-
-		gw = instrument_catalogue.gateway_for(instrument, currency, instrument_catalogue.RECHARGE)
-		if not gw:
-			frappe.throw(
-				_("{0} isn't available for {1} top-ups.").format(instrument, currency),
-				frappe.ValidationError,
-			)
-	else:
-		gw = gateway or _gateway_for_currency(currency)
+	gw, display_paypal = _top_up_gateway(currency, gateway, method, instrument)
 	from central.billing.gateways.registry import get_adapter
 
 	gw_doc = frappe.get_doc("Payment Gateway", gw)
@@ -818,6 +790,40 @@ def create_topup_order(
 		"receipt": receipt,
 		**handles,
 	}
+
+
+def _top_up_gateway(
+	currency: str, gateway: str | None, method: str | None, instrument: str | None
+) -> tuple[str, bool]:
+	"""The gateway a top-up goes to, and whether its sheet shows the PayPal block."""
+	if method == "paypal":
+		pp = frappe.get_doc("Payment Gateway", _paypal_gateway_for_currency(currency))
+		if not pp.is_paypal_via_razorpay():
+			return pp.name, False
+		gw = _enabled_gateway_for_currency(currency, "Razorpay")
+		if not gw:
+			frappe.throw(
+				_(
+					"PayPal through Razorpay needs an enabled Razorpay gateway that supports {0}. Choose another payment method, or contact support."
+				).format(currency),
+				frappe.ValidationError,
+			)
+		return gw, True
+	if not instrument:
+		return gateway or _gateway_for_currency(currency), False
+
+	# The recharge surface: the customer picked an instrument and that decides the
+	# rail (ADR 0023). Resolving by currency default instead would put every INR
+	# top-up on one provider, including the card ones Stripe should take.
+	from central.billing.payments import instruments as instrument_catalogue
+
+	gw = instrument_catalogue.gateway_for(instrument, currency, instrument_catalogue.RECHARGE)
+	if not gw:
+		frappe.throw(
+			_("{0} isn't available for {1} top-ups.").format(instrument, currency),
+			frappe.ValidationError,
+		)
+	return gw, False
 
 
 @frappe.whitelist(methods=["POST"])

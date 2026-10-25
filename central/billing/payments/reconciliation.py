@@ -241,7 +241,7 @@ def reconcile_top_up_orders(now=None) -> list[dict]:
 		if payment:
 			results.append({"top_up_order": name, **order.credit_wallet(payment)})
 		elif frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
-			order.db_set("status", "Expired")
+			order.expire()
 			results.append({"top_up_order": name, "expired": True})
 	return results
 

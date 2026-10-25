@@ -263,13 +263,17 @@ class TestChargeInvoice(ChargeTestBase):
 		self.assertEqual(charges.apply_webhook(event)["reason"], "no_matching_attempt")
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
 
-	def test_a_short_payment_settles_nothing(self):
+	def test_a_short_payment_settles_nothing_and_goes_to_the_wallet(self):
+		from central.billing.revenue import credits
+
 		inv = self._open_invoice(1000)
 		attempt = self._hosted_attempt(inv)
 
 		charges.apply_webhook(self._hosted_checkout_event("evt_short", attempt, 100))
 
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
+		# The money was captured, so it must reach a ledger: 1.00 in major units.
+		self.assertEqual(frappe.utils.flt(credits.get_balance(TEAM)["balance"]), 1)
 
 	def test_a_capture_on_a_paid_invoice_goes_to_the_wallet(self):
 		from central.billing.revenue import credits

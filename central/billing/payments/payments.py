@@ -183,21 +183,10 @@ def confirm_payment_method(payment_method: str) -> Document:
 	card = _adapter(method.gateway).read_saved_card(method.setup_reference) if method.setup_reference else {}
 	if not card:
 		frappe.throw(_("The card has not been saved yet. Finish adding it, then try again."), CardNotSaved)
-	if card.get("customer") and method.gateway_customer_id and card["customer"] != method.gateway_customer_id:
+	if _is_saved_to_another_customer(card, method):
 		return _fail_method(method, "card saved to another gateway customer")
 
-	method.update(
-		{
-			"gateway_method_id": card["payment_method"],
-			"gateway_mandate_id": card.get("mandate") or method.gateway_mandate_id,
-			"card_network": card.get("brand"),
-			"display_label": f"{card.get('brand') or 'Card'} ···· {card['last4']}"
-			if card.get("last4")
-			else card.get("brand"),
-			"expiry_month": card.get("exp_month"),
-			"expiry_year": card.get("exp_year"),
-		}
-	)
+	method.update(_saved_card_fields(card, method))
 	method.save(ignore_permissions=True)
 
 	if not _adapter(method.gateway).validate_payment_method(method):
@@ -209,6 +198,25 @@ def confirm_payment_method(payment_method: str) -> Document:
 	densify_priorities(method.team)
 	method.reload()  # pick up priority / is_default set by densify
 	return method
+
+
+def _is_saved_to_another_customer(card: dict, method) -> bool:
+	return bool(
+		card.get("customer") and method.gateway_customer_id and card["customer"] != method.gateway_customer_id
+	)
+
+
+def _saved_card_fields(card: dict, method) -> dict:
+	"""The method's card fields, as the gateway saved the card."""
+	brand = card.get("brand")
+	return {
+		"gateway_method_id": card["payment_method"],
+		"gateway_mandate_id": card.get("mandate") or method.gateway_mandate_id,
+		"card_network": brand,
+		"display_label": f"{brand or 'Card'} ···· {card['last4']}" if card.get("last4") else brand,
+		"expiry_month": card.get("exp_month"),
+		"expiry_year": card.get("exp_year"),
+	}
 
 
 def _fail_method(method, reason: str) -> Document:

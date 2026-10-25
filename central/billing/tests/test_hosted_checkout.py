@@ -90,6 +90,17 @@ class TestHostedCheckout(BillingTestCase):
 		with self.assertRaises(frappe.DoesNotExistError):
 			self.status(reference=f"Stripe|cs_forged|topup|{TEAM}")
 
+	def test_a_reference_with_no_session_id_is_refused(self):
+		from central.billing.doctype.top_up_order.top_up_order import TopupOrder
+
+		# An order whose gateway call never returned has no session id yet.
+		TopupOrder.start(TEAM, "Stripe", "INR", 500)
+
+		for reference in ("", "Stripe||topup|" + TEAM, "  "):
+			with self.assertRaises(frappe.DoesNotExistError):
+				self.status(reference=reference)
+		self.adapter.checkout_payment.assert_not_called()
+
 	def test_a_paid_invoice_checkout_settles_the_invoice(self):
 		invoice = frappe.get_doc(
 			{

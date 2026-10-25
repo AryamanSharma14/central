@@ -6,6 +6,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from central.billing.gateways.base import VerifiedPayment
+from central.billing.states import transition
 
 
 class TopupOrder(Document):
@@ -67,6 +68,11 @@ class TopupOrder(Document):
 	def record_gateway_order(self, gateway_order_id: str) -> None:
 		self.db_set("gateway_order_id", gateway_order_id)
 
+	def expire(self) -> None:
+		"""Stop asking the gateway about an order nobody paid."""
+		transition(self, "Expired", actor="reconciliation", correlation=self.team)
+		self.save(ignore_permissions=True)
+
 	def credit_wallet(self, payment: VerifiedPayment) -> dict:
 		"""Credit the wallet once for a payment that belongs to this order and covers it.
 
@@ -93,19 +99,16 @@ class TopupOrder(Document):
 			gateway=adapter_key,
 			credit=self.credit or None,
 		)
-		self.db_set(
-			{
-				"status": "Credited",
-				"gateway_payment_id": payment.payment_id,
-				"ledger_entry": result["ledger_entry"],
-			}
-		)
+		transition(self, "Credited", actor="gateway", correlation=self.team, amount=self.total)
+		self.gateway_payment_id = payment.payment_id
+		self.ledger_entry = result["ledger_entry"]
+		self.save(ignore_permissions=True)
 		return result
 
 	def _require_covering(self, payment: VerifiedPayment) -> None:
 		if payment.order_id != self.gateway_order_id and payment.receipt != self.name:
 			self._refuse(_("This payment does not belong to top-up {0}.").format(self.name))
-		if not payment.covers(self.total, self.currency):
+		if not payment.is_enough_for(self.total, self.currency):
 			self._refuse(
 				_("Payment {0} ({1} {2}) does not cover top-up {3} ({4} {5}).").format(
 					payment.payment_id, payment.currency, payment.amount, self.name, self.currency, self.total

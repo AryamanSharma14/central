@@ -270,12 +270,7 @@ def confirm_mandate(payment_method: str, callback: dict):
 	if not method.setup_reference or callback.get("razorpay_order_id") != method.setup_reference:
 		_refuse_mandate(method, "callback is for another order")
 	payment = adapter.get_payment(callback.get("razorpay_payment_id"))
-	if (
-		payment.get("order_id") != method.setup_reference
-		or payment.get("status") not in ("authorized", "captured")
-		or not payment.get("token_id")
-		or (method.gateway_customer_id and payment.get("customer_id") != method.gateway_customer_id)
-	):
+	if not _is_mandate_payment(method, payment):
 		_refuse_mandate(method, "payment does not authorise this mandate")
 
 	method.gateway_method_id = payment["token_id"]
@@ -294,6 +289,16 @@ def confirm_mandate(payment_method: str, callback: dict):
 	payments.densify_priorities(method.team)  # slot the new method into the fallback order
 	method.reload()
 	return method
+
+
+def _is_mandate_payment(method, payment: dict) -> bool:
+	"""Whether the payment is an authorisation on this method's order and customer, with a token."""
+	return (
+		payment.get("order_id") == method.setup_reference
+		and payment.get("status") in ("authorized", "captured")
+		and bool(payment.get("token_id"))
+		and (not method.gateway_customer_id or payment.get("customer_id") == method.gateway_customer_id)
+	)
 
 
 def _refuse_mandate(method, reason: str) -> None:

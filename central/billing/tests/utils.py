@@ -65,6 +65,7 @@ class BillingTestCase(IntegrationTestCase):
 	# explicit cleanup because raw deletes do not run the parent document hooks.
 	_TRACKED = (
 		"Payment Attempt",
+		"Top-up Order",
 		"Refund",
 		"Credit Ledger Entry",
 		"Credit Wallet",
