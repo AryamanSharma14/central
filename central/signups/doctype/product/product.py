@@ -15,7 +15,7 @@ PRODUCT_KEY_PATTERN = re.compile(r"[a-z][a-z0-9-]*")
 LANDING_ROUTE_PATTERN = re.compile(r"/[A-Za-z0-9_/-]*")
 APP_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 # A Frappe branch as Cargo writes it in the image's frappe_version tag.
-FRAPPE_VERSION_PATTERN = re.compile(r"develop|version-[0-9]+")
+FRAPPE_VERSION_PATTERN = re.compile(r"develop|version-[0-9]+(-hotfix)?")
 # The lifecycle emails a product can add a note to, as in Product Email Note.
 PRODUCT_EMAILS = (
 	"site_ready",
