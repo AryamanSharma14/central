@@ -44,6 +44,15 @@ class TestBareMetalYield(BillingTestCase):
 		self.assertEqual(row["unsold"] + row["unpaid"] + row["discount"] + row["revenue"], row["potential"])
 		self.assertEqual(row["yield_percent"], 4.1)
 
+	def test_servers_that_pay_nothing_cost_their_metal_share_not_their_rate_card(self):
+		_, rows, _, _, summary = run({"group_by": "Region"})
+
+		# 40,000 a month over 100 vCPUs is 400 a vCPU; the free and internal servers hold 6.
+		self.assertEqual(rows[0]["unpaid_cost"], 6 * 400)
+		self.assertLess(rows[0]["unpaid_cost"], rows[0]["unpaid"])
+		cost = next(card for card in summary if card["label"] == "Cost of Unpaid Servers (INR)")
+		self.assertEqual(cost["value"], 6 * 400)
+
 	def test_a_machine_row_holds_only_the_servers_on_its_host(self):
 		frappe.db.set_value("Metal Server", "ue-metal-1", "atlas_host_id", "host-1")
 		for server in ("ue-paid", "ue-free"):

@@ -13,13 +13,14 @@ from central.billing.report._capacity import (
 from central.billing.report._columns import column, inr
 from central.billing.report._inventory import PAID, Inventory
 
-LOSSES = (("unsold", "Unsold"), ("unpaid", "Unpaid"), ("discount", "Discount"))
+# Rate card value the bare metal does not earn. Used Free is revenue we skip, not money we lose.
+GAPS = (("unsold", "Unsold"), ("unpaid", "Used Free"), ("discount", "Discount"))
 
 
 def execute(filters: dict | None = None):
 	"""What the sellable bare metal could earn a month, and where it goes, per region or per machine.
 
-	Potential revenue = unsold + unpaid + discount + cash revenue, so the four always add up."""
+	Potential revenue = unsold + used free + discount + cash revenue, so the four always add up."""
 	filters = filters or {}
 	group_by = filters.get("group_by") or "Region"
 	book = YieldBook(filters)
@@ -28,11 +29,12 @@ def execute(filters: dict | None = None):
 
 
 class YieldBook:
-	"""Potential revenue of the sellable bare metal, split into unsold, unpaid, discount and cash.
+	"""Potential revenue of the sellable bare metal, split into unsold, used free, discount and cash.
 
 	Potential prices every sellable vCPU, GiB of memory and GiB of disk at the region's component
 	rate card. A live server holds its own resources at that price. Only a paying server earns
-	cash, and the gap between its rate card value and what it pays is the discount."""
+	cash, and the gap between its rate card value and what it pays is the discount. A server that
+	pays nothing costs us its share of the metal bill, not its rate card value."""
 
 	def __init__(self, filters: dict):
 		self.inventory = Inventory(filters)
@@ -97,6 +99,7 @@ class YieldBook:
 				sum(s.memory_gib for s in servers), sum(c["memory_gib"] for c in sellable)
 			),
 			"cost": sum(flt(m.cost_per_month_inr) for m in machines),
+			"unpaid_cost": sum(s.cost for s in servers if s.funding != PAID),
 			"potential": potential,
 			"unsold": potential - held,
 			"unpaid": held - paid_value,
@@ -136,7 +139,7 @@ def get_chart(rows: list[dict]) -> dict | None:
 	if not rows:
 		return None
 
-	fields = (("revenue", _("Cash Revenue")), *((key, _(label)) for key, label in LOSSES))
+	fields = (("revenue", _("Cash Revenue")), *((key, _(label)) for key, label in GAPS))
 	return {
 		"data": {
 			"labels": [row["group"] or _("Unplaced") for row in rows],
@@ -155,8 +158,8 @@ def get_summary(rows: list[dict]) -> list[dict]:
 
 	potential = sum(row["potential"] for row in rows)
 	revenue = _total([row["revenue"] for row in rows])
-	losses = {label: _total([row[key] for row in rows]) for key, label in LOSSES}
-	biggest = max((label for label in losses if losses[label] is not None), key=losses.get)
+	gaps = {label: _total([row[key] for row in rows]) for key, label in GAPS}
+	biggest = max((label for label in gaps if gaps[label] is not None), key=gaps.get)
 	return [
 		{
 			"label": _("Yield"),
@@ -166,7 +169,8 @@ def get_summary(rows: list[dict]) -> list[dict]:
 		},
 		_inr(_("Potential Revenue (INR)"), potential),
 		_inr(_("Cash Revenue (INR)"), revenue, "Green"),
-		_inr(_("Biggest Loss: {0} (INR)").format(_(biggest)), losses[biggest], "Red"),
+		_inr(_("Biggest Gap: {0} (INR)").format(_(biggest)), gaps[biggest], "Red"),
+		_inr(_("Cost of Unpaid Servers (INR)"), sum(row["unpaid_cost"] for row in rows), "Orange"),
 	]
 
 
@@ -192,9 +196,10 @@ def get_columns(group_by: str) -> list[dict]:
 		column(_("vCPU Sold %"), "vcpu_sold_percent", "Percent", 100),
 		column(_("Memory Sold %"), "memory_sold_percent", "Percent", 110),
 		inr(_("Metal Cost (INR)"), "cost"),
+		inr(_("Cost of Unpaid Servers (INR)"), "unpaid_cost", 190),
 		inr(_("Potential Revenue (INR)"), "potential", 160),
 		inr(_("Unsold (INR)"), "unsold"),
-		inr(_("Unpaid (INR)"), "unpaid"),
+		inr(_("Used Free (INR)"), "unpaid"),
 		inr(_("Discount (INR)"), "discount"),
 		inr(_("Cash Revenue (INR)"), "revenue", 140),
 		column(_("Yield %"), "yield_percent", "Percent", 90),
