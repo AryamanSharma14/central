@@ -127,6 +127,7 @@ def ensure_tax_profile(team: str):
 	if frappe.db.exists("Tax Profile", team):
 		return frappe.get_doc("Tax Profile", team)
 
+	# Only operators edit a Tax Profile; the system creates it for the customer's team.
 	return frappe.get_doc({"doctype": "Tax Profile", "team": team, **_output_tax_for(team)}).insert(
 		ignore_permissions=True
 	)
@@ -146,6 +147,7 @@ def apply_output_tax_for_country(team: str) -> None:
 	if all(profile.get(field) == value for field, value in values.items()):
 		return
 	profile.update(values)
+	# The customer changed the billing country; only operators edit a Tax Profile.
 	profile.save(ignore_permissions=True)
 
 

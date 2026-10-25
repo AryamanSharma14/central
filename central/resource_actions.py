@@ -177,10 +177,10 @@ def submit_command(
 	if action == "restart" and server.status != "Running":
 		frappe.throw(_("Only a running server can be restarted."))
 	if action == "start" and frappe.db.exists(
-		"Subscription", {"server_id": server.name, "stopped_for_nonpayment": 1}
+		"Subscription", {"server_id": server.name, "account_standing": "Suspended"}
 	):
 		throw_action_error(
-			"PAYMENT_OVERDUE", message=_("This server was stopped because an invoice is unpaid.")
+			"PAYMENT_OVERDUE", message=_("This server is suspended because an invoice is unpaid.")
 		)
 	if action == "start" and frappe.db.exists("Site", {"server": server.name, "trial_state": "Ended"}):
 		if has_active_payment_method(team):
@@ -191,13 +191,36 @@ def submit_command(
 	if take_snapshot:
 		server.require_server_access()
 
+	return _queue_command(action, server, take_snapshot=take_snapshot)
+
+
+def submit_billing_command(action: str, server_name: str) -> ActionStatus:
+	"""Stop or start a server for billing, as the system.
+
+	Dunning stops a server that is not paid for, and a payment starts it again. The
+	payment can arrive by webhook as Guest, or from a member without `server:power`,
+	so no user capability applies here."""
+	if action not in ("stop", "start"):
+		raise ValueError(f"Billing cannot {action} a server")
+
+	server = frappe.get_doc("Virtual Machine", server_name, for_update=True)
+	if not server.atlas_vm_id:
+		frappe.throw(_("Server {0} has no verified regional identity.").format(server.name))
+
+	return _queue_command(action, server, requested_by="Administrator")
+
+
+def _queue_command(
+	action: str, server, take_snapshot: bool = False, requested_by: str | None = None
+) -> ActionStatus:
 	document = ResourceAction.get_pending(server.name, action) or ResourceAction.queue(
 		action,
-		team,
+		server.team,
 		server.region,
 		server.title or server.name,
 		server=server.name,
 		remote_vm_id=server.atlas_vm_id,
+		requested_by=requested_by,
 		take_snapshot=int(take_snapshot),
 	)
 

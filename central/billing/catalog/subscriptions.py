@@ -1128,30 +1128,25 @@ def resume_billing(subscription: str, changed_by: str | None = None):
 
 
 def suspend_for_nonpayment(team: str) -> list[str]:
-	"""Suspend every server subscription of an unpaid team and stop its running servers.
+	"""Suspend every subscription of an unpaid team and stop its running servers.
 
-	A paused subscription is included: its server is stopped, but the customer could start it.
+	A service subscription has no server, so only its standing changes. A paused
+	subscription is included: its server is stopped, but the customer could start it.
 	Returns the subscriptions newly suspended. A server that will not stop is logged and
 	left Running; the operator alert for suspended servers that still run picks it up."""
 	suspended = []
-	for name in frappe.get_all(
+	for sub in frappe.get_all(
 		"Subscription",
-		filters={"team": team, "server_id": ["is", "set"], "account_standing": ["!=", "Suspended"]},
-		pluck="name",
+		filters={"team": team, "account_standing": ["!=", "Suspended"]},
+		fields=["name", "server_id", "account_standing"],
 	):
-		if frappe.db.get_value("Subscription", name, "account_standing") == "Current":
-			set_standing(name, "Past Due", changed_by="dunning")
-		set_standing(name, "Suspended", changed_by="dunning", reason="unpaid invoice")
-		suspended.append(name)
-		_stop_for_nonpayment(frappe.get_doc("Subscription", name))
+		if sub.account_standing == "Current":
+			set_standing(sub.name, "Past Due", changed_by="dunning")
+		set_standing(sub.name, "Suspended", changed_by="dunning", reason="unpaid invoice")
+		suspended.append(sub.name)
+		if _power_quietly(sub, "stop", f"Dunning could not stop server {sub.server_id}"):
+			frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 1)
 	return suspended
-
-
-def _stop_for_nonpayment(sub) -> None:
-	if frappe.db.get_value("Virtual Machine", sub.server_id, "status") not in _SERVER_ACTION_FROM["stop"]:
-		return
-	if _power_quietly(sub, "stop", f"Dunning could not stop server {sub.server_id}"):
-		frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 1)
 
 
 def restore_after_payment(team: str) -> list[str]:
@@ -1164,23 +1159,30 @@ def restore_after_payment(team: str) -> list[str]:
 	for sub in frappe.get_all(
 		"Subscription",
 		filters={"team": team, "account_standing": ["in", ["Past Due", "Suspended"]]},
-		fields=["name", "stopped_for_nonpayment"],
+		fields=["name", "server_id", "stopped_for_nonpayment"],
 	):
 		set_standing(sub.name, "Current", changed_by="payment", reason="invoice settled")
 		restored.append(sub.name)
 		if sub.stopped_for_nonpayment:
 			frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 0)
-			doc = frappe.get_doc("Subscription", sub.name)
-			_power_quietly(doc, "start", f"Could not start server {doc.server_id} after payment")
+			_power_quietly(sub, "start", f"Could not start server {sub.server_id} after payment")
 	return restored
 
 
 def _power_quietly(sub, action: str, failure_title: str) -> bool:
-	"""Stop or start a server for billing. On a refusal, undo only its own writes and log it."""
+	"""Stop or start a server for billing, as the system. Returns whether the command was
+	queued. A server in no state for the action is skipped; a refusal undoes only its own
+	writes and is logged."""
+	from central.resource_actions import submit_billing_command
+
+	status = frappe.db.get_value("Virtual Machine", sub.server_id, "status") if sub.server_id else None
+	if status not in _SERVER_ACTION_FROM[action]:
+		return False
+
 	save_point = "server_power_for_billing"
 	frappe.db.savepoint(save_point)
 	try:
-		_control_subscription_server(sub, action)
+		submit_billing_command(action, sub.server_id)
 	except Exception:
 		frappe.db.rollback(save_point=save_point)
 		frappe.log_error(title=failure_title, reference_doctype="Subscription", reference_name=sub.name)

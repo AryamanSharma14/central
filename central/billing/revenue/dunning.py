@@ -272,8 +272,8 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 			engine.dispatch(
 				inv.team,
 				"server_suspended",
-				message=f"Servers were stopped after {days} days overdue on invoice {invoice_name}. "
-				"Data is preserved. Pay the invoice to start them again.",
+				message=f"Your account was suspended after {days} days overdue on invoice {invoice_name}. "
+				"Running servers were stopped and data is preserved. Pay the invoice to restore them.",
 				reference_doctype="Invoice",
 				reference_name=invoice_name,
 			)

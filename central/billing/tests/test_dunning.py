@@ -194,7 +194,7 @@ class TestStagedEscalation(DunningTestBase):
 		sub = self._subscription()
 		self._running(sub)
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server") as stop:
+		with patch("central.resource_actions.submit_billing_command") as stop:
 			self._run_through(inv, sub, last_day=7)
 
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Overdue")
@@ -205,11 +205,11 @@ class TestStagedEscalation(DunningTestBase):
 		sub = self._subscription()
 		server = self._running(sub)
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server") as stop:
+		with patch("central.resource_actions.submit_billing_command") as stop:
 			self._run_through(inv, sub, last_day=14)
 
 		self.assertEqual(self._standing(sub), "Suspended")
-		stop.assert_called_once_with(team=TEAM, resource_id=server)
+		stop.assert_called_once_with("stop", server)
 		self.assertTrue(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
 
 	def test_a_server_that_will_not_stop_stays_flagged_for_operators(self):
@@ -218,7 +218,10 @@ class TestStagedEscalation(DunningTestBase):
 		sub = self._subscription()
 		self._running(sub)
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server", side_effect=frappe.ValidationError("region down")):
+		with patch(
+			"central.resource_actions.submit_billing_command",
+			side_effect=frappe.ValidationError("region down"),
+		):
 			self._run_through(inv, sub, last_day=14)
 
 		self.assertEqual(self._standing(sub), "Suspended")
@@ -230,7 +233,10 @@ class TestStagedEscalation(DunningTestBase):
 
 		sub = self._subscription()
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server"), patch("central.api.servers.terminate_server") as end:
+		with (
+			patch("central.resource_actions.submit_billing_command"),
+			patch("central.api.servers.terminate_server") as end,
+		):
 			self._run_through(inv, sub, last_day=44)
 			out = dunning.process_invoice_dunning(inv, now=day(44))
 
@@ -245,17 +251,17 @@ class TestStagedEscalation(DunningTestBase):
 		sub = self._subscription()
 		server = self._running(sub)
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server"):
+		with patch("central.resource_actions.submit_billing_command"):
 			self._run_through(inv, sub, last_day=14)
 		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
 
 		doc = frappe.get_doc("Invoice", inv)
 		transition(doc, "Paid", reason="test payment", actor="test")
-		with patch("central.api.servers.start_server") as start:
+		with patch("central.resource_actions.submit_billing_command") as start:
 			doc.save(ignore_permissions=True)
 
 		self.assertEqual(self._standing(sub), "Current")
-		start.assert_called_once_with(team=TEAM, resource_id=server)
+		start.assert_called_once_with("start", server)
 		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
 
 	def test_a_server_stopped_for_nonpayment_cannot_be_started(self):
@@ -264,13 +270,63 @@ class TestStagedEscalation(DunningTestBase):
 		sub = self._subscription()
 		server = self._running(sub)
 		inv = self._open_invoice(sub)
-		with patch("central.api.servers.stop_server"):
+		with patch("central.resource_actions.submit_billing_command"):
 			self._run_through(inv, sub, last_day=14)
 		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
 
 		with self.assertRaises(Exception) as caught:
 			submit_command("start", TEAM, server)
 		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_OVERDUE")
+
+	def test_a_server_the_customer_stopped_cannot_be_started_while_suspended(self):
+		from central.resource_actions import submit_command
+
+		sub = self._subscription()
+		server = self._running(sub)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
+		inv = self._open_invoice(sub)
+		self._run_through(inv, sub, last_day=14)
+
+		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
+		with self.assertRaises(Exception) as caught:
+			submit_command("start", TEAM, server)
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_OVERDUE")
+
+	def test_a_payment_by_webhook_starts_the_servers_as_the_system(self):
+		from central.billing.states import transition
+
+		sub = self._subscription()
+		server = self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch("central.resource_actions.submit_billing_command"):
+			self._run_through(inv, sub, last_day=14)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
+
+		doc = frappe.get_doc("Invoice", inv)
+		transition(doc, "Paid", reason="test payment", actor="test")
+		frappe.set_user("Guest")
+		try:
+			with patch(
+				"central.infrastructure.doctype.resource_action.resource_action.ResourceAction.enqueue"
+			):
+				doc.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertTrue(frappe.db.exists("Resource Action", {"server": server, "action": "start"}))
+		self.assertFalse(frappe.db.exists("Error Log", {"reference_name": sub}))
+
+	def test_a_team_with_only_services_is_suspended(self):
+		sub = self._subscription()
+		frappe.db.set_value("Subscription", sub, {"server_id": None, "service_subject": "svc-dunning"})
+		inv = self._open_invoice(sub)
+		with declining_gateway():
+			for d in (1, 3, 7):
+				dunning.process_invoice_dunning(inv, now=day(d))
+			out = dunning.process_invoice_dunning(inv, now=day(14))
+
+		self.assertEqual(self._standing(sub), "Suspended")
+		self.assertIn("suspend", out["actions"])
 
 	def test_the_ladder_follows_billing_settings(self):
 		"""A shortened ladder escalates on its own days, not the shipped ones."""
@@ -279,7 +335,7 @@ class TestStagedEscalation(DunningTestBase):
 		inv = self._open_invoice(sub)
 		results = []
 		with billing_settings(dunning_retry_days="1, 2", suspend_after_days=4, terminate_after_days=6):
-			with declining_gateway(), patch("central.api.servers.stop_server"):
+			with declining_gateway(), patch("central.resource_actions.submit_billing_command"):
 				for d in (1, 2, 4, 6):
 					results.append(dunning.process_invoice_dunning(inv, now=day(d)))
 

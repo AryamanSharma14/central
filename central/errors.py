@@ -149,9 +149,9 @@ ERROR_CATALOG: dict[str, dict] = {
 		"retriable": False,
 	},
 	"PAYMENT_OVERDUE": {
-		"title": "Pay your overdue invoice to add servers",
-		"message": "Your team has an unpaid invoice that is past its due date.",
-		"remediation": "Open Billing and pay the overdue invoice. Ask a team admin if you cannot manage billing.",
+		"title": "Pay what your team owes to continue",
+		"message": "Your team has an unpaid invoice that is overdue, or its account is past due or suspended.",
+		"remediation": "Open Billing and pay the unpaid invoice. Ask a team admin if you cannot manage billing.",
 		"retriable": False,
 	},
 	"TRIAL_IN_PROGRESS": {
