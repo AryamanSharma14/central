@@ -43,7 +43,7 @@ const { invitations, loading, error, busy, reload, accept, decline } =
 				<div class="min-w-0 flex-1">
 					<p class="flex items-center gap-2 text-base-medium text-ink-gray-8">
 						<span class="truncate">{{ invite.team_name }}</span>
-						<Badge :label="invite.role" />
+						<Badge :label="invite.role_name" />
 					</p>
 					<p class="truncate text-p-sm text-ink-gray-5">
 						<template v-if="invite.invited_by"

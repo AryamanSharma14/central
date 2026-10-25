@@ -162,17 +162,20 @@ def _role_rank(role: str | None) -> int:
 @frappe.whitelist(methods=["GET"])
 def my_invitations() -> list[dict[str, Any]]:
 	"""Pending, unexpired invitations addressed to the signed-in user — the invitee's
-	inbox. Each carries the inviting team's label so the console can render it without
-	a second call."""
+	inbox. Each carries the inviting team's and the role's labels, because a custom role
+	belongs to the inviting team and the console cannot resolve it."""
 	user = frappe.session.user
 
 	invitation = frappe.qb.DocType("Team Invitation")
 	team = frappe.qb.DocType("Team")
+	role = frappe.qb.DocType("Team Role")
 
 	rows = (
 		frappe.qb.from_(invitation)
 		.left_join(team)
 		.on(team.name == invitation.team)
+		.left_join(role)
+		.on(role.name == invitation.role)
 		.select(
 			invitation.name,
 			invitation.team,
@@ -181,6 +184,7 @@ def my_invitations() -> list[dict[str, Any]]:
 			invitation.expires_on,
 			invitation.creation,
 			team.team_name,
+			role.role_name,
 		)
 		.where(
 			(invitation.email == user)
@@ -192,6 +196,7 @@ def my_invitations() -> list[dict[str, Any]]:
 
 	for row in rows:
 		row["team_name"] = row.team_name or row.team
+		row["role_name"] = row.role_name or row.role
 
 	return rows
 

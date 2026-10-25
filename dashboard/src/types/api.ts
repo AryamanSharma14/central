@@ -104,6 +104,8 @@ export interface MyInvitation {
 	team: string
 	team_name: string
 	role: string
+	/** The role's display name; a custom role's `role` is an opaque record name. */
+	role_name: string
 	invited_by: string | null
 	expires_on: string | null
 	creation: string

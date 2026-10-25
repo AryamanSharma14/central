@@ -605,6 +605,7 @@ class TestTeamManagement(IntegrationTestCase):
 		mine = next(r for r in rows if r["team"] == self.team.name)
 		self.assertEqual(mine["team_name"], "Managed Team")
 		self.assertEqual(mine["role"], "Developer")
+		self.assertEqual(mine["role_name"], "Developer")
 		self.assertTrue(all(r["status"] != "Accepted" for r in rows if "status" in r))
 
 	def test_delete_custom_role_guards_system_and_in_use_roles(self):
