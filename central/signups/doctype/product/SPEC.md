@@ -19,7 +19,7 @@ System Managers and Product Operators create and edit products in Desk. Only a S
 | Subtitle | Optional. Shown under the heading on the signup and login pages. |
 | Setup Messages | Optional. One line each, such as `Setting up channels…`. The waiting page shows them one at a time, in a loop, while the product starts. Without them, the page shows general lines. |
 | Signup App | The app module name, such as `raven`. Cargo tags the image that has this app installed with `app=<signup app>`. |
-| Frappe Version | The Frappe branch of the trial image, `develop` or `version-<number>`, such as `version-16`. The default is `develop`. Cargo tags each image with the branch it was built on as `frappe_version=<branch>`. |
+| Frappe Version | The Frappe branch of the trial image, `develop`, `version-<number>` or `version-<number>-hotfix`, such as `version-16-hotfix`. The default is `develop`. Cargo tags each image with the branch it was built on as `frappe_version=<branch>`. |
 | Landing Route | Optional. Where the owner lands after signing in to a trial site, such as `/raven`, so the app runs its own setup. Empty opens Desk, which shows Frappe's setup wizard. |
 | Trial Days | Days a trial site of this product runs from when Central records its site. 0 uses Central Settings, Trial Days. See [Trials](../../SPEC.md#trials). |
 | Trial Deletion Days | Days a stopped trial site is kept before its server is terminated. 0 uses Central Settings, Trial Deletion Days. |
