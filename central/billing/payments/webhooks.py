@@ -118,7 +118,8 @@ def handle_webhook_event(event_name: str):
 			reference_name=event_name,
 		)
 		if not frappe.in_test:
-			frappe.db.commit()
+			# The Failed mark must survive the job ending in error; the event's own work was undone above.
+			frappe.db.commit()  # nosemgrep
 
 
 def _dispatch(event_name: str):
@@ -167,5 +168,6 @@ def retry_failed_webhooks() -> list[str]:
 	for name in names:
 		handle_webhook_event(name)
 		if not frappe.in_test:
-			frappe.db.commit()
+			# One commit per event, so an event that fails again cannot undo the ones before it.
+			frappe.db.commit()  # nosemgrep
 	return names
