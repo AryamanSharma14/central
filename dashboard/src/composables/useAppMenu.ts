@@ -1,6 +1,7 @@
 import { type ColorScheme, useColorScheme } from 'frappe-ui'
 import { computed, h } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useMyInvitations } from '@/composables/useMyInvitations'
 import { openSettings } from '@/composables/useSettings'
 import { useSupport } from '@/composables/useSupport'
 
@@ -14,6 +15,7 @@ export const useAppMenu = () => {
 	const { currentUser, logout } = useAuth()
 	const { colorScheme, setColorScheme } = useColorScheme()
 	const { getContactSupportOption, feedbackOption } = useSupport()
+	const { count: invitationCount } = useMyInvitations()
 	const helpMenuItems = [getContactSupportOption(), feedbackOption].filter(
 		(option) => option !== null,
 	)
@@ -44,6 +46,16 @@ export const useAppMenu = () => {
 			icon: 'lucide-user',
 			onClick: () => openSettings('profile'),
 		},
+		// Shown only while an invitation waits, so a signed-in invitee finds it without the email.
+		...(invitationCount.value
+			? [
+					{
+						label: `Invitations (${invitationCount.value})`,
+						icon: 'lucide-mail',
+						onClick: () => openSettings('invitations'),
+					},
+				]
+			: []),
 		{
 			label: 'Theme',
 			icon: 'lucide-sun-moon',

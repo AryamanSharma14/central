@@ -230,7 +230,7 @@
    "description": "How long Central keeps a daily snapshot before it deletes it. A customer can keep one for longer."
   },
   {
-   "default": "2",
+   "default": "0",
    "fieldname": "free_snapshots_per_server",
    "fieldtype": "Int",
    "label": "Free Snapshots per Server",

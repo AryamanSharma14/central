@@ -140,7 +140,7 @@ def terminate_after_days() -> int:
 
 
 # Starting points for the snapshot settings; an operator changes them in Billing Settings.
-SNAPSHOT_DEFAULTS = {"daily_snapshot_retention_hours": 48, "free_snapshots_per_server": 2}
+SNAPSHOT_DEFAULTS = {"daily_snapshot_retention_hours": 48, "free_snapshots_per_server": 0}
 
 
 def ensure_snapshot_settings() -> None:

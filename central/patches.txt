@@ -52,3 +52,5 @@ central.patches.v0_0.seed_server_limits
 central.patches.v0_0.move_transfer_to_central_settings
 # Billing operator alerts go to a Raven channel by default, not to every System Manager.
 central.patches.v0_0.seed_operator_alert_channel
+# Every snapshot is billed: no snapshot of a server is free any more.
+central.patches.v0_0.bill_every_snapshot

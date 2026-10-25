@@ -193,7 +193,17 @@ class TestSnapshotLifecycle(SnapshotTestCase):
 			reference_name=snapshot.name,
 		)
 
+	def test_every_snapshot_is_billed_when_none_are_free(self):
+		frappe.db.set_single_value("Billing Settings", "free_snapshots_per_server", 0)
+		snapshots = self._three_snapshots()
+
+		for snapshot in snapshots:
+			snapshot.reload()
+		self.assertEqual([s.is_free for s in snapshots], [0, 0, 0])
+		self.assertTrue(all(s.subscription for s in snapshots))
+
 	def test_the_two_newest_snapshots_of_a_server_are_free(self):
+		frappe.db.set_single_value("Billing Settings", "free_snapshots_per_server", 2)
 		oldest, middle, newest = self._three_snapshots()
 
 		for snapshot in (oldest, middle, newest):
@@ -211,6 +221,7 @@ class TestSnapshotLifecycle(SnapshotTestCase):
 		self.assertEqual(rate, 20 * 6.5)
 
 	def test_deleting_a_newer_snapshot_makes_an_older_one_free(self):
+		frappe.db.set_single_value("Billing Settings", "free_snapshots_per_server", 2)
 		oldest, _, newest = self._three_snapshots()
 		oldest.reload()
 		billed = oldest.subscription
@@ -226,11 +237,14 @@ class TestSnapshotLifecycle(SnapshotTestCase):
 
 	def test_a_kept_daily_snapshot_is_not_deleted_on_its_own(self):
 		snapshot = self._available("Automatic")
+		billing = frappe.db.get_value("VM Snapshot", snapshot.name, ["is_free", "subscription"])
 
 		snapshot.keep()
 
 		self.assertIsNone(snapshot.expires_at)
-		self.assertEqual(frappe.db.get_value("VM Snapshot", snapshot.name, "is_free"), 1)
+		self.assertEqual(
+			frappe.db.get_value("VM Snapshot", snapshot.name, ["is_free", "subscription"]), billing
+		)
 
 	def test_a_pending_snapshot_cannot_be_deleted(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -287,14 +301,14 @@ class TestSnapshotSchedules(SnapshotTestCase):
 
 class TestSnapshotSettingsSeed(IntegrationTestCase):
 	def test_the_seed_fills_a_missing_setting_and_keeps_a_stored_one(self):
-		frappe.db.set_single_value("Billing Settings", "free_snapshots_per_server", 0)
+		frappe.db.set_single_value("Billing Settings", "free_snapshots_per_server", 3)
 		frappe.db.delete(
 			"Singles", {"doctype": "Billing Settings", "field": "daily_snapshot_retention_hours"}
 		)
 
 		ensure_snapshot_settings()
 
-		self.assertEqual(frappe.db.get_single_value("Billing Settings", "free_snapshots_per_server"), 0)
+		self.assertEqual(frappe.db.get_single_value("Billing Settings", "free_snapshots_per_server"), 3)
 		self.assertEqual(frappe.db.get_single_value("Billing Settings", "daily_snapshot_retention_hours"), 48)
 
 
