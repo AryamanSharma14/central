@@ -210,15 +210,14 @@ class Site(Document):
 		)
 
 	def apply_subdomain(self) -> None:
-		"""Rename the bench onto the customer's chosen name, once. It returns when Pilot accepts
-		the rename, and both hostnames serve until it finishes."""
-		from central.integrations.pilot import rename_site
+		"""Apply the customer's primary domain while keeping the internal site name stable."""
+		from central.integrations.pilot import set_site_primary_domain
 
 		if not self.subdomain or self.rename_task:
 			return
 
 		try:
-			task = rename_site(self.server, IMAGE_SITE_NAME, self.rename_target, make_primary=True)
+			task = set_site_primary_domain(self.server, IMAGE_SITE_NAME, self.rename_target)
 		# This worker boundary records every failure so an operator can retry it safely.
 		except Exception:
 			self.record_rename_failure(
@@ -339,10 +338,9 @@ class Site(Document):
 		return frappe.db.get_value("Product", product, "landing_route") if product else None
 
 	def get_pilot_site_names(self) -> list[str]:
-		"""The names the bench may know this site by, the most likely first. A requested rename
-		changes the bench's name for it before Central sees the new address answer."""
+		"""Try the stable image name first, then the name of a previously renamed site."""
 		return (
-			[self.rename_target, IMAGE_SITE_NAME]
+			[IMAGE_SITE_NAME, self.rename_target]
 			if self.subdomain and self.rename_task
 			else [IMAGE_SITE_NAME]
 		)

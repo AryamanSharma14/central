@@ -92,13 +92,19 @@ def observe_server(server: VirtualMachine) -> str:
 		},
 	)
 
-	# The wildcard gateway already routes here. Pilot only needs to replace its local
-	# admin.local hostname with the routed name.
-	frappe.get_doc("Virtual Machine", server.name).claim_admin_hostname()
-
 	# A Pilot machine carries a site, and this report is where its address arrives.
 	Site.create_once_addressable(server.name)
 	ResourceAction.confirm_observed_status(server.name, status)
+	if status == "Running" and gateway and not server.admin_domain_task:
+		frappe.enqueue_doc(
+			"Virtual Machine",
+			server.name,
+			"claim_admin_hostname",
+			queue="short",
+			enqueue_after_commit=True,
+			job_id=f"admin-domain:{server.name}",
+			deduplicate=True,
+		)
 
 	return status
 

@@ -216,6 +216,7 @@ class TestSiteRoutes(SiteOnAMachine):
 		super().setUp()
 		self.enroll()
 		observe_server(self.server)
+		self.enqueue_doc.reset_mock()
 
 	def test_a_site_is_ready_only_once_it_answers_on_its_own_address(self):
 		with patch("central.api.sites.is_site_reachable", return_value=False) as reachable:
@@ -744,7 +745,7 @@ class TestTrialImage(IntegrationTestCase):
 		"""The tags ride the regional query, so a page of other images cannot hide a match."""
 		_, asked = self.resolve(self.images(1))
 
-		self.assertEqual(asked["extra_tags"], {"has_site": "1", "frappe_version": "develop"})
+		self.assertEqual(asked["extra_tags"], {"has_site": "1", "frappe_version": "version-16-hotfix"})
 
 	def test_the_newest_offered_image_is_chosen(self):
 		configuration, _ = self.resolve(self.images(3))
@@ -818,7 +819,7 @@ class TestSiteNaming(SiteOnAMachine):
 		):
 			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
 
-		self.assertEqual([call.args[2] for call in login.call_args_list], [site.rename_target, "site.local"])
+		self.assertEqual([call.args[2] for call in login.call_args_list], ["site.local", site.rename_target])
 
 	def test_the_chosen_name_signs_in_before_the_rename(self):
 		"""The image serves every name in its zone, so the route alone makes the name answer."""
@@ -857,7 +858,7 @@ class TestSiteNaming(SiteOnAMachine):
 		):
 			self.assertEqual(site.get_login_url(), f"https://{site.rename_target}/desk?sid=abc")
 		probe.assert_called_once_with(f"https://{site.rename_target}")
-		self.assertEqual(login.call_args.args[2], site.rename_target)
+		self.assertEqual(login.call_args.args[2], "site.local")
 		self.assertEqual(self.site().primary_url, f"https://{site.rename_target}")
 
 	def test_pending_route_keeps_the_automatic_redirect(self):
@@ -881,27 +882,29 @@ class TestSiteNaming(SiteOnAMachine):
 		self.assertEqual(site.url, "https://site-1z141z4.par-2.example.test")
 		self.assertEqual(site.rename_target, "acme.par-2.example.test")
 
-	def test_naming_renames_the_bench_onto_their_address_once(self):
-		with patch("central.integrations.pilot.rename_site", return_value={"task_id": "task-1"}) as rename:
+	def test_naming_sets_the_primary_domain_without_renaming_the_site(self):
+		with patch(
+			"central.integrations.pilot.set_site_primary_domain", return_value={"task_id": "task-1"}
+		) as rename:
 			self.site().apply_subdomain()
 			self.site().apply_subdomain()
 
-		rename.assert_called_once_with(
-			self.server.name, "site.local", "acme.par-2.example.test", make_primary=True
-		)
+		rename.assert_called_once_with(self.server.name, "site.local", "acme.par-2.example.test")
 		self.assertEqual(self.site().rename_task, "task-1")
 
 	def test_a_site_nobody_named_is_never_renamed(self):
 		self.site().db_set("subdomain", None)
 
-		with patch("central.integrations.pilot.rename_site") as rename:
+		with patch("central.integrations.pilot.set_site_primary_domain") as rename:
 			self.site().apply_subdomain()
 
 		rename.assert_not_called()
 
 	def test_a_failed_rename_is_traceable_and_retryable(self):
 		site = self.site()
-		with patch("central.integrations.pilot.rename_site", side_effect=OSError("pilot unavailable")):
+		with patch(
+			"central.integrations.pilot.set_site_primary_domain", side_effect=OSError("pilot unavailable")
+		):
 			site.apply_subdomain()
 
 		self.assertIn("Retry", site.rename_error)
@@ -915,6 +918,26 @@ class TestSiteNaming(SiteOnAMachine):
 
 
 class TestAdminHostname(SiteOnAMachine):
+	def observe_and_run_admin_claim(self):
+		observe_server(self.server)
+		self.enqueue_doc.assert_any_call(
+			"Virtual Machine",
+			self.server.name,
+			"claim_admin_hostname",
+			queue="short",
+			enqueue_after_commit=True,
+			job_id=f"admin-domain:{self.server.name}",
+			deduplicate=True,
+		)
+		self.server.reload().claim_admin_hostname()
+
+	def test_site_discovery_does_not_wait_for_the_admin_api(self):
+		self.enroll()
+		with patch("central.integrations.pilot.rename_admin_domain", side_effect=TimeoutError) as rename:
+			observe_server(self.server)
+			self.assertTrue(frappe.db.exists("Site", {"server": self.server.name}))
+			rename.assert_not_called()
+
 	def test_a_running_pilot_machine_claims_its_admin_hostname_once(self):
 		"""Every Pilot machine needs it, and TLS stays off behind the regional proxy."""
 		self.enroll()
@@ -922,7 +945,7 @@ class TestAdminHostname(SiteOnAMachine):
 		with patch(
 			"central.integrations.pilot.rename_admin_domain", return_value={"task_id": "task-2"}
 		) as rename:
-			observe_server(self.server)
+			self.observe_and_run_admin_claim()
 			observe_server(self.server)
 
 		rename.assert_called_once_with(self.server.name, tls=False)
@@ -932,7 +955,7 @@ class TestAdminHostname(SiteOnAMachine):
 		self.enroll()
 
 		with patch("central.integrations.pilot.rename_admin_domain", side_effect=OSError("unreachable")):
-			observe_server(self.server)
+			self.observe_and_run_admin_claim()
 
 		server = self.server.reload()
 		self.assertIsNone(server.admin_domain_task)
@@ -943,8 +966,8 @@ class TestAdminHostname(SiteOnAMachine):
 		self.enroll()
 
 		with patch("central.integrations.pilot.rename_admin_domain", return_value={}) as rename:
-			observe_server(self.server)
-			observe_server(self.server)
+			self.observe_and_run_admin_claim()
+			self.observe_and_run_admin_claim()
 
 		self.assertEqual(rename.call_count, 2)
 		self.assertIsNone(self.server.reload().admin_domain_task)
