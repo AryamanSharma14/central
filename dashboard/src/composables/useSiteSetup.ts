@@ -13,6 +13,9 @@ import type {
 export type SetupStage = SetupPhase | 'arrived'
 
 const POLL_MS = 1000
+// Central never times out a site creation. The slowest real setup took about 3.5 minutes,
+// so past this the page treats it as stuck and offers support.
+const STUCK_AFTER_SECONDS = 10 * 60
 // A new Pilot accepts Central seconds after it finishes its bootstrap, so the
 // first retries come fast. The schedule still gives up after about 2 minutes.
 const LOGIN_RETRY_DELAYS_MS = [
@@ -56,11 +59,18 @@ export function useSiteSetup() {
 		if (isFailed.value) return 'failed'
 		return journey.value?.phase ?? 'booking'
 	})
+	const isWaiting = computed(() =>
+		['booking', 'server', 'app'].includes(stage.value),
+	)
+	const isStuck = computed(
+		() => isWaiting.value && secondsWaited.value > STUCK_AFTER_SECONDS,
+	)
 	// Past twice the usual wait the page says so. The progress keeps the real phase.
 	const isDelayed = computed(() => {
 		const eta = journey.value?.eta_seconds
-		const waiting = ['booking', 'server', 'app'].includes(stage.value)
-		return Boolean(eta && waiting && secondsWaited.value > eta * 2)
+		return Boolean(
+			eta && isWaiting.value && !isStuck.value && secondsWaited.value > eta * 2,
+		)
 	})
 
 	async function poll() {
@@ -136,6 +146,7 @@ export function useSiteSetup() {
 		journey,
 		stage,
 		isDelayed,
+		isStuck,
 		secondsLeft,
 		failure,
 		error,

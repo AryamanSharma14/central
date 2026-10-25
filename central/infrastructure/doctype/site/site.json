@@ -15,7 +15,7 @@
   "rename_task",
   "renamed_at",
   "rename_error",
-  "rename_error_log",
+  "rename_diagnostic",
   "trial_section",
   "trial_state",
   "trial_ends_on",
@@ -107,11 +107,11 @@
    "read_only": 1
   },
   {
-   "description": "The Error Log for the latest site rename failure.",
-   "fieldname": "rename_error_log",
-   "fieldtype": "Link",
-   "label": "Rename Error Log",
-   "options": "Error Log",
+   "description": "The traceback of the latest site rename failure. Operators only.",
+   "fieldname": "rename_diagnostic",
+   "fieldtype": "Code",
+   "label": "Rename Diagnostic",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -194,7 +194,7 @@
    "link_fieldname": "site"
   }
  ],
- "modified": "2026-10-15 10:00:00.000000",
+ "modified": "2026-10-25 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Infrastructure",
  "name": "Site",
@@ -218,6 +218,11 @@
    "read": 1,
    "report": 1,
    "role": "Central User"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager"
   }
  ],
  "row_format": "Dynamic",

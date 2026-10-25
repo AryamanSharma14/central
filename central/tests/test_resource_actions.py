@@ -290,7 +290,7 @@ class TestResourceActions(IntegrationTestCase):
 		self.assertEqual(queue_event.call_args.args, (self.team.name, "provision_failure"))
 		self.assertEqual(queue_event.call_args.kwargs["reference_name"], name)
 		action = frappe.get_doc("Resource Action", name)
-		diagnostic = frappe.get_doc("Error Log", action.error_log).error
+		diagnostic = action.diagnostic
 		self.assertIn("Traceback", diagnostic)
 		self.assertIn("AtlasConnectionError: region refused", diagnostic)
 		self.assertNotIn("region refused", action.error_message)
@@ -418,7 +418,7 @@ class TestResourceActions(IntegrationTestCase):
 		self.assertEqual(action.status, "Succeeded")
 		self.assertIn(
 			"AtlasRequestUncertain: lost reply",
-			frappe.get_doc("Error Log", action.error_log).error,
+			action.diagnostic,
 		)
 		self.client.return_value.create_vm.assert_called_once()
 
@@ -626,7 +626,5 @@ class TestResourceActions(IntegrationTestCase):
 		action = frappe.get_doc("Resource Action", name)
 		self.assertEqual(action.status, "Failed")
 		self.assertEqual(action.error_code, "UNEXPECTED")
-		log = frappe.get_doc("Error Log", action.error_log)
-		self.assertIn("RuntimeError: worker failure", log.error)
-		self.assertEqual((log.reference_doctype, log.reference_name), ("Resource Action", action.name))
+		self.assertIn("RuntimeError: worker failure", action.diagnostic)
 		self.client.return_value.create_vm.assert_not_called()

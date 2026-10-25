@@ -139,9 +139,7 @@ class TestSnapshotLifecycle(SnapshotTestCase):
 		self.assertEqual(frappe.db.get_value("VM Snapshot", sent.name, "atlas_image_id"), "img-9")
 		self.assertEqual(refused.status, "Failed")
 		self.assertEqual(refused.error_detail, "The region could not start this snapshot.")
-		log = frappe.get_doc("Error Log", refused.error_log)
-		self.assertIn("host is full", log.error)
-		self.assertEqual((log.reference_doctype, log.reference_name), ("VM Snapshot", refused.name))
+		self.assertIn("host is full", refused.diagnostic)
 		self.assertEqual(frappe.db.get_value("VM Snapshot", lost.name, "status"), "Pending")
 
 	def test_sync_finds_a_lost_reply_by_its_tag(self):
@@ -172,7 +170,7 @@ class TestSnapshotLifecycle(SnapshotTestCase):
 			(failed.status, failed.error_detail),
 			("Failed", "The region could not finish this snapshot."),
 		)
-		self.assertIn("disk read", frappe.get_doc("Error Log", failed.error_log).error)
+		self.assertIn("disk read", failed.diagnostic)
 		self.assertEqual(gone.status, "Failed")
 
 	def test_failure_queues_one_snapshot_notification(self):
@@ -295,7 +293,7 @@ class TestSnapshotSchedules(SnapshotTestCase):
 		)
 		self.assertIn(
 			"image in use",
-			frappe.get_doc("Error Log", frappe.db.get_value("VM Snapshot", expired.name, "error_log")).error,
+			frappe.db.get_value("VM Snapshot", expired.name, "diagnostic"),
 		)
 
 

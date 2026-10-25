@@ -87,9 +87,9 @@ class ResourceAction(Document):
 		completed_at: DF.Datetime | None
 		correlation_id: DF.Data
 		credential: DF.Link | None
+		diagnostic: DF.Code | None
 		dispatched_at: DF.Datetime | None
 		error_code: DF.Data | None
-		error_log: DF.Link | None
 		error_message: DF.SmallText | None
 		last_checked_at: DF.Datetime | None
 		is_free_trial: DF.Check
@@ -326,8 +326,8 @@ class ResourceAction(Document):
 		self.db_set(self._diagnostic_values(detail, title), notify=True)
 
 	def _diagnostic_values(self, detail: str, title: str) -> dict:
-		error_log = self.log_error(title=title, message=detail)
-		return {"error_log": error_log.name}
+		self.log_error(title=title, message=detail)
+		return {"diagnostic": f"{title}\n\n{detail}"}
 
 	@classmethod
 	def confirm_observed_status(cls, resource_id: str, status: str) -> None:

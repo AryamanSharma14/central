@@ -115,6 +115,8 @@ A System Manager keeps access. A Team SSH Key sync skips a locked server, so its
 
 `central.api.pilot.get_server_access` returns `is_locked` for the server of the calling Pilot credential. It is for Pilot, which must refuse the site's config edits and config downloads while the server is locked. A credential whose server is not linked yet reads as locked.
 
+A team with a locked server also gets no LLM and no object storage, because both cost money. `central.signups.access.require_service_access` refuses `enable_ai` and `create_bucket`, the only ways in. The console shows the refusal message. A System Manager keeps access.
+
 ### Console
 
 `central.billing.api.dashboard.account.get_billing_profile` returns `payment_method_required` and `welcome_credit` (`amount`, `currency`, `validity_days`, or null when the owner already had it). When a payment method is required, the New Server page shows a note and disables Create. Its **Add payment method** button opens the billing details dialog when they are missing, then the payment method dialog, on the same page. The welcome credit offer needs a billing currency, and the currency comes from the country (India pays in INR, every other country in USD). So the onboarding payment step asks for the billing country first and saves it to the billing profile. It fills India when the browser time zone is in India. It then names the welcome credit in that currency, says that adding a payment method does not charge it, and opens the same two dialogs, with the country already filled. On Billing, the main action for a new team is **Add card**. **Add credit** on the Wallet row tops up the prepaid wallet.

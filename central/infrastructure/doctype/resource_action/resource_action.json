@@ -41,7 +41,7 @@
   "request_key",
   "request_digest",
   "credential",
-  "error_log"
+  "diagnostic"
  ],
  "fields": [
   {
@@ -294,11 +294,10 @@
    "read_only": 1
   },
   {
-   "description": "Latest Error Log created for this action. All related Error Logs also reference this Resource Action.",
-   "fieldname": "error_log",
-   "fieldtype": "Link",
-   "label": "Error Log",
-   "options": "Error Log",
+   "description": "The traceback or Atlas detail of the latest failure of this action. Operators only.",
+   "fieldname": "diagnostic",
+   "fieldtype": "Code",
+   "label": "Diagnostic",
    "permlevel": 1,
    "read_only": 1
   }
@@ -309,7 +308,7 @@
    "link_fieldname": "resource_action"
   }
  ],
- "modified": "2026-10-20 20:00:00.000000",
+ "modified": "2026-10-25 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Infrastructure",
  "name": "Resource Action",

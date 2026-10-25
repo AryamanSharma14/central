@@ -1,8 +1,10 @@
 from collections.abc import Callable
 
 import frappe
+from frappe import _
 from frappe.utils.translations import _lt
 
+from central.iam import user_has_operator_bypass
 from central.signups.trial import OPEN_STATES, get_server_trial_state
 
 SERVER_ACCESS_LOCKED = _lt(
@@ -19,6 +21,15 @@ def is_server_locked(server: str) -> bool:
 def get_locked_servers(team: str) -> set[str]:
 	"""The team's servers that run an open trial, also those whose site Central has not recorded yet."""
 	return find_locked_servers(frappe.get_list, {"team": team})
+
+
+def require_service_access(team: str) -> None:
+	"""Refuse LLM and buckets to a team on an open trial, because they cost money. Operators keep access."""
+	if find_locked_servers(frappe.get_all, {"team": team}) and not user_has_operator_bypass():
+		frappe.throw(
+			_("LLM and object storage are not part of the free trial. Upgrade your server to use them."),
+			frappe.PermissionError,
+		)
 
 
 def get_locked_servers_among(servers: list[str]) -> set[str]:

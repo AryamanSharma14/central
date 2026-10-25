@@ -7,10 +7,13 @@ from central.api.servers import registry
 from central.api.snapshots import take_snapshot
 from central.infrastructure.doctype.github_connection.github_connection import GitHubConnectionAttempt
 from central.integrations.servers import get_console_url
+from central.services.api import ai, storage
+from central.signups.access import require_service_access
 from central.tests.test_team_management import create_user
 from central.tests.test_trial_lifecycle import TrialOnAMachine
 
 LOCKED = "Server access is not part of the free trial"
+SERVICE_LOCKED = "LLM and object storage are not part of the free trial"
 
 
 class TestTrialServerAccess(TrialOnAMachine):
@@ -112,6 +115,23 @@ class TestTrialServerAccess(TrialOnAMachine):
 			self.assertTrue(pilot.get_server_access()["is_locked"])
 			self.site().db_set("trial_state", "Converted")
 			self.assertFalse(pilot.get_server_access()["is_locked"])
+
+	def test_an_open_trial_refuses_llm_and_buckets(self):
+		team = self.team.name
+		with self.set_user(self.member):
+			for create in (
+				lambda: ai.enable_ai(team=team),
+				lambda: storage.create_bucket(team=team, bucket_name="files", region=self.region.name),
+			):
+				with self.assertRaisesRegex(frappe.PermissionError, SERVICE_LOCKED):
+					create()
+
+	def test_a_converted_trial_or_an_operator_gets_llm_and_buckets(self):
+		require_service_access(self.team.name)
+
+		self.site().db_set("trial_state", "Converted")
+		with self.set_user(self.member):
+			require_service_access(self.team.name)
 
 	def credential(self):
 		return frappe.get_doc("Pilot Credential", {"server": self.server.name, "status": "Active"})

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Alert, Button, ErrorMessage } from 'frappe-ui'
+import { Alert, Button } from 'frappe-ui'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AuthErrorMessage from '@/components/auth/AuthErrorMessage.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
 import ContactSupportLink from '@/components/common/ContactSupportLink.vue'
@@ -19,6 +20,7 @@ const {
 	journey,
 	stage,
 	isDelayed,
+	isStuck,
 	secondsLeft,
 	failure,
 	error,
@@ -54,7 +56,7 @@ const failureDetail = computed(() => {
 })
 
 const supportContext = computed(() => ({
-	Topic: 'Site setup failed',
+	Topic: 'Site setup',
 	Product: title.value,
 	Reference: journey.value?.reference,
 }))
@@ -80,7 +82,13 @@ function tryAgain() {
 				:loading="isSigningIn"
 				@click="openSite"
 			/>
-			<ErrorMessage v-if="!isSigningIn" class="mt-4" :message="error" />
+			<AuthErrorMessage
+				v-if="error && !isSigningIn"
+				class="mt-4"
+				:message="error"
+				page="Site setup"
+				:context="supportContext"
+			/>
 		</template>
 
 		<template v-else>
@@ -94,7 +102,7 @@ function tryAgain() {
 				class="mt-7"
 				:journey="journey"
 				:stage="stage"
-				:is-delayed="isDelayed"
+				:is-delayed="isDelayed || isStuck"
 				:app-title="title"
 				:seconds-left="secondsLeft"
 			/>
@@ -106,6 +114,21 @@ function tryAgain() {
 				title="This is taking longer than usual"
 				description="You can keep this page open. We'll open your site when it's ready."
 			/>
+			<Alert
+				v-if="isStuck"
+				class="mt-4"
+				theme="red"
+				title="Your site is not ready yet"
+			>
+				<template #description>
+					Setup is taking much longer than it should.
+					<ContactSupportLink :context="supportContext"
+						>Contact support</ContactSupportLink
+					>
+					and we'll look into it. Keep this page open: it still opens your site
+					if setup finishes.
+				</template>
+			</Alert>
 			<Alert
 				v-if="stage === 'failed'"
 				class="mt-4"
@@ -119,7 +142,13 @@ function tryAgain() {
 					<ContactSupportLink :context="supportContext" />.
 				</template>
 			</Alert>
-			<ErrorMessage v-if="error" class="mt-4" :message="error" />
+			<AuthErrorMessage
+				v-if="error"
+				class="mt-4"
+				:message="error"
+				page="Site setup"
+				:context="supportContext"
+			/>
 		</template>
 	</AuthShell>
 </template>

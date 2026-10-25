@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Button, ErrorMessage, LoadingIndicator } from 'frappe-ui'
+import { Button, LoadingIndicator } from 'frappe-ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import AuthErrorMessage from '@/components/auth/AuthErrorMessage.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import RotatingText from '@/components/common/RotatingText.vue'
@@ -152,7 +153,13 @@ async function confirmDelete(): Promise<void> {
 		</p>
 	</div>
 
-	<ErrorMessage v-if="error" class="mt-6" :message="error" />
+	<AuthErrorMessage
+		v-if="error"
+		class="mt-6"
+		:message="error"
+		page="Open trial"
+		:context="{ Product: productTitle, Site: address }"
+	/>
 
 	<div class="mt-8 space-y-3">
 		<template v-if="kind === 'add-app'">
