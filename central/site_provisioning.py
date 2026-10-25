@@ -16,7 +16,7 @@ SIGNUP_FLOW = "Signup"
 # A trial is a site the image already carries, on the Frappe version a signup runs. A
 # product names its own version. The region tags what an image holds, and it matches a tag
 # exactly, so an image that carries no tag is never taken for a yes.
-SIGNUP_IMAGE_TAGS = {"has_site": "1", "frappe_version": "develop"}
+SIGNUP_IMAGE_TAGS = {"has_site": "1", "frappe_version": "version-16-hotfix"}
 # Cargo tags an image with the signup app installed on its site. A product trial asks for
 # its app. A plain trial starts on the bare site, and the region cannot filter on a missing
 # tag, so Central drops tagged images itself.

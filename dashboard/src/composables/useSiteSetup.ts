@@ -39,11 +39,8 @@ export function useSiteSetup() {
 
 	const site = computed(() => status.value?.site ?? null)
 	const journey = computed(() => status.value?.journey ?? null)
-	const isFailed = computed(
-		() =>
-			journey.value?.phase === 'failed' ||
-			Boolean(status.value?.creation?.error),
-	)
+	// A creation error such as REFRESH_FAILED is transient until the request itself fails.
+	const isFailed = computed(() => journey.value?.phase === 'failed')
 	const failure = computed(() => status.value?.creation?.error?.message ?? '')
 	const secondsWaited = computed(() => {
 		const started = journey.value?.started_at

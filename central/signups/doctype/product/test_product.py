@@ -106,6 +106,10 @@ class IntegrationTestProduct(IntegrationTestCase):
 			with self.subTest(version=version), self.assertRaises(frappe.ValidationError):
 				product.save()
 
+		product.reload()
+		product.frappe_version = "version-16-hotfix"
+		product.save()
+
 	def test_the_landing_route_is_a_path_on_the_site(self):
 		product = self.product("raven-landing")
 

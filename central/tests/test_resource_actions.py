@@ -611,6 +611,29 @@ class TestResourceActions(IntegrationTestCase):
 		self.assertIn(queued, names)
 		self.assertIn(unanswered, names)
 
+	def test_the_recovery_sweep_retries_a_failed_refresh_soon(self):
+		"""A failed read is retried after seconds, while other recent requests wait for the stall cutoff."""
+		from central.integrations.resource_actions import recover_requests
+
+		failed_read = self.submit()["action"]
+		recent = self.submit(request_key="second-request-key-002", title="Second server")["action"]
+		moments_ago = frappe.utils.add_to_date(frappe.utils.now_datetime(), seconds=-30)
+		frappe.db.set_value(
+			"Resource Action",
+			failed_read,
+			{"status": "Sent", "error_code": "REFRESH_FAILED", "modified": moments_ago},
+			update_modified=False,
+		)
+		frappe.db.set_value("Resource Action", recent, "modified", moments_ago, update_modified=False)
+		with patch(
+			"central.infrastructure.doctype.resource_action.resource_action.ResourceAction.enqueue",
+			autospec=True,
+		) as enqueue:
+			recover_requests()
+			names = [call.args[0].name for call in enqueue.call_args_list]
+		self.assertIn(failed_read, names)
+		self.assertNotIn(recent, names)
+
 	def test_unexpected_worker_failure_is_recorded_without_redispatch(self):
 		from central.integrations.resource_actions import process_request
 
