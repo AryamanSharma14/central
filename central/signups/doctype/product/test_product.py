@@ -98,7 +98,10 @@ class IntegrationTestProduct(IntegrationTestCase):
 		product = self.product("raven-version")
 		self.assertEqual(product.frappe_version, "develop")
 
-		for version in ("16", "v16", "version-16.1", "main"):
+		product.frappe_version = "version-16-hotfix"
+		product.save()
+
+		for version in ("16", "v16", "version-16.1", "version-16-beta", "main"):
 			product.frappe_version = version
 			with self.subTest(version=version), self.assertRaises(frappe.ValidationError):
 				product.save()
