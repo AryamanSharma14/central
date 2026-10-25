@@ -73,10 +73,11 @@ class Invoice(Document):
 		self.restore_team_once_settled()
 
 	def restore_team_once_settled(self):
-		"""When an unpaid invoice is settled, a team that owes nothing else is restored:
-		standing back to Current and the servers dunning stopped started again."""
+		"""When an unpaid invoice is paid or waived, a team that owes nothing else is restored:
+		standing back to Current and the servers dunning stopped started again. A cancel does
+		not restore: it is a correction, and the reissued invoice is still owed."""
 		before = self.get_doc_before_save()
-		if not before or before.status not in UNSETTLED or self.status in UNSETTLED:
+		if not before or before.status not in UNSETTLED or self.status not in ("Paid", "Waived"):
 			return
 		from central.billing.catalog.subscriptions import restore_after_payment
 		from central.billing.payments.settlement import has_overdue_invoice

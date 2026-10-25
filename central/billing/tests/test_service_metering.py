@@ -77,6 +77,33 @@ def _make_metered_family(
 	return doc.name
 
 
+def _publish_in_family(category, resource_type, plan, rate, retire):
+	"""Retire `retire` and publish `plan` in its place, in the same family."""
+	from central.billing.catalog.pricing import set_catalog_rates
+	from central.billing.tests.utils import _ensure_rate_instances
+
+	frappe.db.set_value("Plan", retire, "is_active", 0)
+	if frappe.db.exists("Plan", plan):
+		frappe.delete_doc("Plan", plan, force=True)
+	doc = frappe.get_doc(
+		{
+			"doctype": "Plan",
+			"title": plan,
+			"category": category,
+			"billing_cycle": "Monthly",
+			"is_active": 1,
+			"includes": [{"resource_type": resource_type, "quantity": 0, "unit": "Nos"}],
+		}
+	)
+	doc.name = plan
+	doc.flags.name_set = True
+	doc.insert(ignore_permissions=True)
+	rates = [{"cluster": "", "currency": "INR", "rate": rate}]
+	_ensure_rate_instances(rates)
+	set_catalog_rates("Plan", doc.name, rates)
+	return doc.name
+
+
 class TestPlanCategoryModes(IntegrationTestCase):
 	"""settlement_mode / reporting_mode are per-family properties, blank resolving to
 	the built default; both are meaningless on a Fixed family (ADR 0015)."""
@@ -245,6 +272,29 @@ class TestServiceSubjectProvisioning(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError) as caught:
 			subscriptions.provision_service_subscription(self.TEAM, self.plan, cluster="mumbai")
 		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_METHOD_REQUIRED")
+
+	def test_an_operator_still_needs_the_team_to_have_a_way_to_pay(self):
+		frappe.db.delete("Payment Method", {"team": self.TEAM})
+		with self.assertRaises(frappe.ValidationError) as caught:
+			subscriptions.provision_service_subscription(
+				self.TEAM, self.plan, cluster="mumbai", allow_unlisted_plan=True
+			)
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_METHOD_REQUIRED")
+
+	def test_a_team_behind_on_payment_can_move_to_a_cheaper_plan_only(self):
+		family, resource = "SM Down Family", "Tokens Down"
+		dear = _make_metered_family(family, resource, "SM Tokens Dear", rate=0.02)
+		first = subscriptions.provision_service_subscription(self.TEAM, dear, cluster="mumbai")
+		frappe.db.set_value("Subscription", first["subscription"], "account_standing", "Past Due")
+
+		cheap = _publish_in_family(family, resource, "SM Tokens Cheap", rate=0.01, retire=dear)
+		res = subscriptions.provision_service_subscription(self.TEAM, cheap, cluster="mumbai")
+		self.assertTrue(res["upgraded"])
+
+		dearer = _publish_in_family(family, resource, "SM Tokens Dearer", rate=0.05, retire=cheap)
+		with self.assertRaises(frappe.ValidationError) as caught:
+			subscriptions.provision_service_subscription(self.TEAM, dearer, cluster="mumbai")
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_OVERDUE")
 
 	def test_plan_without_a_rate_in_team_currency_refused(self):
 		"""A segment with no rate bills nothing, so even an operator cannot open one."""
@@ -592,6 +642,7 @@ class TestAdminServices(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		ensure_team(self.TEAM)
 		complete_billing_profile(self.TEAM, currency="INR")
+		give_team_a_card(self.TEAM)
 		frappe.db.delete("Subscription", {"team": self.TEAM})
 		self.plan = _make_metered_family("SM Admin Family", "PDF Admin", "SM PDF Admin Plan")
 

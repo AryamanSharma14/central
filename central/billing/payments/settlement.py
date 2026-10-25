@@ -161,7 +161,7 @@ def is_behind_on_payment(team: str) -> bool:
 	)
 
 
-def can_pay_by_hand(team: str) -> bool:
+def has_paid_by_hand(team: str) -> bool:
 	"""Whether a team on Manual Checkout has shown it pays: one invoice settled with real money.
 
 	Manual Checkout is the customer's own choice and needs no card, so on its own it

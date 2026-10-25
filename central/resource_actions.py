@@ -27,7 +27,7 @@ from central.billing.doctype.billing_profile.billing_profile import (
 	is_complete,
 	require_billing_profile,
 )
-from central.billing.payments.settlement import can_pay_by_hand, is_behind_on_payment, wallet_funds
+from central.billing.payments.settlement import has_paid_by_hand, is_behind_on_payment, wallet_funds
 from central.billing.revenue.tax import is_internal_team
 from central.errors import throw_action_error
 from central.iam import can, resolve_team
@@ -443,7 +443,7 @@ def require_payment_method_or_credit(team: str, rate: float) -> None:
 		require_billing_profile(team, "create servers")
 		return
 
-	if is_complete(team) and (has_active_payment_method(team) or can_pay_by_hand(team)):
+	if is_complete(team) and (has_active_payment_method(team) or has_paid_by_hand(team)):
 		return
 
 	throw_action_error("PAYMENT_METHOD_REQUIRED")

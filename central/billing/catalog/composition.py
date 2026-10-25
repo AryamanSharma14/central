@@ -49,10 +49,16 @@ def composition_quantities(includes) -> dict[str, float]:
 	"""Sum a composition (includes rows or dicts) into `{resource_type: quantity}`."""
 	out: dict[str, float] = {}
 	for row in includes:
-		resource_type = row["resource_type"] if isinstance(row, dict) else row.resource_type
-		quantity = row["quantity"] if isinstance(row, dict) else row.quantity
+		resource_type, quantity = row_values(row)
 		out[resource_type] = out.get(resource_type, 0.0) + flt(quantity)
 	return out
+
+
+def row_values(row) -> tuple[str, float]:
+	"""The `(resource_type, quantity)` of an includes row, given as a dict or a child row."""
+	if isinstance(row, dict):
+		return row["resource_type"], row["quantity"]
+	return row.resource_type, row.quantity
 
 
 def config_summary(includes) -> str:
@@ -128,8 +134,7 @@ def validate_shape_rows(includes) -> None:
 	changing the server."""
 	seen = set()
 	for row in includes or []:
-		resource_type = row["resource_type"] if isinstance(row, dict) else row.resource_type
-		quantity = row["quantity"] if isinstance(row, dict) else row.quantity
+		resource_type, quantity = row_values(row)
 		if resource_type not in SHAPE_RESOURCES or resource_type in seen:
 			frappe.throw(
 				_("A custom server is made of one CPU, one memory and one disk size. Remove {0}.").format(
