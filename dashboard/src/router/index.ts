@@ -68,11 +68,13 @@ const routes = [
 				component: () => import('@/pages/servers/ServersPage.vue'),
 				meta: { title: 'Servers' },
 			},
+			// Team-wide snapshots, including those of terminated servers. Reached only
+			// from the archive-team checks, which list the snapshots still billing.
 			{
 				path: 'servers/snapshots',
 				name: 'Snapshots',
 				component: () => import('@/pages/servers/SnapshotsPage.vue'),
-				meta: { title: 'Snapshots' },
+				meta: { title: 'Team snapshots' },
 			},
 			{
 				path: 'servers/new',
@@ -134,8 +136,7 @@ const routes = [
 			{ path: 'team', redirect: '/team/members' },
 			// Members + roles share one tabbed page. Settings fold into this surface
 			// (rename beside the title, transfer on member rows, delete in team menu).
-			// /team/roles and /team/settings stay as aliases; invitations stay routable
-			// but are hidden from the sidebar for now.
+			// /team/roles and /team/settings stay as aliases.
 			{
 				path: 'team/members',
 				name: 'Members',
@@ -144,19 +145,6 @@ const routes = [
 			},
 			{ path: 'team/roles', redirect: '/team/members' },
 			{ path: 'team/settings', redirect: '/team/members' },
-			{
-				path: 'team/invitations',
-				name: 'TeamInvitations',
-				component: () => import('@/pages/team/InvitationsPage.vue'),
-				meta: { title: 'Invitations' },
-			},
-			// Personal invitation inbox: opens the Invitations page on its Received tab.
-			{
-				path: 'invitations',
-				name: 'MyInvitations',
-				component: () => import('@/pages/team/InvitationsPage.vue'),
-				meta: { title: 'Invitations' },
-			},
 		],
 	},
 ]
