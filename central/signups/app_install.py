@@ -2,7 +2,6 @@ import frappe
 import requests
 from frappe import _
 
-from central.signups.alerts import alert_operators
 from central.signups.doctype.product.product import get_signup_product
 from central.signups.trial import Trial
 
@@ -97,11 +96,4 @@ class TrialAppInstall:
 		)
 		self.site.add_comment(
 			"Info", _("{0} install failed (Pilot task {1}): {2}").format(app, task_id, reason)
-		)
-		alert_operators(
-			_("app install failed"),
-			"Site",
-			self.site.name,
-			self.site.team,
-			f"{app}, Pilot task {task_id}: {reason}",
 		)

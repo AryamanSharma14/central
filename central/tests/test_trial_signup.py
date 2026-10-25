@@ -4,7 +4,6 @@ import frappe
 import requests
 
 from central.api.sites import get_open_trial, get_trial_app_install, install_trial_app
-from central.billing.platform.alerts import notify_operators
 from central.tests.test_team_management import create_user
 from central.tests.test_trial_lifecycle import TrialOnAMachine
 
@@ -118,14 +117,7 @@ class TestTrialSignup(TrialOnAMachine):
 	def test_a_failed_install_tells_the_customer_and_leaves_the_reason_on_the_site(self):
 		self.pilot.return_value = {"status": "failed", "failure": {"code": "x", "message": "No room left"}}
 
-		with patch("central.signups.alerts.frappe.enqueue") as enqueue:
-			progress = get_trial_app_install("site.local", "task-1", self.product.name, self.team.name)
-
-		[alert] = [
-			call.kwargs["alerts"][0] for call in enqueue.call_args_list if call.args == (notify_operators,)
-		]
-		self.assertEqual(alert["alert"], "app install failed")
-		self.assertIn("No room left", alert["detail"])
+		progress = get_trial_app_install("site.local", "task-1", self.product.name, self.team.name)
 
 		self.assertEqual(progress["status"], "failed")
 		self.assertEqual(

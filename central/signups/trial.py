@@ -19,7 +19,6 @@ from central.iam import can
 from central.infrastructure.doctype.resource_action.resource_action import PENDING_STATES, ResourceAction
 from central.infrastructure.doctype.site.site import Site
 from central.notification.engine import queue_event
-from central.signups.alerts import alert_operators
 from central.signups.eligibility import has_active_payment_method
 from central.signups.funnel import capture_trial_event
 
@@ -415,7 +414,6 @@ class Trial:
 		"""Leave the reason on the Site, where the operator looks, and the traceback in an Error Log."""
 		frappe.log_error(title="Trial step failed", reference_doctype="Site", reference_name=self.site.name)
 		frappe.db.set_value("Site", self.site.name, "trial_error", reason)
-		alert_operators(_("trial step failed"), "Site", self.site.name, self.site.team, reason)
 
 
 def finish_conversion(site: str) -> None:

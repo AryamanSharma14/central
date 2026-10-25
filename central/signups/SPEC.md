@@ -149,12 +149,4 @@ When a stop, a terminate, or the conversion job fails, Central writes the reason
 
 ### Operator alerts
 
-`central.signups.alerts.alert_operators` tells the operators about a failed signup. It sends one alert for each failure, after the transaction commits, through the operator alert channel in Billing Settings (Raven, or email as a fallback).
-
-| Failure | Alert | Reference |
-|---|---|---|
-| The site creation of a signup becomes Failed, Timed Out or Uncertain | `site creation failed`, `site creation timed out` or `site creation uncertain`, with the error code and message | Resource Action |
-| A daily trial step fails | `trial step failed`, with the Trial Error | Site |
-| The Pilot task that installs another product's app fails | `app install failed`, with the app, the task and Pilot's reason | Site |
-
-An Uncertain creation needs an operator, because Atlas may have built the server. A trial step that keeps failing sends one alert each day.
+`central.signups.alerts.alert_failed_signups` runs every hour. When a signup site creation became Failed or Timed Out in the last hour, it sends one message that lists them, through the operator alert channel in Billing Settings (Raven, or email as a fallback). A signup should never fail, so one failure is enough. The check adds nothing to the signup path.

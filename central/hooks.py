@@ -247,6 +247,7 @@ scheduler_events = {
 		"central.billing.ingester.erpnext_sync.retry_failed_syncs",
 		"central.billing.payments.reconciliation.run_reconciliation",
 		"central.billing.platform.alerts.run_operator_alerts",
+		"central.signups.alerts.alert_failed_signups",
 	],
 	"monthly": [
 		"central.billing.revenue.invoicing.draft_monthly_invoices",
