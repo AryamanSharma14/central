@@ -5,6 +5,7 @@ from frappe.utils.translations import _lt
 
 from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
+from central.signups.access import require_service_access
 from central.utils.guards import require_capability
 
 VIEW_DENIED = _lt("You can't view this team's AI. Ask a team admin to review your access.")
@@ -44,7 +45,8 @@ def get_ai(team: str | None = None) -> dict:
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
 def enable_ai(team: str | None = None) -> dict:
-	"""Turn AI on for the team. Safe to repeat."""
+	"""Turn AI on for the team. Safe to repeat. Not on a free trial."""
+	require_service_access(team)
 	return {"name": ai.enable(team)}
 
 

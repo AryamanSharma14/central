@@ -115,7 +115,7 @@ A System Manager keeps access. A Team SSH Key sync skips a locked server, so its
 
 `central.api.pilot.get_server_access` returns `is_locked` for the server of the calling Pilot credential. It is for Pilot, which must refuse the site's config edits and config downloads while the server is locked. A credential whose server is not linked yet reads as locked.
 
-A team with a locked server also gets no LLM and no object storage, because both cost money. `central.signups.access.require_service_access` refuses `enable_ai`, `create_api_key`, `create_bucket` and `rotate_credentials`. `get_ai` and `get_object_storage` return `is_trial_locked`, so the console hides the create actions. A System Manager keeps access.
+A team with a locked server also gets no LLM and no object storage, because both cost money. `central.signups.access.require_service_access` refuses `enable_ai` and `create_bucket`, the only ways in. The console shows the refusal message. A System Manager keeps access.
 
 ### Console
 

@@ -116,29 +116,22 @@ class TestTrialServerAccess(TrialOnAMachine):
 			self.site().db_set("trial_state", "Converted")
 			self.assertFalse(pilot.get_server_access()["is_locked"])
 
-	def test_an_open_trial_refuses_llm_keys_and_buckets(self):
+	def test_an_open_trial_refuses_llm_and_buckets(self):
 		team = self.team.name
 		with self.set_user(self.member):
 			for create in (
 				lambda: ai.enable_ai(team=team),
-				lambda: ai.create_api_key(team=team, label="key"),
 				lambda: storage.create_bucket(team=team, bucket_name="files", region=self.region.name),
-				lambda: storage.rotate_credentials(team=team, name="any"),
 			):
 				with self.assertRaisesRegex(frappe.PermissionError, SERVICE_LOCKED):
 					create()
 
-	def test_the_console_reads_the_service_lock(self):
-		with self.set_user(self.member):
-			self.assertTrue(ai.get_ai(team=self.team.name)["is_trial_locked"])
-			self.assertTrue(storage.get_object_storage(team=self.team.name)["is_trial_locked"])
-
-			self.site().db_set("trial_state", "Converted")
-			self.assertFalse(ai.get_ai(team=self.team.name)["is_trial_locked"])
-			self.assertFalse(storage.get_object_storage(team=self.team.name)["is_trial_locked"])
-
-	def test_an_operator_keeps_llm_and_bucket_access(self):
+	def test_a_converted_trial_or_an_operator_gets_llm_and_buckets(self):
 		require_service_access(self.team.name)
+
+		self.site().db_set("trial_state", "Converted")
+		with self.set_user(self.member):
+			require_service_access(self.team.name)
 
 	def credential(self):
 		return frappe.get_doc("Pilot Credential", {"server": self.server.name, "status": "Active"})
