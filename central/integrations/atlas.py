@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote, urlsplit
@@ -8,6 +9,7 @@ from urllib.parse import quote, urlsplit
 import frappe
 import requests
 from frappe import _
+from frappe.monitor import get_trace_id
 
 from central.errors import AtlasConnectionError, AtlasRejected, AtlasRequestUncertain, AtlasResourceGone
 from central.iam import can, user_has_operator_bypass
@@ -34,7 +36,7 @@ ConsoleMode = Literal["ssh", "tty"]
 class AtlasClient:
 	"""Use the regional tenant API with explicit identity and mutation outcomes."""
 
-	def __init__(self, instance: Region, tenant_id: int):
+	def __init__(self, instance: Region, tenant_id: int, request_id: str | None = None):
 		if type(tenant_id) is not int:
 			frappe.throw(_("The tenant ID must be a whole number."), AtlasConnectionError)
 
@@ -46,6 +48,8 @@ class AtlasClient:
 
 		self.instance = instance
 		self.tenant_id = tenant_id
+		# Atlas adopts it as its trace ID, so its logs and errors find the Central work that asked.
+		self.request_id = request_id
 
 	@classmethod
 	def for_operator(cls, instance: Region) -> AtlasClient:
@@ -389,6 +393,7 @@ class AtlasClient:
 		headers = {
 			"Authorization": f"Bearer {token}",
 			"X-Tenant-ID": str(self.tenant_id),
+			"X-Frappe-Request-Id": self.request_id or get_trace_id() or uuid.uuid4().hex,
 			"Accept": "application/json",
 		}
 
