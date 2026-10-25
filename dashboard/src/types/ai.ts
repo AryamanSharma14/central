@@ -63,8 +63,6 @@ export interface AIState {
 	enabled: boolean
 	// Grove is down or in maintenance: nothing else is filled in.
 	unavailable?: boolean
-	/** The team runs an open free trial, which gets no API keys. */
-	is_trial_locked?: boolean
 	spend?: AISpend
 	usage?: AIMonthUsage
 	geographies?: AIGeography[]

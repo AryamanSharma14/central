@@ -5,7 +5,6 @@ from frappe.utils.translations import _lt
 
 from central.integrations.object_storage import BucketInteractions
 from central.services.doctype.team_service.team_service import STORAGE_SERVICE, TeamService, get_bucket_name
-from central.signups.access import is_team_locked, require_service_access
 from central.utils.guards import require_capability
 
 BUCKET_FIELDS = ("name", "bucket_name", "region", "status", "endpoint_url", "access_key", "creation")
@@ -16,8 +15,7 @@ MANAGE_DENIED = _lt("You can't manage this team's object storage. Ask a team adm
 @frappe.whitelist(methods=["GET"])
 @require_capability("service:view", VIEW_DENIED)
 def get_object_storage(team: str | None = None) -> dict:
-	"""The regions that serve object storage and the team's buckets, without secrets.
-	`is_trial_locked` while the team runs an open trial, which gets no buckets."""
+	"""The regions that serve object storage and the team's buckets, without secrets."""
 	# Team Service is operator-only because it holds secrets; this route redacts them.
 	buckets = frappe.get_all(
 		"Team Service",
@@ -26,7 +24,7 @@ def get_object_storage(team: str | None = None) -> dict:
 		order_by="creation desc",
 	)
 
-	return {"regions": get_storage_regions(), "buckets": buckets, "is_trial_locked": is_team_locked(team)}
+	return {"regions": get_storage_regions(), "buckets": buckets}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -108,7 +106,6 @@ def delete_objects(
 def create_bucket(team: str | None = None, bucket_name: str | None = None, region: str | None = None) -> dict:
 	"""Create a bucket and return its secret once. The bucket is named
 	`<tenant>-<region>-<bucket_name>`, because bucket names are shared across a region."""
-	require_service_access(team)
 	bucket_name = (bucket_name or "").strip()
 	if not bucket_name or not region:
 		frappe.throw(_("A bucket needs a name and a region."))
@@ -132,7 +129,6 @@ def create_bucket(team: str | None = None, bucket_name: str | None = None, regio
 @require_capability("service:manage", MANAGE_DENIED)
 def rotate_credentials(team: str | None = None, name: str | None = None) -> dict:
 	"""Replace a bucket's key and return the new secret once. The old key stops at once."""
-	require_service_access(team)
 	service = _team_bucket(team, name, for_update=True)
 	# The route checked service:manage; Team Service is operator-only because it holds secrets.
 	service.flags.ignore_permissions = True

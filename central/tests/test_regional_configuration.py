@@ -47,12 +47,11 @@ class TestRegionalConfiguration(IntegrationTestCase):
 		self.assertFalse(arguments.kwargs["allow_redirects"])
 		self.token.assert_called_once_with(42)
 
-	def test_every_request_carries_a_request_id_for_atlas(self):
-		AtlasClient(self.instance, 0, request_id="a" * 32).check_connection()
-		self.assertEqual(self.request.call_args.kwargs["headers"]["X-Frappe-Request-Id"], "a" * 32)
+	def test_a_request_carries_the_central_trace_id(self):
+		with patch("central.integrations.atlas.get_trace_id", return_value="trace-1"):
+			AtlasClient.for_operator(self.instance).check_connection()
 
-		AtlasClient.for_operator(self.instance).check_connection()
-		self.assertRegex(self.request.call_args.kwargs["headers"]["X-Frappe-Request-Id"], r"^[0-9a-f]{32}$")
+		self.assertEqual(self.request.call_args.kwargs["headers"]["X-Frappe-Request-Id"], "trace-1")
 
 	def test_missing_region_id_never_sends_request(self):
 		self.instance.atlas_region_id = None

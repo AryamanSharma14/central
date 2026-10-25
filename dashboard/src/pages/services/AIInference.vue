@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Alert, Button, Dialog, Skeleton, TabButtons, Tooltip } from 'frappe-ui'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import CopyableValue from '@/components/common/CopyableValue.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import AISettings from '@/components/services/llm/AISettings.vue'
@@ -20,11 +20,6 @@ const { activeTeam } = useSession()
 const { ai, aiLoading, aiError, reloadAI, enable, minted, dismissMinted } =
 	useAI()
 useBreadcrumbs().setBreadcrumbs([{ label: 'LLM' }])
-
-// A free trial gets no keys: the server refuses them, so the page offers none.
-const canManage = computed(
-	() => canManageServices.value && !ai.value?.is_trial_locked,
-)
 
 const keys = ref<InstanceType<typeof ApiKeys>>()
 
@@ -58,7 +53,7 @@ const enableAI = async (): Promise<void> => {
 				@click="keys?.openHelp()"
 			/>
 			<Tooltip
-				v-if="canManage"
+				v-if="canManageServices"
 				:text="
 					keys?.atKeyLimit
 						? `Your plan allows ${ai.spend?.max_keys} live keys. Revoke one to create another.`
@@ -104,7 +99,7 @@ const enableAI = async (): Promise<void> => {
 
 			<template v-else-if="ai?.enabled" :key="activeTeam">
 				<Summary
-					:can-manage="canManage"
+					:can-manage="canManageServices"
 					@create="keys?.openCreate()"
 					@quickstart="keys?.openHelp()"
 				/>
@@ -122,7 +117,7 @@ const enableAI = async (): Promise<void> => {
 				<div v-show="tab === 'keys'" class="contents">
 					<ApiKeys
 						ref="keys"
-						:can-manage="canManage"
+						:can-manage="canManageServices"
 						:active="tab === 'keys'"
 					/>
 				</div>
@@ -137,13 +132,9 @@ const enableAI = async (): Promise<void> => {
 				v-else
 				icon="lucide-bot"
 				title="Set up LLM"
-				:description="
-					ai?.is_trial_locked
-						? 'LLM is not part of the free trial. Upgrade your server to enable it and create API keys.'
-						: 'Our hosted models and leading upstream models, through OpenAI and Anthropic compatible APIs. Enable LLM for your team, then create a key to call them from your own apps.'
-				"
+				description="Our hosted models and leading upstream models, through OpenAI and Anthropic compatible APIs. Enable LLM for your team, then create a key to call them from your own apps."
 			>
-				<template v-if="canManage" #action>
+				<template v-if="canManageServices" #action>
 					<Button
 						variant="solid"
 						label="Enable for team"

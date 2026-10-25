@@ -5,7 +5,6 @@ from frappe.utils.translations import _lt
 
 from central.integrations.grove import GroveClient, GroveUnavailable
 from central.services import ai
-from central.signups.access import is_team_locked, require_service_access
 from central.utils.guards import require_capability
 
 VIEW_DENIED = _lt("You can't view this team's AI. Ask a team admin to review your access.")
@@ -32,23 +31,20 @@ KEY_FIELDS = (
 def get_ai(team: str | None = None) -> dict:
 	"""Whether AI is on for the team and, when it is, its spend and limits, this month's usage
 	and the geographies a key may be minted in. `unavailable` while Grove is down or in
-	maintenance: the page says so, and the keys keep working at the gateways.
-	`is_trial_locked` while the team runs an open trial, which gets no keys."""
-	locked = {"is_trial_locked": is_team_locked(team)}
+	maintenance: the page says so, and the keys keep working at the gateways."""
 	if not ai.get_ai_service(team):
-		return {"enabled": False, **locked}
+		return {"enabled": False}
 
 	try:
-		return {"enabled": True, **locked, **ai.get_overview(team)}
+		return {"enabled": True, **ai.get_overview(team)}
 	except GroveUnavailable:
-		return {"enabled": True, "unavailable": True, **locked}
+		return {"enabled": True, "unavailable": True}
 
 
 @frappe.whitelist(methods=["POST"])
 @require_capability("service:manage", MANAGE_DENIED)
 def enable_ai(team: str | None = None) -> dict:
 	"""Turn AI on for the team. Safe to repeat."""
-	require_service_access(team)
 	return {"name": ai.enable(team)}
 
 
@@ -70,7 +66,6 @@ def create_api_key(
 	"""Mint a key for the team in `geography` (Grove's default when none) with `cap` whole USD
 	to spend a month (none: the key is refused until it gets one), and return its secret.
 	This is the only time it is shown. `models` is what it may call, for the quickstart."""
-	require_service_access(team)
 	require_ai(team)
 	label = (label or "").strip()
 	if not label:

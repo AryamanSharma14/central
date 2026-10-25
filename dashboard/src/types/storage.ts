@@ -39,8 +39,6 @@ export interface BucketUsage {
 export interface ObjectStorage {
 	regions: StorageRegion[]
 	buckets: StorageBucket[]
-	/** The team runs an open free trial, which gets no buckets. */
-	is_trial_locked: boolean
 }
 
 export interface BucketObject {

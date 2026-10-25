@@ -211,7 +211,7 @@ def _client(request) -> AtlasClient:
 	instance = frappe.get_doc("Region", request.region)
 	tenant_id = frappe.db.get_value("Team", request.team, "tenant_id")
 
-	return AtlasClient(instance, tenant_id, request_id=request.correlation_id)
+	return AtlasClient(instance, tenant_id)
 
 
 def _create_payload(request) -> dict:

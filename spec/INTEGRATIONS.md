@@ -30,7 +30,7 @@ The customer Team owns the trial before and after a paid upgrade. A Team can own
 
 ## Regional authentication
 
-Region stores the direct regional URL and numeric region ID, alongside its geography and display identity. Central signs a short-lived token for that region. Each request carries the Team tenant ID in `X-Tenant-ID`. Atlas verifies the token and enforces the tenant boundary. Each request also carries `X-Frappe-Request-Id`, which Atlas uses as its trace ID in its logs and Error Logs. A Resource Action sends its `correlation_id`, so an operator finds every Atlas call of one action with one ID. Other calls send the Central trace ID.
+Region stores the direct regional URL and numeric region ID, alongside its geography and display identity. Central signs a short-lived token for that region. Each request carries the Team tenant ID in `X-Tenant-ID`. Atlas verifies the token and enforces the tenant boundary. Each request also carries the Central trace ID in `X-Frappe-Request-Id`. Atlas uses it as its own trace ID, so a Central Error Log and the Atlas logs of the same work share one ID. Both need `monitor` on in the site config.
 
 System images form a shared regional catalog. The tenant header identifies the authorized caller. It does not make those images Team-owned. Operator connection checks use the system tenant.
 
