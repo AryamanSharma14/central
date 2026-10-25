@@ -148,3 +148,7 @@ On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Tr
 ### Failure
 
 When a stop, a terminate, or the conversion job fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. The daily job includes Converted sites that have a Trial Error. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.
+
+### Operator alerts
+
+`central.signups.alerts.alert_failed_signups` runs every hour. When a signup site creation became Failed or Timed Out in the last hour, it sends one message that lists them, through the operator alert channel in Billing Settings (Raven, or email as a fallback). A signup should never fail, so one failure is enough. The check adds nothing to the signup path.
