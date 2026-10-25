@@ -100,6 +100,7 @@ Run the isolated server control checks with `yarn test:server-controls`. These c
 
 ## Documentation
 
+- [Customer documentation](docs/README.md): the Frappe Cloud user guide site, its demo data, and media capture.
 - [CLAUDE.md](CLAUDE.md): contributor and agent rules.
 - [Specification router](spec/README.md): every module and cross-cutting specification.
 - [Billing architecture](central/billing/ARCHITECTURE.md): the billing code map.
