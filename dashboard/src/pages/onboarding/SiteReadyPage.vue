@@ -20,6 +20,7 @@ const {
 	journey,
 	stage,
 	isDelayed,
+	isStuck,
 	secondsLeft,
 	failure,
 	error,
@@ -101,7 +102,7 @@ function tryAgain() {
 				class="mt-7"
 				:journey="journey"
 				:stage="stage"
-				:is-delayed="isDelayed"
+				:is-delayed="isDelayed || isStuck"
 				:app-title="title"
 				:seconds-left="secondsLeft"
 			/>
@@ -111,11 +112,21 @@ function tryAgain() {
 				class="mt-4"
 				theme="amber"
 				title="This is taking longer than usual"
+				description="You can keep this page open. We'll open your site when it's ready."
+			/>
+			<Alert
+				v-if="isStuck"
+				class="mt-4"
+				theme="red"
+				title="Your site is not ready yet"
 			>
 				<template #description>
-					You can keep this page open. We'll open your site when it's ready. If
-					it does not open soon,
-					<ContactSupportLink :context="supportContext" />.
+					Setup is taking much longer than it should.
+					<ContactSupportLink :context="supportContext"
+						>Contact support</ContactSupportLink
+					>
+					and we'll look into it. Keep this page open: it still opens your site
+					if setup finishes.
 				</template>
 			</Alert>
 			<Alert
