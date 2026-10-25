@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import frappe
 from frappe import _
 
@@ -156,7 +158,12 @@ def trial_configuration(team: str, product: Product | None = None) -> dict:
 
 		has_plan = True
 		if images := trial_images(team, region, offering, product):
-			newest = max(images, key=lambda image: image["created_at"])
+			minimum_age = frappe.get_cached_doc("Central Settings").signup_image_minimum_age_minutes
+			cutoff = time.time() - minimum_age * 60
+			preferred = (
+				[image for image in images if image["created_at"] <= cutoff] if minimum_age else images
+			)
+			newest = max(preferred or images, key=lambda image: image["created_at"])
 			return {"region": region, "offering": offering, "image_id": newest["id"], "plan": plan}
 
 	if not has_plan:
@@ -166,13 +173,16 @@ def trial_configuration(team: str, product: Product | None = None) -> dict:
 
 def trial_images(team: str, region: str, offering: str, product: Product | None) -> list[dict]:
 	"""The region's trial images with the product's app installed, or with no app at all."""
-	if product:
-		tags = product_image_tags(product)
-		return list_images(team, region, offering, SIGNUP_FLOW, extra_tags=tags)["items"]
+	tags = product_image_tags(product) if product else SIGNUP_IMAGE_TAGS
+	images = []
+	offset = 0
+	while True:
+		page = list_images(team, region, offering, SIGNUP_FLOW, offset=offset, extra_tags=tags)
+		images.extend(page["items"])
+		if (offset := page.get("next_offset")) is None:
+			break
 
-	images = list_images(team, region, offering, SIGNUP_FLOW, extra_tags=SIGNUP_IMAGE_TAGS)["items"]
-
-	return [image for image in images if SIGNUP_APP_TAG not in image["tags"]]
+	return images if product else [image for image in images if SIGNUP_APP_TAG not in image["tags"]]
 
 
 def product_image_tags(product: Product) -> dict[str, str]:
