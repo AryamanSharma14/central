@@ -49,7 +49,7 @@ server Terminated --> remove_server_routes job --> remove() each route --> recor
 ```
 
 - `apply()` reads the current Virtual Machine `ipv6_address`, sends it, and stores it in `ipv6_address`. A success resets `attempts` to 0 and clears the previous failure.
-- A failed apply or removal stores a safe `failure_reason` and links the full traceback through Error Log.
+- A failed apply or removal stores a safe `failure_reason` and the full traceback in `diagnostic`, which only a System Manager reads.
 - The desk **Retry** button resets `attempts` and runs `apply()` again. It shows for a record that is not Active.
 - A PATCH and a DELETE are safe to repeat, so a retry never needs cleanup.
 - A delete fails when the proxy call fails. The record stays, so the route and the record cannot drift apart. Fix the cause and delete again.

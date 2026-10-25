@@ -28,8 +28,8 @@ class Site(Document):
 		claimed_at: DF.Datetime | None
 		product: DF.Link | None
 		ready_at: DF.Datetime | None
+		rename_diagnostic: DF.Code | None
 		rename_error: DF.SmallText | None
-		rename_error_log: DF.Link | None
 		rename_task: DF.Data | None
 		renamed_at: DF.Datetime | None
 		server: DF.Link
@@ -235,12 +235,14 @@ class Site(Document):
 			)
 			return
 
-		self.db_set({"rename_task": task_id, "rename_error": None, "rename_error_log": None})
+		self.db_set({"rename_task": task_id, "rename_error": None, "rename_diagnostic": None})
 
 	def record_rename_failure(self, reason: str, diagnostic: str) -> None:
-		"""Keep a safe reason on the Site and the diagnostic in Error Log."""
-		error_log = self.log_error(title="Pilot site rename failed", message=diagnostic)
-		self.db_set({"rename_error": reason, "rename_error_log": error_log.name})
+		"""Keep a safe reason and the operator diagnostic on the Site."""
+		self.log_error(title="Pilot site rename failed", message=diagnostic)
+		self.db_set(
+			{"rename_error": reason, "rename_diagnostic": f"Pilot site rename failed\n\n{diagnostic}"}
+		)
 
 	@frappe.whitelist(methods=["POST"])
 	def retry_subdomain_rename(self) -> None:
@@ -251,7 +253,7 @@ class Site(Document):
 		if not self.rename_error:
 			frappe.throw(_("This site rename has no recorded failure."))
 
-		self.db_set({"rename_error": None, "rename_error_log": None})
+		self.db_set({"rename_error": None, "rename_diagnostic": None})
 		self.enqueue_subdomain_rename()
 
 	@frappe.whitelist(methods=["POST"])

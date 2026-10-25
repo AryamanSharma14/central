@@ -38,8 +38,8 @@ class SiteDomain(Document):
 
 		server: DF.Link
 		attempts: DF.Int
+		diagnostic: DF.Code | None
 		domain: DF.Data
-		error_log: DF.Link | None
 		failure_reason: DF.SmallText | None
 		ipv6_address: DF.Data | None
 		last_attempt_at: DF.Datetime | None
@@ -182,7 +182,7 @@ class SiteDomain(Document):
 			values.update(
 				status="Active",
 				failure_reason=None,
-				error_log=None,
+				diagnostic=None,
 				attempts=0,
 				ipv6_address=address,
 			)
@@ -209,14 +209,14 @@ class SiteDomain(Document):
 			)
 
 	def failure_values(self, reason: str, title: str) -> dict:
-		"""Build a safe failure and linked traceback for this route."""
+		"""Build a safe failure and the operator traceback for this route."""
 		diagnostic = frappe.get_traceback(with_context=False)
-		error_log = self.log_error(title=title, message=diagnostic)
+		self.log_error(title=title, message=diagnostic)
 
 		return {
 			"status": "Failed",
 			"failure_reason": reason,
-			"error_log": error_log.name,
+			"diagnostic": f"{title}\n\n{diagnostic}",
 		}
 
 	@staticmethod

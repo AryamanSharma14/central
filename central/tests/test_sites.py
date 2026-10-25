@@ -905,7 +905,7 @@ class TestSiteNaming(SiteOnAMachine):
 			site.apply_subdomain()
 
 		self.assertIn("Retry", site.rename_error)
-		self.assertIn("pilot unavailable", frappe.get_doc("Error Log", site.rename_error_log).error)
+		self.assertIn("pilot unavailable", site.rename_diagnostic)
 
 		self.enqueue_doc.reset_mock()
 		site.retry_subdomain_rename()
@@ -937,7 +937,7 @@ class TestAdminHostname(SiteOnAMachine):
 		server = self.server.reload()
 		self.assertIsNone(server.admin_domain_task)
 		self.assertIn("retry", server.admin_domain_error)
-		self.assertIn("unreachable", frappe.get_doc("Error Log", server.admin_domain_error_log).error)
+		self.assertIn("unreachable", server.admin_domain_diagnostic)
 
 	def test_a_response_without_a_task_leaves_it_to_the_next_report(self):
 		self.enroll()

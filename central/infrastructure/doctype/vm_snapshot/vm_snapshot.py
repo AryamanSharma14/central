@@ -27,8 +27,8 @@ class VMSnapshot(Document):
 		from frappe.types import DF
 
 		atlas_image_id: DF.Data | None
+		diagnostic: DF.Code | None
 		error_detail: DF.LongText | None
-		error_log: DF.Link | None
 		expires_at: DF.Datetime | None
 		image_offering: DF.Link | None
 		is_free: DF.Check
@@ -172,12 +172,12 @@ class VMSnapshot(Document):
 		self.save(ignore_permissions=True)
 
 	def record_diagnostic(self, reason: str, diagnostic: str, title: str) -> None:
-		"""Leave a safe reason and linked operator detail on this snapshot."""
+		"""Leave a safe reason and the operator diagnostic on this snapshot."""
 		self.db_set({"error_detail": reason, **self.diagnostic_values(diagnostic, title)})
 
 	def diagnostic_values(self, diagnostic: str, title: str) -> dict:
-		error_log = self.log_error(title=title, message=diagnostic)
-		return {"error_log": error_log.name}
+		self.log_error(title=title, message=diagnostic)
+		return {"diagnostic": f"{title}\n\n{diagnostic}"}
 
 	def keep(self) -> None:
 		"""Stop the automatic deletion of a daily snapshot. It is billed only while it is not
