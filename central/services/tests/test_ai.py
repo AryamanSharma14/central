@@ -301,10 +301,12 @@ class TestAI(IntegrationTestCase):
 	def test_the_page_says_grove_is_unavailable_instead_of_failing(self):
 		self.enabled()
 		with patch.object(GroveClient, "get_figures", side_effect=GroveUnavailable):
-			self.assertEqual(api.get_ai(self.team), {"enabled": True, "unavailable": True})
+			self.assertEqual(
+				api.get_ai(self.team), {"enabled": True, "unavailable": True, "is_trial_locked": False}
+			)
 
 	def test_ai_off_answers_with_nothing_and_refuses_the_rest(self):
-		self.assertEqual(api.get_ai(self.team), {"enabled": False})
+		self.assertEqual(api.get_ai(self.team), {"enabled": False, "is_trial_locked": False})
 		with self.assertRaises(frappe.ValidationError):
 			api.list_api_keys(self.team)
 

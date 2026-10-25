@@ -18,7 +18,8 @@ const { setBreadcrumbs } = useBreadcrumbs()
 setBreadcrumbs([{ label: 'Object Storage' }])
 
 const { canManageServices } = useCapabilities()
-const { regions, buckets, loading, error, reload } = useObjectStorage()
+const { regions, buckets, isTrialLocked, loading, error, reload } =
+	useObjectStorage()
 
 const availabilityTicketUrl = useSupport().getTicketUrl({
 	Topic: 'Object Storage availability',
@@ -33,8 +34,19 @@ const regionName = (code: string): string => {
 }
 
 const canCreate = computed(
-	() => canManageServices.value && regions.value.length > 0,
+	() =>
+		canManageServices.value && regions.value.length > 0 && !isTrialLocked.value,
 )
+
+const emptyDescription = computed(() => {
+	if (!regions.value.length)
+		return 'Object Storage is not available in any region right now. Contact support to check availability.'
+	if (isTrialLocked.value)
+		return 'Object Storage is not part of the free trial. Upgrade your server to create buckets.'
+	if (canCreate.value)
+		return 'Create a bucket in a region near your servers. You get an S3 endpoint and a key that opens only that bucket.'
+	return 'This team has no buckets. Ask a team admin to create a bucket or grant you permission to manage object storage.'
+})
 </script>
 
 <template>
@@ -69,13 +81,7 @@ const canCreate = computed(
 				v-else-if="!buckets.length"
 				icon="lucide-archive"
 				:title="regions.length ? 'No buckets yet' : 'Not available yet'"
-				:description="
-					regions.length
-						? canCreate
-							? 'Create a bucket in a region near your servers. You get an S3 endpoint and a key that opens only that bucket.'
-							: 'This team has no buckets. Ask a team admin to create a bucket or grant you permission to manage object storage.'
-						: 'Object Storage is not available in any region right now. Contact support to check availability.'
-				"
+				:description="emptyDescription"
 			>
 				<template v-if="canCreate" #action>
 					<Button

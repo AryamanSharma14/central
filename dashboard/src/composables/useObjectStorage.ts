@@ -72,6 +72,7 @@ export const bucketLabel = (bucket: StorageBucket): string =>
 export const useObjectStorage = () => ({
 	regions: computed(() => storageCall.data?.regions ?? []),
 	buckets: computed(() => storageCall.data?.buckets ?? []),
+	isTrialLocked: computed(() => !!storageCall.data?.is_trial_locked),
 	usages: computed(() => usages.value),
 	loading: computed(() => storageCall.loading && !storageCall.data),
 	error: computed(() => storageCall.error),
