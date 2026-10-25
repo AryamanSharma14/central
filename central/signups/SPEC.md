@@ -146,3 +146,15 @@ On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Tr
 ### Failure
 
 When a stop, a terminate, or the conversion job fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. The daily job includes Converted sites that have a Trial Error. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.
+
+### Operator alerts
+
+`central.signups.alerts.alert_operators` tells the operators about a failed signup. It sends one alert for each failure, after the transaction commits, through the operator alert channel in Billing Settings (Raven, or email as a fallback).
+
+| Failure | Alert | Reference |
+|---|---|---|
+| The site creation of a signup becomes Failed, Timed Out or Uncertain | `site creation failed`, `site creation timed out` or `site creation uncertain`, with the error code and message | Resource Action |
+| A daily trial step fails | `trial step failed`, with the Trial Error | Site |
+| The Pilot task that installs another product's app fails | `app install failed`, with the app, the task and Pilot's reason | Site |
+
+An Uncertain creation needs an operator, because Atlas may have built the server. A trial step that keeps failing sends one alert each day.

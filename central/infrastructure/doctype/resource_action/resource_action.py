@@ -256,6 +256,8 @@ class ResourceAction(Document):
 			self.queue_attention_notification(envelope)
 			if self.is_trial_creation:
 				self.capture_trial_event("trial_failed", status=status, error_code=self.error_code)
+		if status != previous_status and status in ("Failed", "Timed Out", "Uncertain"):
+			self.alert_signup_failure(status)
 
 	def fail(self, error: Exception, title: str) -> None:
 		"""Record a failed dispatch. An uncertain Atlas reply stays pending for recovery."""
@@ -289,6 +291,22 @@ class ResourceAction(Document):
 		started = self.dispatched_at or self.creation
 		return (
 			frappe.utils.time_diff_in_seconds(frappe.utils.now_datetime(), started) > COMMAND_TIMEOUT_SECONDS
+		)
+
+	def alert_signup_failure(self, status: str) -> None:
+		"""Tell the operators when a signup's site creation fails, or Atlas may have built it unasked."""
+		if not self.is_trial_creation:
+			return
+
+		from central.signups.alerts import alert_operators
+
+		reason = self.error_message or _("No reason was recorded.")
+		alert_operators(
+			_("site creation {0}").format(status.lower()),
+			self.doctype,
+			self.name,
+			self.team,
+			f"{self.error_code or status}: {reason}",
 		)
 
 	@property
