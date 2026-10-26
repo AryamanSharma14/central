@@ -425,35 +425,53 @@ def begin_resize(
 	doc = frappe.get_doc("Subscription", subscription)
 	if not _is_resizable(doc):
 		return {"queued": False, "resized": False}
-	server = (
-		frappe.db.get_value(
-			"Virtual Machine",
-			doc.server_id,
-			[
-				"region",
-				"status",
-				"atlas_vm_id",
-				"title",
-				"plan",
-				"vcpus",
-				"memory_megabytes",
-				"disk_gigabytes",
-			],
-			as_dict=True,
-			for_update=True,
-		)
-		if doc.server_id
-		else None
-	)
+	server = _locked_server(doc.server_id)
 	if server and (pending := ResourceAction.get_pending(doc.server_id, "resize")):
 		return {"queued": True, "resized": True, **pending.customer_status()}
 
+	is_live = _is_live_for_resize(server)
+	_require_resize_target(doc, server, plan, includes)
+	target = _resize_target(doc, plan, includes, sub_category, disk_gigabytes)
+	shape = _plan_resize(doc, server, target.plan, target.includes, target.sub_category, target.override_rate)
+	if shape is None:
+		return {"queued": False, "resized": False}  # same config — nothing to do
+
+	# No live VM to reshape → re-lock the contract inline (nothing slow to defer).
+	if not is_live:
+		_relock_resize(subscription, target, changed_by)
+		return {"queued": False, "resized": True}
+
+	action = _queue_resize(doc, server, target, shape, changed_by)
+	return {"queued": True, "resized": True, **action.customer_status()}
+
+
+def _locked_server(server_id: str | None):
+	"""The server a resize reshapes, locked so two resizes cannot both pass the checks."""
+	if not server_id:
+		return None
+	fields = [
+		"region",
+		"status",
+		"atlas_vm_id",
+		"title",
+		"plan",
+		"vcpus",
+		"memory_megabytes",
+		"disk_gigabytes",
+	]
+	return frappe.db.get_value("Virtual Machine", server_id, fields, as_dict=True, for_update=True)
+
+
+def _is_live_for_resize(server) -> bool:
+	"""Whether the resize must reshape a VM. One without a regional identity cannot be reshaped."""
 	is_live = bool(server and server.status in ("Running", "Paused", "Stopped"))
 	if is_live and not server.atlas_vm_id:
 		frappe.throw(frappe._("This server has no verified regional identity."))
+	return is_live
 
-	_require_resize_target(doc, server, plan, includes)
 
+def _resize_target(doc, plan, includes, sub_category, disk_gigabytes) -> frappe._dict:
+	"""What the resize moves to, after the console's disk choice is applied."""
 	# A plan's own disk is what a new server is created with. Resize keeps the
 	# current disk, or grows it, and refuses a plan whose disk is smaller.
 	original_plan = plan
@@ -462,48 +480,48 @@ def begin_resize(
 	# price plus the disk rate for the extra GB — never the cheaper à-la-carte total.
 	preset_plan = original_plan if original_plan and plan is None else None
 	override_rate = _preset_plus_disk_rate(doc, preset_plan, disk_gigabytes) if preset_plan else None
-	shape = _plan_resize(doc, server, plan, includes, sub_category, override_rate)
-	if shape is None:
-		return {"queued": False, "resized": False}  # same config — nothing to do
+	return frappe._dict(
+		plan=plan,
+		includes=includes or [],
+		sub_category=sub_category,
+		preset_plan=preset_plan,
+		override_rate=override_rate,
+	)
 
-	# No live VM to reshape → re-lock the contract inline (nothing slow to defer).
-	if not is_live:
-		if plan:
-			resize_to_plan(subscription, plan, changed_by=changed_by)
-		else:
-			resize_composed_subscription(
-				subscription,
-				includes or [],
-				sub_category,
-				changed_by=changed_by,
-				override_rate=override_rate,
-				preset_plan=preset_plan,
-			)
-		return {"queued": False, "resized": True}
 
+def _relock_resize(subscription: str, target: frappe._dict, changed_by: str | None) -> None:
+	if target.plan:
+		resize_to_plan(subscription, target.plan, changed_by=changed_by)
+		return
+	resize_composed_subscription(
+		subscription,
+		target.includes,
+		target.sub_category,
+		changed_by=changed_by,
+		override_rate=target.override_rate,
+		preset_plan=target.preset_plan,
+	)
+
+
+def _queue_resize(doc, server, target: frappe._dict, shape: dict, changed_by: str | None) -> ResourceAction:
+	"""Persist the resize for the integration worker, which reshapes the VM and then re-locks billing."""
 	from central.server_models import ResizeConfiguration
 
 	configuration = ResizeConfiguration.model_validate(
 		{
-			"subscription": subscription,
-			"plan": plan,
-			"includes": includes or [],
-			"sub_category": sub_category,
-			"override_rate": float(override_rate) if override_rate is not None else None,
-			"preset_plan": preset_plan,
+			"subscription": doc.name,
+			"plan": target.plan,
+			"includes": target.includes,
+			"sub_category": target.sub_category,
+			"override_rate": float(target.override_rate) if target.override_rate is not None else None,
+			"preset_plan": target.preset_plan,
 			"shape": shape,
 			"from_plan": server.plan,
-			"from_shape": {
-				"vcpus": float(server.vcpus),
-				"memory_megabytes": int(server.memory_megabytes),
-				"disk_gigabytes": int(server.disk_gigabytes),
-			}
-			if server.vcpus and server.memory_megabytes and server.disk_gigabytes
-			else None,
+			"from_shape": _server_resize_shape(server),
 		}
 	)
 	# Billing validated the target and the route already checked server:resize.
-	action = ResourceAction.queue(
+	return ResourceAction.queue(
 		"resize",
 		doc.team,
 		server.region,
@@ -513,7 +531,17 @@ def begin_resize(
 		requested_by=changed_by,
 		request_payload=configuration.model_dump(),
 	)
-	return {"queued": True, "resized": True, **action.customer_status()}
+
+
+def _server_resize_shape(server) -> dict | None:
+	"""The shape the server runs now, or None while any part of it is unknown."""
+	if not (server.vcpus and server.memory_megabytes and server.disk_gigabytes):
+		return None
+	return {
+		"vcpus": float(server.vcpus),
+		"memory_megabytes": int(server.memory_megabytes),
+		"disk_gigabytes": int(server.disk_gigabytes),
+	}
 
 
 def _require_resize_target(doc, server, plan: str | None, includes: list | None) -> None:
