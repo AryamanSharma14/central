@@ -1121,19 +1121,38 @@ def suspend_for_nonpayment(team: str) -> list[str]:
 	subscription is included: its server is stopped, but the customer could start it.
 	Returns the subscriptions newly suspended. A server that will not stop is logged and
 	left Running; the operator alert for suspended servers that still run picks it up."""
-	suspended = []
-	for sub in frappe.get_all(
+	rows = frappe.get_all(
 		"Subscription",
 		filters={"team": team, "account_standing": ["!=", "Suspended"]},
 		fields=["name", "server_id", "account_standing"],
-	):
+	)
+	suspended = [_suspend_one(sub) for sub in rows]
+	return [name for name in suspended if name]
+
+
+def _suspend_one(sub) -> str | None:
+	"""Suspend one subscription and return its name. One that cannot move is logged and
+	skipped, so the rest of the team is still suspended."""
+	save_point = "suspend_for_nonpayment"
+	frappe.db.savepoint(save_point)
+	try:
 		if sub.account_standing == "Current":
 			set_standing(sub.name, "Past Due", changed_by="dunning")
 		set_standing(sub.name, "Suspended", changed_by="dunning", reason="unpaid invoice")
-		suspended.append(sub.name)
-		if _queue_power_for_billing(sub, "stop", f"Dunning could not stop server {sub.server_id}"):
-			frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 1)
-	return suspended
+	except frappe.ValidationError:
+		frappe.db.rollback(save_point=save_point)
+		frappe.log_error(
+			title=f"Dunning could not suspend subscription {sub.name}",
+			reference_doctype="Subscription",
+			reference_name=sub.name,
+		)
+		return None
+
+	# The flag means dunning asked for the stop. If the stop fails, the server still runs
+	# and the start on payment is skipped, so the flag cannot start a server by mistake.
+	if _queue_power_for_billing(sub, "stop", f"Dunning could not stop server {sub.server_id}"):
+		frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 1)
+	return sub.name
 
 
 def restore_after_payment(team: str) -> list[str]:

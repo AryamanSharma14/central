@@ -140,6 +140,8 @@ def apply_output_tax_for_country(team: str) -> None:
 	billing profile before any invoice is issued. After that the country is locked
 	(`BillingProfile.lock_country_and_currency_after_invoicing`), so the tax is too.
 	Only the country-derived fields change; internal, SEZ and TDS settings are kept."""
+	# A held draft locks it too: the draft is in the team's currency, and India is billed
+	# only in INR, so the country cannot move into or out of India while it waits.
 	if frappe.db.exists("Invoice", {"team": team}):
 		return
 	profile = ensure_tax_profile(team)

@@ -228,6 +228,24 @@ class TestStagedEscalation(DunningTestBase):
 		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
 		self.assertIn(sub, [a["subject"] for a in alerts.suspended_servers_running()])
 
+	def test_a_subscription_that_cannot_suspend_is_logged_not_raised(self):
+		sub = self._subscription()
+		real = subscriptions.set_standing
+
+		def refuse_this_one(name, standing, **kwargs):
+			if name == sub:
+				raise subscriptions.InvalidTransition("unexpected standing")
+			return real(name, standing, **kwargs)
+
+		with (
+			patch.object(subscriptions, "set_standing", side_effect=refuse_this_one),
+			patch("frappe.log_error") as logged,
+		):
+			suspended = subscriptions.suspend_for_nonpayment(TEAM)
+
+		self.assertNotIn(sub, suspended)
+		self.assertEqual(logged.call_args.kwargs["reference_name"], sub)
+
 	def test_day44_termination_is_due_and_nothing_is_deleted(self):
 		from central.billing.platform import alerts
 
