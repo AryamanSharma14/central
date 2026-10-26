@@ -771,13 +771,7 @@ def _validate_resize_shape(
 	profile minimum. CPU and memory the server runs now, or that `preset_plan` sells,
 	need only the disk checks, even when that shape is not what a new config would
 	be allowed to design."""
-	from central.billing.catalog.composition import (
-		COMPUTE,
-		DISK,
-		MEMORY,
-		composition_quantities,
-		validate_composition,
-	)
+	from central.billing.catalog.composition import DISK, composition_quantities, validate_composition
 
 	if not server_id:
 		validate_composition(profile, rows)
@@ -788,29 +782,45 @@ def _validate_resize_shape(
 		)
 		or frappe._dict()
 	)
-	qty = composition_quantities(rows)
-	current_disk = frappe.utils.cint(current.disk_gigabytes)
-	new_disk = frappe.utils.flt(qty.get(DISK, 0))
-	same_compute = frappe.utils.flt(qty.get(COMPUTE, 0)) == frappe.utils.flt(current.vcpus) and (
-		frappe.utils.flt(qty.get(MEMORY, 0)) == frappe.utils.flt(current.memory_megabytes) / 1024
-	)
-	if same_compute or preset_plan:
-		_guard_disk_shrink(server_id, {"disk_gigabytes": int(new_disk)})
-		disk_max = frappe.utils.flt(frappe.db.get_value("Plan Sub-Category", profile, "disk_max"))
-		if disk_max and new_disk > disk_max:
-			frappe.throw(
-				frappe._("Disk {0} GB exceeds the {1} maximum of {2} GB.").format(
-					frappe.utils.flt(new_disk), profile, disk_max
-				)
-			)
+	quantities = composition_quantities(rows)
+	new_disk = frappe.utils.flt(quantities.get(DISK, 0))
+	if preset_plan or _is_same_compute(quantities, current):
+		_validate_resize_disk(profile, server_id, new_disk)
 		return
+	if new_disk == frappe.utils.cint(current.disk_gigabytes):
+		rows = _kept_disk_at_profile_minimum(profile, rows)
+	validate_composition(profile, rows)
+
+
+def _is_same_compute(quantities: dict, current) -> bool:
+	"""Whether a resize keeps the CPU and memory the server runs now."""
+	from central.billing.catalog.composition import COMPUTE, MEMORY
+
+	same_vcpus = frappe.utils.flt(quantities.get(COMPUTE, 0)) == frappe.utils.flt(current.vcpus)
+	memory_gigabytes = frappe.utils.flt(current.memory_megabytes) / 1024
+	return same_vcpus and frappe.utils.flt(quantities.get(MEMORY, 0)) == memory_gigabytes
+
+
+def _validate_resize_disk(profile: str, server_id: str, new_disk: float) -> None:
+	"""The disk checks alone: no shrink, and no more than the profile maximum."""
+	_guard_disk_shrink(server_id, {"disk_gigabytes": int(new_disk)})
+	disk_max = frappe.utils.flt(frappe.db.get_value("Plan Sub-Category", profile, "disk_max"))
+	if disk_max and new_disk > disk_max:
+		frappe.throw(
+			frappe._("Disk {0} GB exceeds the {1} maximum of {2} GB.").format(
+				frappe.utils.flt(new_disk), profile, disk_max
+			)
+		)
+
+
+def _kept_disk_at_profile_minimum(profile: str, rows: list) -> list:
+	"""A kept disk below the profile minimum is checked as the minimum, so the server keeps it."""
+	from central.billing.catalog.composition import DISK, composition_quantities
+
 	disk_min = frappe.utils.flt(frappe.db.get_value("Plan Sub-Category", profile, "disk_min"))
-	check_rows = rows
-	if new_disk == current_disk and disk_min and new_disk < disk_min:
-		check_rows = [
-			{**row, "quantity": disk_min} if row.get("resource_type") == DISK else dict(row) for row in rows
-		]
-	validate_composition(profile, check_rows)
+	if not disk_min or composition_quantities(rows).get(DISK, 0) >= disk_min:
+		return rows
+	return [{**row, "quantity": disk_min} if row.get("resource_type") == DISK else dict(row) for row in rows]
 
 
 def _guard_disk_shrink(server_id: str, shape: dict) -> None:
