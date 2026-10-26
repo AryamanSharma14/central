@@ -90,7 +90,8 @@ Central sends the signup code and the [trial lifecycle emails](../../SPEC.md#ope
 | Email | Action destination |
 |---|---|
 | `site_ready`, `trial_unopened` | The created site's public URL and the product's Landing Route. A plain signup opens the site's root URL. |
-| `trial_expiring`, `trial_ended`, `trial_deletion_soon`, `trial_converted` | Frappe Cloud's billing page. |
+| `trial_expiring`, `trial_ended`, `trial_deletion_soon` | The server's Upgrade dialog (`/servers/<server>?action=resize`). |
+| `trial_converted` | Frappe Cloud's billing page. |
 | `trial_deleted` | No action link. |
 
 **Email Notes.** Each row adds text under the standard text of one email, only for sites of this product. Separate paragraphs with a blank line. Use it for product advice, such as what to do first. Central keeps the standard text, the dates and the button, so a note cannot change the trial terms.

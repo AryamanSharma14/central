@@ -168,6 +168,7 @@ class Product(Document):
 			"team_name": _("Acme"),
 			"reference_title": address,
 			"message": "",
+			"server": "acme",
 			"context": {
 				"product": self.title,
 				"address": address,
