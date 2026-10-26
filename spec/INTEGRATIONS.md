@@ -205,7 +205,7 @@ Pilot <── config: held_commits ───────────────
 1. After each app update, Pilot writes a `success` or `failed` line that Datum stores in `datum.logs` with `service = 'app_updates'`.
 2. An Insights alert for each region runs the query below on that table every 15 minutes. It returns each release with at least one failed update, and uses the last result of each server.
 3. The alert posts its rows to `hold_app_releases` in the body `{"context": {"rows": [...]}}`, which Insights sends for a webhook alert. Each row has `app`, `to_commit`, `failed`, `total` and `error`. Central refuses the whole request when a row has a different shape, so a wrong alert setup fails in Insights and does not hold part of the batch.
-4. Central holds a release only when at least **Minimum Servers** updated to it and more than **Failure Percent** of them failed. Both are on the App Rollout tab of Central Settings, 5 and 20 by default. Central checks each alert alone, so it does not add the servers of one release in different regions. Central adds one **App Rollout Hold** for each new commit. The commit is the record name, so a later alert does not add a second hold.
+4. Central holds a release only when at least **Minimum Servers** updated to it and more than **Failure Rate** of them failed. Both are on the App Rollout tab of Central Settings, 5 and 20 by default. Central checks each alert alone, so it does not add the servers of one release in different regions. Central adds one **App Rollout Hold** for each new commit. The commit is the record name, so a later alert does not add a second hold.
 5. To offer the release again, an operator ticks **Released** on the hold. A later alert does not hold that commit again.
 
 The alert query:
@@ -220,7 +220,7 @@ FROM
         resource_id,
         argMax(attributes['status'], ts) AS status,
         argMax(message, ts) AS error
-    FROM datum.logs
+    FROM logs
     WHERE service = 'app_updates' AND ts > now() - INTERVAL 7 DAY
     GROUP BY app, to_commit, resource_id
 )
@@ -232,7 +232,7 @@ Insights signs in with an OAuth bearer token. The token belongs to a user that h
 
 1. Create the user and give it the App Rollout Alert role.
 2. Create an OAuth Client, and an OAuth Bearer Token for that client and user that expires in 1 year.
-3. In Insights, for each region's ClickHouse data source, save the query and add an alert with the channel Webhook, the cron `*/15 * * * *`, the condition that the query returns rows, the URL `https://<central>/api/method/central.api.integrations.insights.hold_app_releases`, and the bearer token.
+3. In Insights, for each region's ClickHouse data source with the database `datum`, save the query as a SQL query with **Live connection** on, and add an alert with the channel Webhook, the cron `*/15 * * * *`, the condition `q['failed'] > 0`, the URL `https://<central>/api/method/central.api.integrations.insights.hold_app_releases`, and the bearer token.
 4. Before the token expires, or when it may have leaked, create a new token, put it in each alert, and revoke the old token. A leaked token can hold releases, but it cannot release a hold or read data.
 
 ## How does the trial flow work?
