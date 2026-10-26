@@ -20,8 +20,10 @@ Only what belongs to the site. Its address is its name and its state is the mach
 | `ready_at` | the first successful public readiness probe |
 | `claimed_at` | the first successful login handoff |
 | `rename_task` | the Pilot task that accepted the requested rename |
+| `rename_status` | the latest observed physical rename task status |
+| `rename_completed_at` | when Central confirmed physical rename success |
 | `renamed_at` | when a sign-in first found the requested hostname answering |
-| `rename_error` | a safe reason when Pilot did not accept the rename |
+| `rename_error` | a safe reason when Pilot did not accept or complete the rename |
 | `rename_diagnostic` | the operator traceback of the latest rename failure, readable only by a System Manager |
 
 `Site.url` is `https://` and the name. `Site.primary_url` is the requested hostname after `renamed_at` is set, otherwise `Site.url`. `Site.status` reads the machine's status. None of these is a column.
@@ -52,7 +54,7 @@ onboarding_status --> GET <url>/api/method/ping --> ready
                                                                          |
 claim_site --> mint login for site.local --> sign in at the requested name, or at url until it answers
                                       |
-                                      +--> enqueue primary domain attachment
+                                      +--> enqueue physical site rename
 
 get_site --> read readiness only
 login_site --> mint a fresh login for site.local
@@ -64,7 +66,8 @@ login_site --> mint a fresh login for site.local
 - A new Site with a requested name queues `Site.route_subdomain`. It creates the [Site Domain](../site_domain/SPEC.md) of the requested name for the server, unless the name has a route already. The Pilot image serves its site on every name in its zone, so the requested name answers as soon as the route is Active, before the rename. A job keeps a refused route from stopping the Site record. The rename later registers the same route again, which is safe.
 - `VirtualMachine.claim_admin_hostname` tells Pilot to replace its local `admin.local` name with the `admin-vm-*` hostname that the regional proxy already routes. Observation queues it after commit, after the Site record is available. A slow Admin request does not delay site discovery. TLS stays off because the regional proxy terminates it. A failed request or a response without a task ID leaves the marker empty, so the next report queues another attempt.
 - A successful claim records `claimed_at`, returns the login URL, and enqueues the rename after the database commit. The response does not wait for Pilot to accept or finish the rename.
-- `Site.apply_subdomain` attaches the requested primary domain through Pilot. Pilot keeps the internal site directory at `site.local` and makes the requested hostname the site's `host_name`. The existing `rename_task` field stores the accepted configuration task. Deploy Pilot's primary-domain attachment support before this Central change.
+- `Site.apply_subdomain` submits a Pilot rename from `site.local` to the requested hostname with `make_primary=True`. Pilot moves the directory, makes the requested hostname primary, and keeps the old hostname by default. The `rename_task` field stores the accepted task and `rename_status` starts at `queued`. Signup does not wait for submission or completion.
+- Every five minutes, `poll_site_renames` checks pending renames on running servers. Each check has its own exception handler. A failed check leaves the status pending and does not stop the other checks. Central reads the bench task endpoint, which still works after the site directory moves. It stores Pilot's task status and records `rename_completed_at` only after `success`. Failed or killed tasks keep their failure details on the Site for an operator to inspect in Pilot. Existing sites with a recorded task and no tracking status are left unchanged.
 - A rename failure stays on the Site with a safe reason and an operator diagnostic. A System Manager can use **Retry Site Rename** until Pilot accepts a task.
 - Terminating the machine terminates the site, with nothing to write: the site reads its state from the machine.
 
@@ -91,7 +94,7 @@ The page shows four milestones: Queued (until the region takes the request), Pro
 
 ## Sign-in
 
-Central signs in on the customer hostname as soon as it answers. Until then, sign-in uses the automatic `Site.url` and does not wait. A slow or failed route only delays the switch. Central tries Pilot's stable `site.local` name first, then the customer name for sites that an earlier deployment renamed. The first sign-in on the customer hostname sets `renamed_at`. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. Claiming schedules primary-domain attachment after the response.
+Central signs in on the customer hostname as soon as it answers. Until then, sign-in uses the automatic `Site.url` and does not wait. A slow or failed route only delays the switch. Central tries `site.local` first, then the customer name after Pilot renames the directory. The first sign-in on the customer hostname sets `renamed_at`; this timestamp does not confirm completion of the physical rename. From then on, the console and the server registry show `Site.primary_url`, and readiness probes still use `Site.url`. Claiming schedules the physical rename after the response.
 
 On a trial site, a member of the site's team signs in as their own user. Pilot creates the user as a System Manager the first time they open the site, so they can finish the app's own setup. An operator outside the team, and every other site, signs in as Administrator.
 

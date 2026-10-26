@@ -43,11 +43,12 @@ class TestWelcomeCredit(IntegrationTestCase):
 	def add_trial(self, team: str, state: str):
 		"""A trial site record. Its conversion is not under test, so it is patched out."""
 		self.enterContext(patch("central.signups.credit.convert_team"))
+		name = f"trial-{frappe.generate_hash(length=6)}.example.test"
 		frappe.get_doc(
 			{
 				"doctype": "Site",
-				"name": f"trial-{frappe.generate_hash(length=6)}.example.test",
-				"site_name": "trial.example.test",
+				"name": name,
+				"site_name": name,
 				"team": team,
 				"server": "server-trial",
 				"trial_state": state,
@@ -113,6 +114,19 @@ class TestWelcomeCredit(IntegrationTestCase):
 	@IntegrationTestCase.change_settings("Central Settings", require_payment_method=0)
 	def test_no_payment_method_is_asked_for_when_the_requirement_is_off(self):
 		self.assertFalse(get_purchase_state(TEAM)["payment_method_required"])
+
+	def test_the_console_names_only_the_teams_own_open_trial(self):
+		self.assertIsNone(get_purchase_state(TEAM)["open_trial"])
+
+		self.add_trial(SECOND_TEAM, "Active")
+		self.assertIsNone(get_purchase_state(TEAM)["open_trial"])
+
+		self.add_trial(TEAM, "Ended")
+		trial = get_purchase_state(TEAM)["open_trial"]
+		self.assertEqual((trial["state"], trial["server"]), ("Ended", "server-trial"))
+
+		with patch("central.signups.eligibility.can", return_value=False):
+			self.assertIsNone(get_purchase_state(TEAM)["open_trial"]["server"])
 
 	def test_a_team_that_had_a_free_trial_gets_no_welcome_credit(self):
 		for state in ("Active", "Ended"):

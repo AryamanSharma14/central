@@ -138,7 +138,9 @@ def _claim_attempt(invoice: str, payment_method: str | None, gateway: str | None
 				"initiated_at": frappe.utils.now_datetime(),
 				"retry_number": retry_number,
 			}
-		).insert(ignore_permissions=True)
+		)
+		# Billing claims the charge for the system, and every link was just read from the database.
+		attempt.insert(ignore_permissions=True, ignore_links=True)
 	except _ALREADY_CLAIMED:
 		# Someone else already claimed this exact charge (same invoice, same retry
 		# number, so the same key). They own it; we don't start a second one. Undo
@@ -165,6 +167,7 @@ def _charge_claimed_attempt(attempt_name: str) -> dict:
 	"we charged and don't know the result" and resolves against the gateway.
 	"""
 	attempt = frappe.get_doc("Payment Attempt", attempt_name)
+	attempt.flags.ignore_links = True  # only its status and outcome change here
 	method = frappe.get_doc("Payment Method", attempt.payment_method)
 	adapter = _adapter_for(attempt.gateway)
 
@@ -381,6 +384,7 @@ def apply_webhook(event_name: str) -> dict:
 	is the ONLY path that sets Paid.
 	"""
 	event = frappe.get_doc("Webhook Event", event_name)
+	event.flags.ignore_links = True  # only its status and outcome change here
 	adapter_key = frappe.db.get_value("Payment Gateway", event.gateway, "adapter_key")
 	payload = frappe.parse_json(event.raw_payload) if event.raw_payload else {}
 
@@ -427,6 +431,7 @@ def apply_webhook(event_name: str) -> dict:
 		return {"handled": False, "reason": "no_matching_attempt"}
 
 	attempt = frappe.get_doc("Payment Attempt", attempt_name)
+	attempt.flags.ignore_links = True  # only its status and outcome change here
 	event.payment_attempt = attempt_name
 	if is_authorised:
 		# Funds held, capture pending. Advance only from initiated — never walk a
@@ -498,6 +503,7 @@ def _mark_invoice_paid(invoice: str, amount) -> bool:
 		invoice_tbl.name == invoice
 	).for_update().run()
 	inv = frappe.get_doc("Invoice", invoice)
+	inv.flags.ignore_links = True  # only its status and outcome change here
 	if inv.status == "Paid":
 		return False  # a duplicate webhook — already settled
 	inv.amount_paid = frappe.utils.flt(amount)

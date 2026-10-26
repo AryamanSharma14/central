@@ -326,6 +326,22 @@ class Trial:
 			"ends_on": self.site.trial_ends_on,
 			"days_left": max(date_diff(self.site.trial_ends_on, nowdate()), 0),
 			"deletes_on": self.site.trial_deletes_on,
+			"plan": self.get_plan(),
+		}
+
+	def get_plan(self) -> dict | None:
+		"""The plan the site converts to, at the rate its subscription will charge. The rate
+		reserved at creation can be older than the catalog. None when the server has no plan."""
+		server = frappe.db.get_value("Virtual Machine", self.site.server, ["plan", "region"], as_dict=True)
+		if not server or not server.plan:
+			return None
+
+		plan = frappe.get_doc("Plan", server.plan)
+		currency = frappe.db.get_value("Billing Profile", self.site.team, "currency")
+		return {
+			"title": plan.title or plan.name,
+			"monthly_rate": plan.get_rate(currency, server.region) if currency else None,
+			"currency": currency,
 		}
 
 	def get_summary(self) -> dict:
@@ -343,21 +359,24 @@ class Trial:
 		}
 
 	def get_monthly_rate(self) -> float:
-		request = self.site.get_creation_request()
-		return flt(request.reserved_monthly_rate) if request else 0.0
+		"""What the converted subscription charges. A trial accepted no quote, so the rate reserved
+		at creation is not its price."""
+		plan = self.get_plan()
+		return flt(plan["monthly_rate"]) if plan else 0.0
 
 	def get_cost(self, until=None) -> dict:
 		"""The plan's monthly rate for the days the trial ran. The trial starts when Central records the site."""
-		request = self.site.get_creation_request()
-		if not request:
+		plan = self.get_plan()
+		if not plan:
 			return {}
 
 		days = (
 			get_datetime(until or now_datetime()) - get_datetime(self.site.creation)
 		).total_seconds() / 86400
-		cost = flt(request.reserved_monthly_rate) * max(days, 0) / 30
-		currency = frappe.parse_json(request.request_payload or "{}").get("currency")
-		return {"trial_cost": cost, "trial_currency": currency}
+		return {
+			"trial_cost": flt(plan["monthly_rate"]) * max(days, 0) / 30,
+			"trial_currency": plan["currency"],
+		}
 
 	def notify(self, event_type: str, notice: str) -> None:
 		"""Send each email once. Trial Last Notice records the last one."""
@@ -468,6 +487,27 @@ def get_trial_status(server: str, site: str | None = None) -> dict | None:
 	return trial.get_status() if trial.is_open else None
 
 
+def get_trial_plan_floor(server: str) -> dict[str, float] | None:
+	"""The composition of the plan a converted trial server started on. Its plan menus offer
+	nothing smaller, because the product site needs at least that much. None for other servers."""
+	from central.billing.catalog.composition import composition_quantities
+
+	if not frappe.db.exists("Site", {"server": server, "trial_state": "Converted"}):
+		return None
+
+	payload = frappe.db.get_value(
+		"Resource Action", {"server": server, "action": "create"}, "request_payload"
+	)
+	plan = (frappe.parse_json(payload or "{}") or {}).get("plan")
+	if not plan:
+		return None
+
+	includes = frappe.get_all(
+		"Plan Includes", filters={"parenttype": "Plan", "parent": plan}, fields=["resource_type", "quantity"]
+	)
+	return composition_quantities(includes)
+
+
 def get_product_branding(product: str | None) -> dict:
 	"""The Product's title and logo as the customer sees them. A plain trial is Frappe Cloud's."""
 	branding = frappe.db.get_value("Product", product, ["title", "logo"], as_dict=True) if product else None
@@ -502,26 +542,22 @@ def is_conversion_starting(server: str) -> bool:
 
 def get_starting_rate(team: str) -> float:
 	"""The monthly rate of the team's converted trials whose live servers have no subscription yet."""
-	from frappe.query_builder.functions import Sum
-
 	site = frappe.qb.DocType("Site")
 	machine = frappe.qb.DocType("Virtual Machine")
-	request = frappe.qb.DocType("Resource Action")
 	subscription = frappe.qb.DocType("Subscription")
-	rate = (
+	names = (
 		frappe.qb.from_(site)
 		.join(machine)
 		.on(machine.name == site.server)
-		.join(request)
-		.on((request.server == site.server) & (request.action == "create"))
 		.left_join(subscription)
 		.on((subscription.server_id == site.server) & (subscription.team == site.team))
-		.select(Sum(request.reserved_monthly_rate))
+		.select(site.name)
 		.where(
 			(site.team == team)
 			& (site.trial_state == "Converted")
 			& (machine.status != "Terminated")
 			& subscription.name.isnull()
 		)
-	).run()
-	return flt(rate[0][0])
+	).run(pluck=True)
+	# The trial limit keeps this to one site or two, so pricing each one reads little.
+	return sum(Trial.load(name).get_monthly_rate() for name in names)

@@ -225,6 +225,7 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 		context = engine._resolve_context(
 			team or self.team.name, self.event.name, sample, self.site().name, "Site"
 		)
+		context["server"] = self.site().server or ""
 		return engine._notification_email(self.event, {**context, "reference_title": "acme"})[1]
 
 	def product(self, **values):
@@ -308,13 +309,22 @@ class TestProductLifecycleEmails(SiteOnAMachine):
 
 	def test_billing_emails_link_central_and_deleted_email_has_no_site_link(self):
 		product = self.product(landing_route="/raven")
+		upgrade = f'href="https://central.example.test/dashboard/servers/{self.site().server}?action=resize"'
+		billing = 'href="https://central.example.test/dashboard/billing"'
 		with patch("central.notification.engine.central_url", return_value="https://central.example.test"):
-			for event_type in ("trial_expiring", "trial_ended", "trial_deletion_soon", "trial_converted"):
+			for event_type in ("trial_expiring", "trial_ended", "trial_deletion_soon"):
 				with self.subTest(event_type=event_type):
 					self.event = engine.get_event_type(event_type)
 					html = self.email_for(product)
-					self.assertIn('href="https://central.example.test/dashboard/billing"', html)
+					self.assertIn(upgrade, html)
 					self.assertNotIn(f'href="{self.site().url}', html)
+					self.assertIn(
+						"/dashboard/servers/acme?action=resize", product.preview_email(event_type)["html"]
+					)
+			self.event = engine.get_event_type("trial_converted")
+			html = self.email_for(product)
+			self.assertIn(billing, html)
+			self.assertNotIn(f'href="{self.site().url}', html)
 		self.event = engine.get_event_type("trial_deleted")
 		self.assertNotIn(f'href="{self.site().url}', self.email_for(product))
 

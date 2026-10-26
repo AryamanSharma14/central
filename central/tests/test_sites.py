@@ -7,7 +7,7 @@ from central.api.sites import claim_site, get_site, login_site, onboarding_statu
 from central.errors import AtlasResourceGone
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
-from central.infrastructure.doctype.site.site import on_host, record_ready_sites
+from central.infrastructure.doctype.site.site import on_host, poll_site_renames, record_ready_sites
 from central.infrastructure.doctype.virtual_machine.virtual_machine import VirtualMachine
 from central.integrations.pilot import PilotLoginPending, fetch_site_login_url
 from central.integrations.servers import observe_server
@@ -935,29 +935,28 @@ class TestSiteNaming(SiteOnAMachine):
 		self.assertEqual(site.url, "https://site-1z141z4.par-2.example.test")
 		self.assertEqual(site.rename_target, "acme.par-2.example.test")
 
-	def test_naming_sets_the_primary_domain_without_renaming_the_site(self):
-		with patch(
-			"central.integrations.pilot.set_site_primary_domain", return_value={"task_id": "task-1"}
-		) as rename:
+	def test_naming_submits_the_physical_rename_once(self):
+		with patch("central.integrations.pilot.rename_site", return_value={"task_id": "task-1"}) as rename:
 			self.site().apply_subdomain()
 			self.site().apply_subdomain()
 
-		rename.assert_called_once_with(self.server.name, "site.local", "acme.par-2.example.test")
+		rename.assert_called_once_with(
+			self.server.name, "site.local", "acme.par-2.example.test", make_primary=True
+		)
 		self.assertEqual(self.site().rename_task, "task-1")
+		self.assertEqual(self.site().rename_status, "queued")
 
 	def test_a_site_nobody_named_is_never_renamed(self):
 		self.site().db_set("subdomain", None)
 
-		with patch("central.integrations.pilot.set_site_primary_domain") as rename:
+		with patch("central.integrations.pilot.rename_site") as rename:
 			self.site().apply_subdomain()
 
 		rename.assert_not_called()
 
 	def test_a_failed_rename_is_traceable_and_retryable(self):
 		site = self.site()
-		with patch(
-			"central.integrations.pilot.set_site_primary_domain", side_effect=OSError("pilot unavailable")
-		):
+		with patch("central.integrations.pilot.rename_site", side_effect=OSError("pilot unavailable")):
 			site.apply_subdomain()
 
 		self.assertIn("Retry", site.rename_error)
@@ -968,6 +967,101 @@ class TestSiteNaming(SiteOnAMachine):
 
 		self.enqueue_doc.assert_called_once()
 		self.assertIsNone(site.rename_error)
+
+	def test_claim_only_enqueues_the_rename_after_commit(self):
+		self.enqueue_doc.reset_mock()
+		with patch("central.integrations.pilot.rename_site") as rename:
+			self.site().mark_claimed()
+
+		rename.assert_not_called()
+		self.enqueue_doc.assert_called_once_with(
+			"Site",
+			self.site().name,
+			"apply_subdomain",
+			queue="short",
+			enqueue_after_commit=True,
+			job_id=f"site-rename:{self.site().name}",
+			deduplicate=True,
+		)
+		self.assertIsNotNone(self.site().claimed_at)
+
+	def test_a_rename_without_a_task_id_stays_retryable(self):
+		site = self.site()
+		with patch("central.integrations.pilot.rename_site", return_value={}):
+			site.apply_subdomain()
+
+		self.assertFalse(self.site().rename_task)
+		self.assertIn("did not return a task", site.rename_error)
+
+	def test_rename_completion_is_recorded_only_after_pilot_succeeds(self):
+		site = self.site()
+		site.db_set({"rename_task": "task-1", "rename_status": "queued"})
+		with patch("central.integrations.pilot.get_task", return_value={"status": "running"}):
+			site.record_rename_status()
+		site.reload()
+		self.assertEqual(site.rename_status, "running")
+		self.assertIsNone(site.rename_completed_at)
+		with patch("central.integrations.pilot.get_task", return_value={"status": "success"}) as get_task:
+			site.record_rename_status()
+		get_task.assert_called_once_with(self.server.name, "task-1")
+		site.reload()
+		self.assertEqual(site.rename_status, "success")
+		self.assertIsNotNone(site.rename_completed_at)
+		with patch("central.integrations.pilot.get_task") as get_task:
+			site.record_rename_status()
+		get_task.assert_not_called()
+
+	def test_failed_rename_keeps_the_pilot_failure_for_the_operator(self):
+		site = self.site()
+		site.db_set({"rename_task": "task-1", "rename_status": "queued"})
+		with patch(
+			"central.integrations.pilot.get_task",
+			return_value={"status": "failed", "failure": {"code": "task_interrupted"}},
+		):
+			site.record_rename_status()
+		site.reload()
+		self.assertEqual(site.rename_status, "failed")
+		self.assertIn("Inspect the task in Pilot", site.rename_error)
+		self.assertIn("task_interrupted", site.rename_diagnostic)
+		self.assertIsNone(site.rename_completed_at)
+
+	def test_an_old_poll_cannot_complete_a_replacement_task(self):
+		site = self.site()
+		site.db_set({"rename_task": "task-1", "rename_status": "queued"})
+
+		def answer(*args):
+			frappe.db.set_value("Site", site.name, "rename_task", "task-2")
+			return {"status": "success"}
+
+		with patch("central.integrations.pilot.get_task", side_effect=answer):
+			site.record_rename_status()
+		site.reload()
+		self.assertEqual(site.rename_task, "task-2")
+		self.assertEqual(site.rename_status, "queued")
+		self.assertIsNone(site.rename_completed_at)
+
+	def test_a_failed_poll_does_not_stop_other_pending_sites(self):
+		site = self.site()
+		site.db_set({"rename_task": "task-1", "rename_status": "queued"})
+		other = frappe.copy_doc(site)
+		other.site_name = "second.par-2.example.test"
+		other.rename_task = "task-2"
+		other.insert()
+
+		def answer(server, task):
+			if task == "task-1":
+				raise OSError("unreachable")
+			return {"status": "success"}
+
+		with (
+			patch("central.integrations.pilot.get_task", side_effect=answer),
+			patch("frappe.db.commit"),
+			patch("frappe.db.rollback"),
+			patch("frappe.log_error"),
+		):
+			poll_site_renames()
+		self.assertEqual(site.reload().rename_status, "queued")
+		self.assertEqual(other.reload().rename_status, "success")
 
 
 class TestAdminHostname(SiteOnAMachine):

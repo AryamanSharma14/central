@@ -61,6 +61,14 @@ class TrialOnAMachine(SiteOnAMachine):
 	def funnel_events(self) -> list[str]:
 		return [call.args[0] for call in self.funnel.call_args_list]
 
+	def price_trial(self, rate: float) -> None:
+		"""Put the trial's server on a plan at `rate` USD a month, the price its conversion charges."""
+		from central.billing.tests.utils import complete_billing_profile, make_plan
+
+		complete_billing_profile(self.team.name, currency="USD")
+		plan = make_plan("trial-lifecycle-plan", rates=[{"cluster": "", "currency": "USD", "rate": rate}])
+		frappe.db.set_value("Virtual Machine", self.server.name, "plan", plan)
+
 
 class TestTrialLifecycle(TrialOnAMachine):
 	"""A trial site runs for its days, warns, stops, then is terminated."""
@@ -315,7 +323,7 @@ class TestTrialLifecycle(TrialOnAMachine):
 		self.assertFalse(trial.is_billing_deferred(self.server.name))
 
 	def test_an_active_payment_method_converts_the_team_trials(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		frappe.db.set_value(
 			"Site", self.site().name, "creation", add_days(now_datetime(), -3), update_modified=False
 		)
@@ -335,7 +343,7 @@ class TestTrialLifecycle(TrialOnAMachine):
 		self.assert_conversion_queued()
 
 	def test_a_trial_above_the_spending_limit_stays_a_trial_until_the_limit_is_raised(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		self.headroom.return_value = 20
 		with patch("central.signups.trial.has_active_payment_method", return_value=True):
 			trial.convert_team(self.team.name)
@@ -352,20 +360,20 @@ class TestTrialLifecycle(TrialOnAMachine):
 		self.assertFalse(site.trial_error)
 
 	def test_a_converted_server_that_is_still_starting_holds_its_rate(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		self.site().db_set("trial_state", "Converted")
 
 		self.assertEqual(trial.get_starting_rate(self.team.name), 30)
 
 	def test_a_terminated_server_from_a_failed_conversion_holds_no_rate(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		self.site().db_set({"trial_state": "Converted", "trial_error": "Could not start"})
 		self.server.db_set("status", "Terminated")
 
 		self.assertEqual(trial.get_starting_rate(self.team.name), 0)
 
 	def test_a_trial_waits_while_another_conversion_uses_the_limit(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		self.headroom.return_value = 40
 		with patch("central.signups.trial.get_starting_rate", return_value=20):
 			self.assertFalse(trial.Trial(self.site()).convert_within_limit())
@@ -373,7 +381,7 @@ class TestTrialLifecycle(TrialOnAMachine):
 		self.assertEqual(self.site().trial_state, "Active")
 
 	def test_an_ended_trial_above_the_spending_limit_cannot_be_kept(self):
-		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
+		self.price_trial(30)
 		self.headroom.return_value = 0
 		self.site().db_set("trial_state", "Ended")
 		with (
@@ -467,6 +475,8 @@ class TestTrialLifecycle(TrialOnAMachine):
 
 	def test_the_in_app_trial_status_carries_its_contract_fields(self):
 		"""The site's billing tab reads these fields; their names are the contract with Pilot."""
+		self.price_trial(40)
+		frappe.db.set_value("Resource Action", {"server": self.server.name}, "reserved_monthly_rate", 30)
 		status = trial.get_trial_status(self.server.name)
 
 		self.assertEqual(
@@ -478,7 +488,12 @@ class TestTrialLifecycle(TrialOnAMachine):
 				"ends_on",
 				"days_left",
 				"deletes_on",
+				"plan",
 			},
+		)
+		# The reserved rate is older than the catalog; the subscription charges the catalog rate.
+		self.assertEqual(
+			status["plan"], {"title": "trial-lifecycle-plan", "monthly_rate": 40, "currency": "USD"}
 		)
 
 	def test_resize_options_say_the_trial_blocks_a_resize(self):

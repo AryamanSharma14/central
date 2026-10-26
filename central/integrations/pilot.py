@@ -52,10 +52,16 @@ def get_bootstrap_metadata(action) -> dict[str, str]:
 		common_site_config |= mailbox.get_site_config()
 	metadata["pilot-common-site-config"] = json.dumps(common_site_config)
 
+	common_config = {}
+	if action.requested_by:
+		if email := frappe.db.get_value("User", action.requested_by, "email"):
+			common_config["letsencrypt"] = {"email": email}
 	try:
-		metadata["pilot-common-config"] = json.dumps({"telemetry": get_telemetry_configuration(action)})
+		common_config["telemetry"] = get_telemetry_configuration(action)
 	except Exception:
 		action.record_diagnostic(frappe.get_traceback(), "Pilot telemetry configuration failed")
+	if common_config:
+		metadata["pilot-common-config"] = json.dumps(common_config)
 
 	return metadata
 
@@ -213,6 +219,17 @@ def get_site_task(server: str, site: str, task_id: str) -> dict:
 	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	path = f"/api/v1/sites/{quote(site, safe='')}/tasks/{quote(task_id, safe='')}"
 	return _request_pilot("GET", server, base_url, path)
+
+
+def get_task(server: str, task_id: str) -> dict:
+	"""Read a bench task even after its site's directory has moved."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	task = _request_pilot("GET", server, base_url, f"/api/v1/tasks/{quote(task_id, safe='')}")
+	if not isinstance(task, dict) or task.get("task_id") != task_id:
+		raise ValueError("Pilot returned a different task.")
+	if task.get("status") not in {"queued", "running", "success", "failed", "killed"}:
+		raise ValueError("Pilot returned an invalid task status.")
+	return task
 
 
 def _expected_gateway_url(server) -> str:

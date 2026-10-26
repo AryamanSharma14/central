@@ -14,6 +14,7 @@ import PlanGroup from '@/components/servers/PlanGroup.vue'
 import TrialUpgradePanel from '@/components/servers/TrialUpgradePanel.vue'
 import { useResizeServer } from '@/composables/useResizeServer'
 import type { VirtualMachineRow } from '@/composables/useServers'
+import { useTrialConversion } from '@/composables/useTrialConversion'
 import { configSpecs } from '@/lib/composed'
 import { formatGb } from '@/lib/units'
 
@@ -68,6 +69,12 @@ const {
 	resized: () => emit('resized'),
 })
 
+const { convertedPlan, awaitConversion } = useTrialConversion(
+	trial,
+	() => configCall.reload(),
+	model,
+)
+
 const trialPanel = ref<InstanceType<typeof TrialUpgradePanel> | null>(null)
 
 const open = computed({
@@ -81,7 +88,7 @@ const open = computed({
 <template>
 	<Dialog
 		v-model="open"
-		:title="trial ? 'Upgrade your site' : 'Resize server'"
+		:title="trial ? 'Upgrade from free trial' : 'Resize server'"
 		size="3xl"
 	>
 		<template #default>
@@ -127,7 +134,7 @@ const open = computed({
 				:trial="trial"
 				:checking="configCall.loading"
 				:server-id="server?.resource_id ?? ''"
-				@check="configCall.reload()"
+				@check="awaitConversion"
 			/>
 			<Alert
 				v-else-if="starting"
@@ -142,6 +149,12 @@ const open = computed({
 				This server can't be resized right now.
 			</p>
 			<div v-else class="space-y-4">
+				<Alert
+					v-if="convertedPlan"
+					theme="green"
+					:title="`You're on the ${convertedPlan.title} plan`"
+					description="Billing has started. Choose a bigger size below, or close this dialog to stay on this plan."
+				/>
 				<Alert v-if="resizeError" theme="red" :title="resizeError" />
 				<Alert
 					v-if="losesLockedRate && lock"
