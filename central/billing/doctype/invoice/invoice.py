@@ -51,6 +51,19 @@ class Invoice(Document):
 	def validate(self):
 		self.set_period_key()
 
+	def update_child_table(self, fieldname, df=None):
+		# A status save leaves the lines as they were, so they are not written again.
+		if fieldname == "items" and self.has_unchanged_lines():
+			return
+		super().update_child_table(fieldname, df)
+
+	def has_unchanged_lines(self) -> bool:
+		"""The lines hold the same values as when this invoice was loaded."""
+		before = self.get_doc_before_save()
+		if self.is_new() or not before:
+			return False
+		return _line_values(self.items) == _line_values(before.items)
+
 	def set_period_key(self):
 		"""One live invoice per (team, period); cancelled ones step aside.
 
@@ -65,6 +78,11 @@ class Invoice(Document):
 			self.period_key = f"{CANCELLED}|{self.name}"
 		else:
 			self.period_key = period_key_for(self.team, self.period_start, self.period_end)
+
+
+def _line_values(rows) -> list[tuple]:
+	fields = [df.fieldname for df in frappe.get_meta("Invoice Line Item").fields if df.fieldname]
+	return [(row.name, tuple(row.get(f) for f in fields)) for row in rows]
 
 
 def on_doctype_update() -> None:

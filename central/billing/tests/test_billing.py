@@ -341,6 +341,32 @@ class TestTerminationCancelsBilling(BillingTestBase):
 		self.assertEqual(subscriptions.team_run_rate(TEAM), 0)  # headroom freed
 
 
+class TestStatusSaveKeepsLines(BillingTestBase):
+	"""Saving an invoice's status does not write its lines again."""
+
+	def _invoice(self):
+		add_segment(self.sub, "Created", 1000, "2026-06-01 00:00:00")
+		return frappe.get_doc(
+			"Invoice", invoicing.generate_draft_invoice(self.sub, "2026-06-01", "2026-06-30")
+		)
+
+	def test_a_status_save_leaves_the_lines_alone(self):
+		inv = self._invoice()
+		line_modified = frappe.db.get_value("Invoice Line Item", inv.items[0].name, "modified")
+		with self.freeze_time("2030-01-01 10:00:00"):
+			inv.due_date = "2026-07-07"
+			inv.save(ignore_permissions=True)
+		self.assertEqual(
+			frappe.db.get_value("Invoice Line Item", inv.items[0].name, "modified"), line_modified
+		)
+
+	def test_a_changed_line_is_still_written(self):
+		inv = self._invoice()
+		inv.items[0].amount = 1
+		inv.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Invoice Line Item", inv.items[0].name, "amount"), 1)
+
+
 class TestServerBillsFromItsStart(BillingTestBase):
 	"""A server bills from the moment it was created, not from that day's midnight."""
 

@@ -233,7 +233,7 @@ def _append_event(doc, from_state, to_state, reason, actor, correlation, amount,
 			"reason": reason,
 			"correlation": correlation or doc.name,
 		}
-	).insert(ignore_permissions=True)
+	).insert(ignore_permissions=True, ignore_links=True)  # copied from the document that moved
 
 
 def record_event(doc, event_type: str, from_state=None, to_state=None, reason=None, amount=None) -> None:
