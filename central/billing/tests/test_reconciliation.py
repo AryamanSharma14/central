@@ -190,6 +190,18 @@ class TestReconcile(ReconTestBase):
 		self.assertEqual(out["unresolved"], "awaiting_payer")
 		self.assertEqual(frappe.db.get_value("Payment Attempt", attempt, "status"), "Initiated")
 
+	def test_a_checkout_on_a_gateway_without_order_lookup_is_left_open(self):
+		"""A gateway that cannot look an order up (PayPal) does not stop the scan."""
+		from central.billing.gateways.base import GatewayUnsupported
+
+		inv = self._open_invoice()
+		attempt = self._ambiguous_attempt(inv, txn=None)
+		frappe.db.set_value("Payment Attempt", attempt, "gateway_order_id", "order_paypal")
+		with gateway_status("created") as adapter:
+			adapter.find_order_payment.side_effect = GatewayUnsupported("no order lookup")
+			out = reconciliation.reconcile_attempt(attempt)
+		self.assertEqual(out["unresolved"], "awaiting_payer")
+
 	def test_a_checkout_paid_without_a_callback_is_settled(self):
 		from central.billing.gateways.base import VerifiedPayment
 

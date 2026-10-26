@@ -203,9 +203,7 @@ def _resolve_checkout(attempt, age_hours: float) -> dict:
 	"""A customer-present checkout we never heard back from. Ask the gateway about the
 	order we created for it: the payer may have paid slowly (UPI collect, 3DS), so the
 	attempt is failed only once the checkout has had a day to complete."""
-	payment = None
-	if attempt.gateway_order_id:
-		payment = _adapter(attempt.gateway).find_order_payment(attempt.gateway_order_id)
+	payment = _find_order_payment(attempt.gateway, attempt.gateway_order_id)
 	if payment:
 		attempt.gateway_transaction_id = payment.payment_id
 		_resolve_paid(attempt, payment)
@@ -220,7 +218,6 @@ def reconcile_top_up_orders(now=None) -> list[dict]:
 	"""Credit top-ups whose payment landed but whose callback and webhook were both lost,
 	and expire the ones nobody paid."""
 	from central.billing.doctype.top_up_order.top_up_order import TopupOrder
-	from central.billing.gateways.base import GatewayUnsupported
 
 	now = frappe.utils.get_datetime(now or frappe.utils.now_datetime())
 	results = []
@@ -234,16 +231,26 @@ def reconcile_top_up_orders(now=None) -> list[dict]:
 		pluck="name",
 	):
 		order = frappe.get_doc("Top-up Order", name)
-		try:
-			payment = _adapter(order.gateway).find_order_payment(order.gateway_order_id)
-		except GatewayUnsupported:
-			payment = None
+		payment = _find_order_payment(order.gateway, order.gateway_order_id)
 		if payment:
 			results.append(_credit_top_up(order, payment))
 		elif frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
 			order.expire()
 			results.append({"top_up_order": name, "expired": True})
 	return results
+
+
+def _find_order_payment(gateway: str, order_id: str | None):
+	"""The captured payment on a gateway order, or None. A gateway that cannot look an
+	order up reports nothing, so the order waits for its webhook or expires."""
+	from central.billing.gateways.base import GatewayUnsupported
+
+	if not order_id:
+		return None
+	try:
+		return _adapter(gateway).find_order_payment(order_id)
+	except GatewayUnsupported:
+		return None
 
 
 def _credit_top_up(order, payment) -> dict:
