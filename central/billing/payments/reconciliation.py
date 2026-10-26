@@ -239,11 +239,23 @@ def reconcile_top_up_orders(now=None) -> list[dict]:
 		except GatewayUnsupported:
 			payment = None
 		if payment:
-			results.append({"top_up_order": name, **order.credit_wallet(payment)})
+			results.append(_credit_top_up(order, payment))
 		elif frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
 			order.expire()
 			results.append({"top_up_order": name, "expired": True})
 	return results
+
+
+def _credit_top_up(order, payment) -> dict:
+	"""Credit a top-up from what the gateway reports. A payment that does not cover it fails
+	the order for an operator, so one order does not stop the rest of the run."""
+	from central.billing.doctype.top_up_order.top_up_order import PaymentDoesNotCover
+
+	try:
+		return {"top_up_order": order.name, **order.credit_wallet(payment)}
+	except PaymentDoesNotCover:
+		order.fail(f"Payment {payment.payment_id} of {payment.currency} {payment.amount} does not cover it.")
+		return {"top_up_order": order.name, "failed": "payment_does_not_cover"}
 
 
 def _resolve_paid(attempt, payment=None):

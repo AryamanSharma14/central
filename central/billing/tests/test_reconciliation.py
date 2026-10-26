@@ -368,6 +368,21 @@ class TestTopUpReconciliation(ReconTestBase):
 		self.assertEqual(frappe.db.get_value("Top-up Order", order, "status"), "Credited")
 		self.assertEqual(credits.get_balance(TEAM)["balance"], 700)
 
+	def test_a_short_top_up_fails_without_stopping_the_run(self):
+		from central.billing.gateways.base import VerifiedPayment
+
+		short = self._order("pi_short")
+		paid = self._order("pi_paid")
+		with gateway_status("succeeded") as adapter:
+			adapter.find_order_payment.side_effect = lambda order_id: VerifiedPayment(
+				order_id, True, 100 if order_id == "pi_short" else 700, "INR", order_id=order_id
+			)
+			reconciliation.reconcile_top_up_orders()
+
+		self.assertEqual(frappe.db.get_value("Top-up Order", short, "status"), "Failed")
+		self.assertTrue(frappe.db.get_value("Top-up Order", short, "failure_reason"))
+		self.assertEqual(frappe.db.get_value("Top-up Order", paid, "status"), "Credited")
+
 	def test_an_unpaid_top_up_expires(self):
 		order = self._order("pi_never", hours_old=8 * 24)
 		with gateway_status("requires_payment_method") as adapter:

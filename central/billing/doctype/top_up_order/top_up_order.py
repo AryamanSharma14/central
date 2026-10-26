@@ -9,6 +9,10 @@ from central.billing.gateways.base import VerifiedPayment
 from central.billing.states import transition
 
 
+class PaymentDoesNotCover(frappe.ValidationError):
+	"""A payment that does not belong to a top-up or does not cover its total."""
+
+
 class TopupOrder(Document):
 	"""A wallet top-up Central asked a gateway for, stored before the payer acts.
 
@@ -72,6 +76,13 @@ class TopupOrder(Document):
 	def expire(self) -> None:
 		"""Stop asking the gateway about an order nobody paid."""
 		transition(self, "Expired", actor="reconciliation", correlation=self.team)
+		# Reconciliation runs as the system with no session user to check.
+		self.save(ignore_permissions=True)
+
+	def fail(self, reason: str) -> None:
+		"""Stop retrying an order an operator has to resolve, and keep the reason on it."""
+		transition(self, "Failed", reason=reason, actor="reconciliation", correlation=self.team)
+		self.failure_reason = reason
 		# Reconciliation runs as the system with no session user to check.
 		self.save(ignore_permissions=True)
 
@@ -146,7 +157,7 @@ class TopupOrder(Document):
 			_(
 				"The payment could not be confirmed. Check your credit balance and payment history before paying again. Contact support if you were charged but no credit appears."
 			),
-			frappe.ValidationError,
+			PaymentDoesNotCover,
 		)
 
 
