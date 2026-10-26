@@ -341,6 +341,34 @@ class TestTerminationCancelsBilling(BillingTestBase):
 		self.assertEqual(subscriptions.team_run_rate(TEAM), 0)  # headroom freed
 
 
+class TestServerBillsFromItsStart(BillingTestBase):
+	"""A server bills from the moment it was created, not from that day's midnight."""
+
+	def _server_for(self, created, terminated):
+		with self.freeze_time(created):
+			sub = make_billing_subscription(TEAM, CLUSTER, PLAN, clear_changes=False)
+		server = frappe.get_doc("Virtual Machine", frappe.db.get_value("Subscription", sub, "server_id"))
+		server.status = "Running"
+		server.save(ignore_permissions=True)
+		with self.freeze_time(terminated):
+			server.reload()
+			server.status = "Terminated"
+			server.save(ignore_permissions=True)
+		return sub
+
+	def test_a_server_that_ran_eight_hours_bills_eight_hours(self):
+		sub = self._server_for("2026-06-05 14:30:00", "2026-06-05 22:30:00")
+
+		inv = frappe.get_doc("Invoice", invoicing.generate_draft_invoice(sub, "2026-06-01", "2026-06-30"))
+		self.assertEqual([(li.unit, li.hours) for li in inv.items], [("hour", 8.0)])
+
+	def test_a_backdated_start_opens_at_its_date(self):
+		with self.freeze_time("2026-06-10 15:00:00"):
+			sub = make_billing_subscription(TEAM, CLUSTER, PLAN, start_date="2026-06-05", clear_changes=False)
+		opened = frappe.db.get_value("Subscription Change", {"subscription": sub}, "effective_at")
+		self.assertEqual(str(opened), "2026-06-05 00:00:00")
+
+
 class TestMonthlyBillingRun(BillingTestBase):
 	"""The scheduled entrypoint that drafts + settles the just-closed month."""
 
