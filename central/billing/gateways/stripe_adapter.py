@@ -22,6 +22,7 @@ from central.billing.gateways.base import (
 	NormalisedEvent,
 	PaymentResult,
 	RefundResult,
+	VerifiedPayment,
 	WebhookNotFound,
 	header_value,
 )
@@ -103,6 +104,19 @@ def _predebit_hold(intent: dict) -> str | None:
 	if not completes_at:
 		return None
 	return str(frappe.utils.get_datetime_str(frappe.utils.datetime.datetime.fromtimestamp(completes_at)))
+
+
+def _verified(intent: dict) -> VerifiedPayment:
+	"""A PaymentIntent, read back as what Stripe says was paid. Its metadata is set
+	only with our secret key, so its `receipt` is ours."""
+	return VerifiedPayment(
+		payment_id=intent.get("id"),
+		captured=intent.get("status") == "succeeded",
+		amount=frappe.utils.flt(intent.get("amount_received") or 0) / 100,
+		currency=(intent.get("currency") or "").upper(),
+		order_id=intent.get("id"),
+		receipt=(intent.get("metadata") or {}).get("receipt"),
+	)
 
 
 def _to_dict(obj) -> dict:
@@ -395,6 +409,34 @@ class StripeAdapter(GatewayAdapter):
 			"currency": (currency or "usd").upper(),
 		}
 
+	def verify_payment(self, payment_id: str) -> VerifiedPayment:
+		return _verified(self.get_payment_intent(payment_id))
+
+	def find_order_payment(self, order_id: str) -> VerifiedPayment | None:
+		"""An in-app order is a PaymentIntent (`pi_`); a hosted one is a Checkout Session (`cs_`)."""
+		if order_id.startswith("cs_"):
+			return self.checkout_payment(order_id)
+		payment = self.verify_payment(order_id)
+		return payment if payment.captured else None
+
+	def checkout_payment(self, session_id: str) -> VerifiedPayment | None:
+		session = self.get_checkout_session(session_id)
+		if session.get("payment_status") != "paid" or not session.get("payment_intent"):
+			return None
+		return VerifiedPayment(
+			payment_id=session["payment_intent"],
+			captured=True,
+			amount=frappe.utils.flt(session.get("amount_total")) / 100,
+			currency=(session.get("currency") or "").upper(),
+			order_id=session_id,
+			receipt=(session.get("metadata") or {}).get("receipt"),
+		)
+
+	@staticmethod
+	def payment_from_event(payload: dict) -> VerifiedPayment | None:
+		obj = (payload.get("data") or {}).get("object") or {}
+		return _verified(obj) if obj.get("object") == "payment_intent" else None
+
 	def get_payment_intent(self, payment_intent_id: str) -> dict:
 		"""Retrieve a PaymentIntent so a top-up can be confirmed from what Stripe
 		actually charged (status + amount + currency), not a client-supplied figure."""
@@ -465,28 +507,27 @@ class StripeAdapter(GatewayAdapter):
 
 		return {"checkout_url": session.get("url"), "session_id": session.get("id")}
 
-	def get_setup_result(self, session_id: str) -> dict:
-		"""Read a completed setup Checkout session back to the saved card: the gateway
-		payment-method id + card display fields, or `{}` while still pending."""
+	def read_saved_card(self, setup_reference: str) -> dict:
+		"""The card a SetupIntent (`seti_`) or a setup Checkout Session (`cs_`) saved, read
+		from Stripe: payment method, customer, mandate and display fields. `{}` while the
+		customer has not finished."""
 		self._configure()
+		intent_id = setup_reference
+		if setup_reference.startswith("cs_"):
+			intent_id = _to_dict(stripe.checkout.Session.retrieve(setup_reference)).get("setup_intent")
+			if not intent_id:
+				return {}
 
-		session = _to_dict(stripe.checkout.Session.retrieve(session_id))
-
-		setup_intent_id = session.get("setup_intent")
-
-		if not setup_intent_id:
-			return {}
-
-		intent = _to_dict(stripe.SetupIntent.retrieve(setup_intent_id))
+		intent = _to_dict(stripe.SetupIntent.retrieve(intent_id))
 		method_id = intent.get("payment_method")
-
 		if intent.get("status") != "succeeded" or not method_id:
 			return {}
 
 		card = (_to_dict(stripe.PaymentMethod.retrieve(method_id)).get("card")) or {}
-
 		return {
 			"payment_method": method_id,
+			"customer": intent.get("customer"),
+			"mandate": intent.get("mandate"),
 			"brand": (card.get("brand") or "card").title(),
 			"last4": card.get("last4"),
 			"exp_month": card.get("exp_month"),

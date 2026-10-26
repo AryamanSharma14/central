@@ -121,6 +121,19 @@ WEBHOOK_EVENT = StateMachine(
 	},
 )
 
+# A wallet top-up Central asked a gateway for. A payment that lands after the order
+# expired still credits it: the money was taken.
+TOP_UP_ORDER = StateMachine(
+	"Top-up Order",
+	"status",
+	{
+		"Created": {"Credited", "Failed", "Expired"},
+		"Expired": {"Credited"},
+		"Credited": set(),  # terminal
+		"Failed": set(),  # terminal
+	},
+)
+
 # The monthly run's own progress. No money of its own, but routed through the
 # authority so the single owner rule holds with no special cases.
 BILLING_RUN = StateMachine(
@@ -165,6 +178,7 @@ _MACHINES = {
 		REFUND,
 		PAYMENT_METHOD,
 		WEBHOOK_EVENT,
+		TOP_UP_ORDER,
 		BILLING_RUN,
 		RERATING_RUN,
 		COMMITMENT,

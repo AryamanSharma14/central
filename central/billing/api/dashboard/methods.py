@@ -120,32 +120,16 @@ def initiate_card_setup(team: str | None = None, gateway: str | None = None) -> 
 
 
 @frappe.whitelist(methods=["POST"])
-def confirm_card(
-	payment_method: str | None = None,
-	gateway_method_id: str | None = None,
-	display_label: str | None = None,
-	expiry_month: int | None = None,
-	expiry_year: int | None = None,
-	gateway_mandate_id: str | None = None,
-	card_network: str | None = None,
-) -> dict:
-	"""Confirm a card the gateway SDK tokenised — runs the micro-charge validation.
+def confirm_card(payment_method: str | None = None) -> dict:
+	"""Confirm a card the gateway SDK saved — runs the micro-charge validation.
 
-	`gateway_mandate_id` is present where the currency required a mandate at setup
-	(India); later off-session debits quote it."""
+	The card, its label, expiry and any India mandate are read from the gateway by the
+	setup this method was opened with, never taken from the request."""
 	from central.billing.payments import payments
 
 	team = frappe.db.get_value("Payment Method", payment_method, "team")
 	_require_manage(team)
-	method = payments.confirm_payment_method(
-		payment_method,
-		gateway_method_id=gateway_method_id,
-		display_label=display_label,
-		expiry_month=expiry_month,
-		expiry_year=expiry_year,
-		gateway_mandate_id=gateway_mandate_id,
-		card_network=card_network,
-	)
+	method = payments.confirm_payment_method(payment_method)
 	return {"payment_method": method.name, "status": method.status}
 
 
@@ -217,10 +201,9 @@ def confirm_payment_method_order(
 	razorpay_payment_id: str | None = None,
 	razorpay_order_id: str | None = None,
 	razorpay_signature: str | None = None,
-	razorpay_token_id: str | None = None,
 ) -> dict:
-	"""Confirm the Razorpay Checkout callback — verifies the signature, activates
-	the mandate. Real gateway verification, not a stub."""
+	"""Confirm the Razorpay Checkout callback — verifies the signature, reads the token
+	from the payment Razorpay holds for this method's order, and activates the mandate."""
 	team = frappe.db.get_value("Payment Method", payment_method, "team")
 	_require_manage(team)
 	from central.billing.payments import mandates
@@ -231,7 +214,6 @@ def confirm_payment_method_order(
 			"razorpay_payment_id": razorpay_payment_id,
 			"razorpay_order_id": razorpay_order_id,
 			"razorpay_signature": razorpay_signature,
-			"razorpay_token_id": razorpay_token_id,
 		},
 	)
 	return {"payment_method": method.name, "status": method.status}

@@ -201,6 +201,7 @@ def setup_mandate(team: str, gateway: str, customer_id: str | None = None, is_de
 			"mandate_max_amount": cap,
 			"mandate_currency": "INR",
 			"gateway_customer_id": customer_id,
+			"setup_reference": handles.get("order_id"),
 			"is_default": is_default,
 		}
 	).insert(ignore_permissions=True)
@@ -241,6 +242,7 @@ def setup_card(
 			"gateway_customer_id": customer_id,
 			"fallback_reason": fallback_reason,
 			"card_network": "RuPay" if fallback_reason == "Rupay" else None,
+			"setup_reference": handles.get("order_id"),
 		}
 	).insert(ignore_permissions=True)
 
@@ -252,20 +254,26 @@ def setup_card(
 def confirm_mandate(payment_method: str, callback: dict):
 	"""Confirm the Razorpay Checkout callback that authorised the mandate.
 
-	Verifies the checkout-callback signature (distinct from the webhook
-	signature), stores the live token, and flips the method to `active`. A new
-	active mandate retires any sibling active mandate for the same team+gateway
+	1. The checkout-callback signature must be valid (it binds the order and payment ids).
+	2. The callback's order must be the authorisation order Central opened for this method.
+	3. The payment, read from Razorpay, must belong to that order and this method's
+	   customer, and must be authorised or captured. The token is read from it, never
+	   taken from the browser.
+	A new active mandate retires any sibling active mandate for the same team+gateway
 	(the re-authorisation case), so the higher ceiling cleanly supersedes.
 	"""
 	method = frappe.get_doc("Payment Method", payment_method)
 	adapter = _adapter(method.gateway)
 
 	if not adapter.verify_payment_signature(callback):
-		transition(method, "Failed", actor=frappe.session.user, reason="mandate signature invalid")
-		method.save(ignore_permissions=True)
-		frappe.throw(_("Mandate authorisation signature invalid"), frappe.ValidationError)
+		_refuse_mandate(method, "mandate signature invalid")
+	if not method.setup_reference or callback.get("razorpay_order_id") != method.setup_reference:
+		_refuse_mandate(method, "callback is for another order")
+	payment = adapter.get_payment(callback.get("razorpay_payment_id"))
+	if not _is_mandate_payment(method, payment):
+		_refuse_mandate(method, "payment does not authorise this mandate")
 
-	method.gateway_method_id = callback.get("razorpay_token_id") or callback.get("token_id")
+	method.gateway_method_id = payment["token_id"]
 	transition(method, "Active", actor=frappe.session.user)
 	method.validated_at = frappe.utils.now_datetime()
 	method.reauth_required = 0
@@ -281,6 +289,25 @@ def confirm_mandate(payment_method: str, callback: dict):
 	payments.densify_priorities(method.team)  # slot the new method into the fallback order
 	method.reload()
 	return method
+
+
+def _is_mandate_payment(method, payment: dict) -> bool:
+	"""Whether the payment is an authorisation on this method's order and customer, with a token."""
+	return (
+		payment.get("order_id") == method.setup_reference
+		and payment.get("status") in ("authorized", "captured")
+		and bool(payment.get("token_id"))
+		and (not method.gateway_customer_id or payment.get("customer_id") == method.gateway_customer_id)
+	)
+
+
+def _refuse_mandate(method, reason: str) -> None:
+	transition(method, "Failed", actor=frappe.session.user, reason=reason)
+	# Only billing code changes a method's status; the caller checked billing:manage.
+	method.save(ignore_permissions=True)
+	frappe.throw(
+		_("The mandate authorisation could not be confirmed. Try adding it again."), frappe.ValidationError
+	)
 
 
 def cancel_mandate(payment_method: str):
