@@ -478,7 +478,7 @@ def apply_webhook(event_name: str) -> dict:
 	# found by the gateway's own ids. Payment notes are never read: the payer sets them.
 	from central.billing.doctype.top_up_order.top_up_order import TopupOrder
 
-	order = TopupOrder.for_payment(payment)
+	order = TopupOrder.for_payment(payment, event.gateway)
 	if order:
 		if not is_success:
 			_mark_event(event, "Ignored")

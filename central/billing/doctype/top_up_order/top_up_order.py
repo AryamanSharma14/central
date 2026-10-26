@@ -55,14 +55,15 @@ class TopupOrder(Document):
 		).insert(ignore_permissions=True)
 
 	@classmethod
-	def for_payment(cls, payment: VerifiedPayment) -> "TopupOrder | None":
+	def for_payment(cls, payment: VerifiedPayment, gateway: str) -> "TopupOrder | None":
 		"""The top-up a gateway payment belongs to: by the order the gateway names, or by
-		our own receipt where only we can set it. None for a payment that is not a top-up."""
+		our own receipt where only we can set it. None for a payment that is not a top-up,
+		or for a top-up started on another gateway."""
 		name = payment.order_id and frappe.db.get_value(
-			"Top-up Order", {"gateway_order_id": payment.order_id}, "name"
+			"Top-up Order", {"gateway": gateway, "gateway_order_id": payment.order_id}, "name"
 		)
 		if not name and payment.receipt:
-			name = frappe.db.exists("Top-up Order", payment.receipt)
+			name = frappe.db.exists("Top-up Order", {"name": payment.receipt, "gateway": gateway})
 		return frappe.get_doc("Top-up Order", name) if name else None
 
 	def record_gateway_order(self, gateway_order_id: str) -> None:

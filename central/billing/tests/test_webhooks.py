@@ -259,6 +259,17 @@ class TestWalletTopupWebhookBackstop(IntegrationTestCase):
 		self.assertFalse(out["handled"])
 		self.assertEqual(len(self._credits_for(pid)), 0)
 
+	def test_a_payment_on_another_gateway_credits_nothing(self):
+		"""An order id stored for one gateway does not match a payment on another."""
+		pid = "pay_backstop_7"
+		self.order.db_set("gateway", make_stripe_gateway().name)
+
+		out = charges.apply_webhook(self._store_event(pid).name)
+
+		self.assertFalse(out["handled"])
+		self.assertEqual(len(self._credits_for(pid)), 0)
+		self.assertEqual(frappe.db.get_value("Top-up Order", self.order.name, "status"), "Created")
+
 	def test_a_short_payment_credits_nothing(self):
 		pid = "pay_backstop_6"
 		with self.assertRaises(frappe.ValidationError):
