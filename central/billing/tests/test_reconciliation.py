@@ -354,6 +354,28 @@ class TestScan(ReconTestBase):
 			reconciliation.run_reconciliation()
 		self.assertEqual(frappe.db.get_value("Payment Attempt", old, "status"), "Captured")
 
+	def test_a_gateway_timeout_on_one_attempt_does_not_stop_the_scan(self):
+		from central.billing.gateways.base import GatewayTimeout
+
+		inv = self._open_invoice()
+		unreachable = self._ambiguous_attempt(inv, txn="pi_timeout", minutes_old=60)
+		# Two attempts on one invoice need different keys.
+		frappe.db.set_value("Payment Attempt", unreachable, "idempotency_key", "key-timeout")
+		answered = self._ambiguous_attempt(inv, txn="pi_answered", minutes_old=60)
+
+		def transaction_status(txn):
+			if txn == "pi_timeout":
+				raise GatewayTimeout("timed out")
+			return "succeeded"
+
+		with gateway_status("succeeded") as adapter:
+			adapter.get_transaction_status.side_effect = transaction_status
+			results = reconciliation.run_reconciliation()
+
+		self.assertIn({"record": unreachable, "unresolved": "gateway_error"}, results)
+		self.assertEqual(frappe.db.get_value("Payment Attempt", unreachable, "status"), "Initiated")
+		self.assertEqual(frappe.db.get_value("Payment Attempt", answered, "status"), "Captured")
+
 
 class TestTopUpReconciliation(ReconTestBase):
 	"""A top-up whose callback and webhook were both lost is credited from the gateway."""

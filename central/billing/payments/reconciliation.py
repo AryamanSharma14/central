@@ -141,11 +141,24 @@ def run_reconciliation(now=None) -> list:
 		filters=[["status", "in", list(_AMBIGUOUS)], ["initiated_at", "<=", cutoff]],
 		pluck="name",
 	)
-	results = [reconcile_attempt(name, now=now) for name in stuck]
-
-	unsettled = _captured_unsettled_attempts(cutoff)
-	results += [reconcile_captured_attempt(name, now=now) for name in unsettled]
+	results = _reconcile_each(stuck, reconcile_attempt, now)
+	results += _reconcile_each(_captured_unsettled_attempts(cutoff), reconcile_captured_attempt, now)
 	results += reconcile_top_up_orders(now=now)
+	return results
+
+
+def _reconcile_each(names: list[str], reconcile_one, now) -> list[dict]:
+	"""Reconcile each record on its own. A gateway that cannot answer for one record leaves
+	it for the next run. Each record asks the gateway before it writes, so none is half done."""
+	from central.billing.gateways.base import GatewayError
+
+	results = []
+	for name in names:
+		try:
+			results.append(reconcile_one(name, now=now))
+		except GatewayError:
+			frappe.log_error(title=f"Reconciliation could not reach the gateway for {name}")
+			results.append({"record": name, "unresolved": "gateway_error"})
 	return results
 
 
@@ -217,11 +230,8 @@ def _resolve_checkout(attempt, age_hours: float) -> dict:
 def reconcile_top_up_orders(now=None) -> list[dict]:
 	"""Credit top-ups whose payment landed but whose callback and webhook were both lost,
 	and expire the ones nobody paid."""
-	from central.billing.doctype.top_up_order.top_up_order import TopupOrder
-
 	now = frappe.utils.get_datetime(now or frappe.utils.now_datetime())
-	results = []
-	for name in frappe.get_all(
+	orders = frappe.get_all(
 		"Top-up Order",
 		filters={
 			"status": "Created",
@@ -229,15 +239,20 @@ def reconcile_top_up_orders(now=None) -> list[dict]:
 			"creation": ["<=", frappe.utils.add_to_date(now, minutes=-GRACE_MINUTES)],
 		},
 		pluck="name",
-	):
-		order = frappe.get_doc("Top-up Order", name)
-		payment = _find_order_payment(order.gateway, order.gateway_order_id)
-		if payment:
-			results.append(_credit_top_up(order, payment))
-		elif frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
-			order.expire()
-			results.append({"top_up_order": name, "expired": True})
-	return results
+	)
+	results = _reconcile_each(orders, _reconcile_top_up_order, now)
+	return [result for result in results if result]
+
+
+def _reconcile_top_up_order(name: str, now) -> dict | None:
+	order = frappe.get_doc("Top-up Order", name)
+	payment = _find_order_payment(order.gateway, order.gateway_order_id)
+	if payment:
+		return _credit_top_up(order, payment)
+	if frappe.utils.time_diff_in_hours(now, order.creation) >= TOP_UP_EXPIRES_HOURS:
+		order.expire()
+		return {"top_up_order": name, "expired": True}
+	return None
 
 
 def _find_order_payment(gateway: str, order_id: str | None):
