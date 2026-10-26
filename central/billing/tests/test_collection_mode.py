@@ -2,9 +2,11 @@
 # For license information, please see license.txt
 """Collection mode + the ₹15,000 Action Required threshold (ADR 0005, ADR 0022)."""
 
+from unittest.mock import MagicMock, patch
+
 import frappe
 
-from central.billing.gateways.base import VerifiedPayment
+from central.billing.gateways.base import PaymentResult, VerifiedPayment
 from central.billing.payments import collection_mode
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
 from central.billing.tests.utils import clear_team_tier, complete_billing_profile, ensure_team, set_team_tier
@@ -335,6 +337,13 @@ class TestModeAwareDunning(IntegrationTestCase):
 		frappe.db.delete("Payment Method", {"team": TEAM})
 		frappe.db.delete("Billing Notification Log", {"team": TEAM})
 		self.gw = make_razorpay_gateway().name
+		# A retry the mode allows is declined here, never sent to Razorpay.
+		adapter = MagicMock()
+		adapter.prepare_charge.return_value = "order_declined"
+		adapter.charge.return_value = PaymentResult(
+			success=False, status="Failed", failure_code="card_declined", failure_reason="Declined"
+		)
+		self.enterContext(patch("central.billing.gateways.registry.get_adapter", return_value=adapter))
 		# An active method exists — so a retry WOULD happen if the mode allowed it.
 		frappe.get_doc(
 			{

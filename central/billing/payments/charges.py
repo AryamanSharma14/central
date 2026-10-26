@@ -284,13 +284,9 @@ def create_invoice_payment_order(invoice: str, gateway: str | None = None) -> di
 			notes={"invoice": invoice, "team": attempt.team, "purpose": "invoice_payment"},
 		)
 	except Exception as e:
-		# No order exists, so nothing can be paid against this attempt; free the invoice.
-		transition(attempt, "Failed", actor="gateway", correlation=invoice, reason="order not created")
-		attempt.failure_reason = str(e)[:140]
-		attempt.save(ignore_permissions=True)
-		_persist()
+		fail_unopened_order(attempt, e)
 		raise
-	attempt.db_set("gateway_order_id", handles.get("order_id") or handles.get("payment_intent_id"))
+	store_gateway_order(attempt, handles.get("order_id") or handles.get("payment_intent_id"))
 	return {
 		"created": True,
 		"attempt": attempt.name,
@@ -301,6 +297,23 @@ def create_invoice_payment_order(invoice: str, gateway: str | None = None) -> di
 		"receipt": attempt.name,
 		**handles,
 	}
+
+
+def fail_unopened_order(attempt, error: Exception) -> None:
+	"""The gateway did not open the order, so nothing can be paid against this attempt.
+	Failing it frees the invoice for the next payment."""
+	transition(attempt, "Failed", actor="gateway", correlation=attempt.invoice, reason="order not created")
+	attempt.failure_reason = str(error)[:140]
+	# The paying member reads invoices but cannot write a Payment Attempt.
+	attempt.save(ignore_permissions=True)
+	_persist()
+
+
+def store_gateway_order(attempt, order_id: str) -> None:
+	"""Commit the gateway order id before the payer gets the order. The capture webhook
+	finds the attempt by this id, so it must outlive a crash in the rest of the request."""
+	attempt.db_set("gateway_order_id", order_id)
+	_persist()
 
 
 def _claim_on_session_attempt(invoice: str, gateway: str | None) -> dict:

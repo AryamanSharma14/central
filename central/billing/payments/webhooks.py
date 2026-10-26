@@ -92,9 +92,17 @@ def _store_and_enqueue(gateway, event, payload: bytes):
 	except frappe.DuplicateEntryError:
 		return  # lost the race — another request stored it first
 
+	_enqueue_event(doc.name)
+
+
+def _enqueue_event(event_name: str) -> None:
+	"""Apply the event in its own job; the job commits what it did, or its Failed mark.
+	The job id keeps a second job for the same event out while one is queued or running."""
 	frappe.enqueue(
 		"central.billing.payments.webhooks.handle_webhook_event",
-		event_name=doc.name,
+		event_name=event_name,
+		job_id=f"webhook_event::{event_name}",
+		deduplicate=True,
 		enqueue_after_commit=True,
 	)
 
@@ -104,7 +112,8 @@ def handle_webhook_event(event_name: str):
 
 	A handler that raises leaves nothing half-written: its work is rolled back, the
 	event is marked Failed with the error, and `retry_failed_webhooks` tries it again.
-	`platform.alerts.failed_webhooks` pages an operator while it stays Failed."""
+	`platform.alerts.failed_webhooks` pages an operator while it stays Failed. It runs as
+	a background job, which commits the Failed mark because this returns normally."""
 	save_point = "apply_webhook_event"
 	frappe.db.savepoint(save_point)
 	try:
@@ -117,9 +126,6 @@ def handle_webhook_event(event_name: str):
 			reference_doctype="Webhook Event",
 			reference_name=event_name,
 		)
-		if not frappe.in_test:
-			# The Failed mark must survive the job ending in error; the event's own work was undone above.
-			frappe.db.commit()  # nosemgrep
 
 
 def _dispatch(event_name: str):
@@ -144,13 +150,14 @@ def _mark_failed(event_name: str, error: str) -> None:
 		transition(event, "Failed", actor="webhook", correlation=event.gateway_event_id)
 	event.error = error[-2000:]
 	event.retry_count = (event.retry_count or 0) + 1
+	# The webhook job runs as Guest or the system; nobody else writes a Webhook Event.
 	event.save(ignore_permissions=True)
 
 
 def retry_failed_webhooks() -> list[str]:
 	"""Hourly: apply again the events that failed, and the ones whose job never ran.
 
-	Each event commits on its own, so one that fails again does not stop the rest."""
+	Each event runs in its own job, so one that fails again does not stop the rest."""
 	stale = frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-STALE_RECEIVED_MINUTES)
 	names = frappe.get_all(
 		"Webhook Event",
@@ -166,8 +173,5 @@ def retry_failed_webhooks() -> list[str]:
 		limit=RETRY_BATCH,
 	)
 	for name in names:
-		handle_webhook_event(name)
-		if not frappe.in_test:
-			# One commit per event, so an event that fails again cannot undo the ones before it.
-			frappe.db.commit()  # nosemgrep
+		_enqueue_event(name)
 	return names

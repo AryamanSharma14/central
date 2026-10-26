@@ -71,6 +71,7 @@ class TopupOrder(Document):
 	def expire(self) -> None:
 		"""Stop asking the gateway about an order nobody paid."""
 		transition(self, "Expired", actor="reconciliation", correlation=self.team)
+		# Reconciliation runs as the system with no session user to check.
 		self.save(ignore_permissions=True)
 
 	def credit_wallet(self, payment: VerifiedPayment) -> dict:
@@ -102,6 +103,7 @@ class TopupOrder(Document):
 		transition(self, "Credited", actor="gateway", correlation=self.team, amount=self.total)
 		self.gateway_payment_id = payment.payment_id
 		self.ledger_entry = result["ledger_entry"]
+		# A verified gateway payment credits it, often from a Guest webhook.
 		self.save(ignore_permissions=True)
 		return result
 

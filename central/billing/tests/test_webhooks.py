@@ -12,6 +12,7 @@ from central.billing.payments.webhooks import process_webhook
 from central.billing.tests.test_razorpay_adapter import make_razorpay_gateway
 from central.billing.tests.test_stripe_adapter import make_stripe_gateway
 from central.billing.tests.utils import BillingTestCase as IntegrationTestCase
+from central.billing.tests.utils import run_enqueued_inline
 
 EVENT_ID = "evt_webhook_500"
 PAYLOAD = (
@@ -306,7 +307,10 @@ class TestFailedWebhookIsKept(IntegrationTestCase):
 
 		with patch("central.billing.payments.charges.apply_webhook", side_effect=RuntimeError("down")):
 			webhooks.handle_webhook_event(self.event.name)
-		with patch("central.billing.payments.charges.apply_webhook") as apply:
+		with (
+			patch("central.billing.payments.charges.apply_webhook") as apply,
+			patch("frappe.enqueue", side_effect=run_enqueued_inline),
+		):
 			retried = webhooks.retry_failed_webhooks()
 		self.assertIn(self.event.name, retried)
 		apply.assert_called_once_with(self.event.name)

@@ -303,6 +303,7 @@ def _is_mandate_payment(method, payment: dict) -> bool:
 
 def _refuse_mandate(method, reason: str) -> None:
 	transition(method, "Failed", actor=frappe.session.user, reason=reason)
+	# Only billing code changes a method's status; the caller checked billing:manage.
 	method.save(ignore_permissions=True)
 	frappe.throw(
 		_("The mandate authorisation could not be confirmed. Try adding it again."), frappe.ValidationError

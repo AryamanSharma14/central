@@ -221,6 +221,7 @@ def _saved_card_fields(card: dict, method) -> dict:
 
 def _fail_method(method, reason: str) -> Document:
 	transition(method, "Failed", actor=frappe.session.user, reason=reason)
+	# Only billing code changes a method's status; the caller checked billing:manage.
 	method.save(ignore_permissions=True)
 	return method
 

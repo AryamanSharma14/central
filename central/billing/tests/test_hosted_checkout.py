@@ -101,6 +101,36 @@ class TestHostedCheckout(BillingTestCase):
 				self.status(reference=reference)
 		self.adapter.checkout_payment.assert_not_called()
 
+	def test_a_checkout_the_gateway_refuses_frees_the_invoice(self):
+		invoice = self._open_invoice()
+		self.adapter.create_checkout_session.side_effect = RuntimeError("gateway down")
+
+		with self.assertRaises(RuntimeError):
+			self.create_invoice(invoice=invoice.name, redirect_url="https://site")
+
+		self.assertEqual(
+			frappe.db.get_value("Payment Attempt", {"invoice": invoice.name}, "status"), "Failed"
+		)
+		self.adapter.create_checkout_session.side_effect = None
+		self._session("cs_again")
+		self.assertTrue(self.create_invoice(invoice=invoice.name, redirect_url="https://site")["reference"])
+
+	def _open_invoice(self):
+		return frappe.get_doc(
+			{
+				"doctype": "Invoice",
+				"team": TEAM,
+				"invoice_type": "Billable",
+				"status": "Open",
+				"period_start": "2026-09-01",
+				"period_end": "2026-09-30",
+				"currency": "INR",
+				"subtotal": 800,
+				"total": 800,
+				"expected_collection": 800,
+			}
+		).insert(ignore_permissions=True)
+
 	def test_a_paid_invoice_checkout_settles_the_invoice(self):
 		invoice = frappe.get_doc(
 			{

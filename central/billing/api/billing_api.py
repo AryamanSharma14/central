@@ -891,7 +891,11 @@ def create_invoice_checkout(invoice: str, redirect_url: str) -> dict:
 	"""Start an on-session payment of an open invoice via hosted checkout. Returns
 	`{checkout_url, reference, gateway}`; the invoice settles on the capture, which
 	`get_checkout_status` reports."""
-	from central.billing.payments.charges import _claim_on_session_attempt
+	from central.billing.payments.charges import (
+		_claim_on_session_attempt,
+		fail_unopened_order,
+		store_gateway_order,
+	)
 
 	_assert_owns(frappe.db.get_value("Invoice", invoice, "team"))
 	claim = _claim_on_session_attempt(invoice, None)
@@ -899,16 +903,20 @@ def create_invoice_checkout(invoice: str, redirect_url: str) -> dict:
 		frappe.throw(_("Invoice is not open for payment."), frappe.ValidationError)
 	attempt = frappe.get_doc("Payment Attempt", claim["attempt"])
 	amount = frappe.utils.flt(attempt.amount)
-	session = _create_hosted_checkout(
-		attempt.team,
-		attempt.gateway,
-		attempt.currency,
-		amount,
-		attempt.name,
-		redirect_url,
-		{"team": attempt.team, "invoice": invoice, "purpose": "invoice_payment"},
-	)
-	attempt.db_set("gateway_order_id", session["session_id"])
+	try:
+		session = _create_hosted_checkout(
+			attempt.team,
+			attempt.gateway,
+			attempt.currency,
+			amount,
+			attempt.name,
+			redirect_url,
+			{"team": attempt.team, "invoice": invoice, "purpose": "invoice_payment"},
+		)
+	except Exception as e:
+		fail_unopened_order(attempt, e)
+		raise
+	store_gateway_order(attempt, session["session_id"])
 	return _checkout_handles(attempt.gateway, session, "invoice", invoice, amount, attempt.currency)
 
 
