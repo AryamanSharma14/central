@@ -474,17 +474,22 @@ def check_servers_have_a_known_host() -> list[Violation]:
 		if not server.atlas_host_id or server.atlas_host_id not in hosts[server.region]:
 			unplaced.setdefault(server.region, []).append(server.name)
 	# One row per region: a region with no linked machine would otherwise alert once per server.
+	# The gap is the region's metal, not any one team's, so the row carries no team.
 	return [
 		Violation(
 			check="R2",
 			subject_doctype="Region",
 			subject=region,
 			actual=len(names),
-			detail=f"{len(names)} server(s) run on no known Metal Server, so machine profitability "
-			f"leaves them out. For example: {', '.join(names[:5])}.",
+			detail=_unplaced_detail(names),
 		)
 		for region, names in unplaced.items()
 	]
+
+
+def _unplaced_detail(names: list[str]) -> str:
+	examples = ", ".join(names[:5])
+	return f"{len(names)} server(s) run on no known Metal Server, so machine profitability leaves them out. For example: {examples}."
 
 
 def check_billing_run_is_moving() -> list[Violation]:

@@ -255,9 +255,11 @@ def _fan_out_emails(
 	"""Queue the email to each recipient, sent after the caller's transaction commits.
 
 	Rendering an email is slow, and the caller often holds a lock on money records, so only the
-	recipients are decided here. Returns ``{"queued": N, "attempted": N, "failed": 0}``."""
+	recipients are decided here. Returns ``{"queued": N, "attempted": N, "failed": 0}``: a send
+	fails only later, in the job, and leaves an Error Log there."""
 	recipients = _email_recipients(team, event, server=server, affected_user=affected_user)
 	if recipients:
+		# After commit only: a rollback drops the job, so no mail goes out for a change that never happened.
 		frappe.enqueue(
 			send_notification_emails,
 			queue="short",

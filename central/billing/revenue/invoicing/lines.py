@@ -197,7 +197,8 @@ def _subscription_lines(sub, cluster: str, changes: list, b, explain: bool = Fal
 				"server": sub.server_id,
 				"cluster": cluster,
 				"churn": held_hours < CHURN_WINDOW_HOURS,
-				# The resource began or ended its life in this segment, not just a config.
+				# The resource began or ended its life in this segment, not just a config. A
+				# segment always ends at the next change, so a stop after a resize closes it too.
 				"opens": change.change_type == "Created",
 				"closes": i + 1 < len(changes) and changes[i + 1].change_type == "Cancelled",
 			}

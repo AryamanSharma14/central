@@ -189,7 +189,10 @@ def _retry_if_due(inv, schedule, now, mode: str | None) -> dict | None:
 
 
 def _is_retry_due(invoice: str, schedule: list, now) -> bool:
-	"""A retry day has been reached and no charge was tried on or after it."""
+	"""A retry day has been reached and no charge was tried on or after it.
+
+	A run that missed retry days catches up with one round, not one per missed day, so a
+	backlog never charges the same card several times in one run."""
 	days = [
 		s.date
 		for s in schedule

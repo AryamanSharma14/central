@@ -58,7 +58,10 @@ class Invoice(Document):
 		super().update_child_table(fieldname, df)
 
 	def has_unchanged_lines(self) -> bool:
-		"""The lines hold the same values as when this invoice was loaded."""
+		"""The lines hold the same values as the saved invoice.
+
+		The copy before save is read from the database, so any line added, removed or edited
+		in memory makes the lists differ and the lines are written."""
 		before = self.get_doc_before_save()
 		if self.is_new() or not before:
 			return False

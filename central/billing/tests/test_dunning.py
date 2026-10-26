@@ -12,6 +12,7 @@ from central.billing import settings
 from central.billing.catalog import subscriptions
 from central.billing.catalog.signing import generate_keypair
 from central.billing.gateways.base import PaymentResult
+from central.billing.payments import decline
 from central.billing.revenue import dunning
 from central.billing.tests.test_stripe_adapter import make_stripe_gateway
 from central.billing.tests.utils import (
@@ -386,3 +387,18 @@ class TestTheLadderIsAList(IntegrationTestCase):
 		with patch.object(frappe.db, "get_value") as read:
 			dunning.dunning_schedule(self.START, self._policy())
 			self.assertFalse(read.called)
+
+
+class TestRetryableLater(IntegrationTestCase):
+	"""Which failed charges a later retry day may charge again."""
+
+	def test_a_shortfall_can_be_charged_again(self):
+		self.assertTrue(decline.is_retryable_later("card_declined", "insufficient_funds"))
+
+	def test_a_hard_decline_is_never_charged_again(self):
+		self.assertFalse(decline.is_retryable_later("expired_card", None))
+		self.assertFalse(decline.is_retryable_later("card_declined", "expired_card"))
+		self.assertFalse(decline.is_retryable_later("card_declined", "stolen_card"))
+
+	def test_an_ambiguous_failure_is_not_charged_again(self):
+		self.assertFalse(decline.is_retryable_later("processing_error", None))

@@ -46,13 +46,7 @@ MANDATE_CODES = (
 
 # Declines a later retry cannot fix: the card is wrong, gone or barred, or the
 # customer must be present. A shortfall or a generic bank refusal can clear in days.
-HARD_CODES = (
-	"expired_card",
-	"incorrect_number",
-	"incorrect_cvc",
-	"card_not_supported",
-	"authentication_failed",
-)
+HARD_CODES = tuple(code for code in TERMINAL_CODES if code != "card_declined")
 HARD_DECLINE_CODES = (
 	"lost_card",
 	"stolen_card",
@@ -64,9 +58,6 @@ HARD_DECLINE_CODES = (
 	"revocation_of_authorization",
 	"revocation_of_all_authorizations",
 	"merchant_blacklist",
-	"expired_card",
-	"incorrect_number",
-	"card_not_supported",
 )
 
 # What a decline means to the person whose card it was. Gateway codes and their
@@ -124,11 +115,13 @@ def is_terminal(failure_code: str | None) -> bool:
 
 
 def is_retryable_later(failure_code: str | None, decline_code: str | None) -> bool:
-	"""True where charging the same method again on a later day can succeed."""
+	"""True where charging the same method again on a later day can succeed.
+
+	An ambiguous failure may still settle, so charging it again could charge twice."""
 	code, reason = (failure_code or "").lower(), (decline_code or "").lower()
-	if code in HARD_CODES or code in MANDATE_CODES:
+	if code in AMBIGUOUS_CODES or code in HARD_CODES or code in MANDATE_CODES:
 		return False
-	return reason not in HARD_DECLINE_CODES
+	return reason not in HARD_DECLINE_CODES and reason not in HARD_CODES
 
 
 def fallback_enabled() -> bool:

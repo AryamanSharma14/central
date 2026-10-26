@@ -138,7 +138,9 @@ def _claim_attempt(invoice: str, payment_method: str | None, gateway: str | None
 				"initiated_at": frappe.utils.now_datetime(),
 				"retry_number": retry_number,
 			}
-		).insert(ignore_permissions=True, ignore_links=True)  # every link was just read from the database
+		)
+		# Billing claims the charge for the system, and every link was just read from the database.
+		attempt.insert(ignore_permissions=True, ignore_links=True)
 	except _ALREADY_CLAIMED:
 		# Someone else already claimed this exact charge (same invoice, same retry
 		# number, so the same key). They own it; we don't start a second one. Undo
