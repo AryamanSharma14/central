@@ -31,6 +31,7 @@ class Subscription(Document):
 		vm_snapshot: DF.Link | None
 		public_ip_server: DF.Link | None
 		start_date: DF.Date | None
+		stopped_for_nonpayment: DF.Check
 		sub_category: DF.Link | None
 		team: DF.Link
 	# end: auto-generated types

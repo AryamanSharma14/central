@@ -124,6 +124,57 @@ def held_invoices() -> list[dict]:
 	]
 
 
+def suspended_servers_running() -> list[dict]:
+	"""Servers dunning suspended but could not stop. The team is not paying for them."""
+	sub = frappe.qb.DocType("Subscription")
+	vm = frappe.qb.DocType("Virtual Machine")
+	rows = (
+		frappe.qb.from_(sub)
+		.join(vm)
+		.on(sub.server_id == vm.name)
+		.select(sub.name, sub.team, sub.server_id)
+		.where((sub.account_standing == "Suspended") & (vm.status == "Running"))
+		.limit(100)
+	).run(as_dict=True)
+	return [
+		{
+			"alert": "suspended_server_running",
+			"doctype": "Subscription",
+			"subject": r.name,
+			"team": r.team,
+			"detail": f"Server {r.server_id} is suspended for non-payment but still running",
+		}
+		for r in rows
+	]
+
+
+def termination_due() -> list[dict]:
+	"""Overdue invoices past the termination day. A person decides; nothing is deleted for them."""
+	from central.billing.revenue import dunning
+
+	policy = dunning.dunning_policy()
+	today = frappe.utils.nowdate()
+	found = []
+	for invoice in frappe.get_all(
+		"Invoice",
+		filters={"invoice_type": "Billable", "status": "Overdue"},
+		fields=["name", "team", "currency", "total", "due_date", "dunning_starts_on"],
+		limit=100,
+	):
+		schedule = dunning.dunning_schedule(dunning.dunning_clock_start(invoice), policy)
+		if "Terminate" in dunning.stages_reached(schedule, today):
+			found.append(
+				{
+					"alert": "termination_due",
+					"doctype": "Invoice",
+					"subject": invoice.name,
+					"team": invoice.team,
+					"detail": f"{invoice.currency} {invoice.total} unpaid since {invoice.due_date}; termination is due",
+				}
+			)
+	return found
+
+
 def failed_refunds() -> list[dict]:
 	"""Refunds a gateway refused. The invoice is cancelled but the customer is still owed."""
 	return [
@@ -204,6 +255,8 @@ SOURCES = (
 	held_invoices,
 	failed_refunds,
 	failed_accounting_syncs,
+	suspended_servers_running,
+	termination_due,
 )
 
 

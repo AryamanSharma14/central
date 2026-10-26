@@ -24,6 +24,7 @@ from frappe.query_builder import Order
 # keep working. Suspension is still staged through Past Due (grace), never a direct jump.
 from central.billing.states import InvalidTransition, transition
 from central.infrastructure.doctype.resource_action.resource_action import ResourceAction
+from central.server_models import ActionStatus
 
 
 def anchor_subscription(team: str) -> str | None:
@@ -279,6 +280,7 @@ def provision_service_subscription(
 	default_payment_method: str | None = None,
 	gateway: str | None = None,
 	changed_by: str | None = None,
+	allow_unlisted_plan: bool = False,
 ):
 	"""Subscribe a team to a team-level metered service (ADR 0013/0015).
 
@@ -292,27 +294,26 @@ def provision_service_subscription(
 	upgrading to a different plan in the same family re-locks the SAME subject (a
 	`Plan Changed` segment) and keeps its usage history continuous — never forking into a
 	parallel subject. Re-subscribing the identical plan is idempotent. Returns the
-	subscription + the synthesized subject + the locked handles."""
+	subscription + the synthesized subject + the locked handles.
+
+	A team that already runs a plan keeps it (grandfathering). Moving onto a plan, or
+	starting one, needs a plan the catalog lists today, unless an operator route passes
+	`allow_unlisted_plan`. Added spend always needs a way to pay, whoever asks."""
 	category = _assert_service_plan(plan)
 
 	subject = _service_subject_id(team, category, cluster)
 	existing = frappe.db.get_value(
 		"Subscription", {"service_subject": subject, "enabled": 1}, ["name", "plan"], as_dict=True
 	)
+	if existing and existing.plan == plan:
+		return _service_subscription_result(existing.name, subject, reused=True)
+
+	rate = _require_sellable_service_plan(team, plan, cluster, allow_unlisted_plan)
+	_require_a_way_to_pay_for_more(team, existing.name if existing else None, rate)
 	if existing:
-		reused = existing.plan == plan
-		if not reused:
-			# Same family, different plan → an upgrade/downgrade: re-lock in place.
-			change_plan(existing.name, plan, changed_by=changed_by)
-		seg = _latest_segment_by_subscription([existing.name]).get(existing.name)
-		return {
-			"subscription": existing.name,
-			"service_subject": subject,
-			"reused": reused,
-			"upgraded": not reused,
-			"locked_rate": frappe.utils.flt(seg.locked_rate) if seg else None,
-			"currency": seg.currency if seg else None,
-		}
+		# Same family, different plan → an upgrade/downgrade: re-lock in place.
+		change_plan(existing.name, plan, changed_by=changed_by)
+		return _service_subscription_result(existing.name, subject, upgraded=True)
 
 	doc = frappe.get_doc(
 		{
@@ -332,25 +333,23 @@ def provision_service_subscription(
 	)
 	doc.flags.changed_by = changed_by
 	doc.insert(ignore_permissions=True)
+	return _service_subscription_result(doc.name, subject)
 
-	opening = frappe.db.get_value(
-		"Subscription Change",
-		{"subscription": doc.name, "change_type": "Created"},
-		["locked_rate", "currency"],
-		as_dict=True,
-	)
+
+def _service_subscription_result(subscription: str, subject: str, reused=False, upgraded=False) -> dict:
+	segment = _latest_segment_by_subscription([subscription]).get(subscription)
 	return {
-		"subscription": doc.name,
+		"subscription": subscription,
 		"service_subject": subject,
-		"reused": False,
-		"upgraded": False,
-		"locked_rate": opening.locked_rate if opening else None,
-		"currency": opening.currency if opening else None,
+		"reused": reused,
+		"upgraded": upgraded,
+		"locked_rate": frappe.utils.flt(segment.locked_rate) if segment else None,
+		"currency": segment.currency if segment else None,
 	}
 
 
 def _assert_service_plan(plan: str) -> str:
-	"""A team-level service plan is any active Plan whose family is not provisioned as a
+	"""A team-level service plan is a Plan whose family is not provisioned as a
 	whole Server (servers go through the VM create/resize flow, ADR 0007). Metered
 	families (AI Tokens, PDF, storage) and non-Server bundles qualify. Returns its
 	Plan Category (the service family)."""
@@ -365,6 +364,25 @@ def _assert_service_plan(plan: str) -> str:
 			frappe.ValidationError,
 		)
 	return category
+
+
+def _require_sellable_service_plan(team: str, plan: str, cluster: str | None, allow_unlisted: bool) -> float:
+	"""Refuse a service plan that is retired or has no price for this team. Returns its rate.
+
+	An operator may place a team on a retired plan on purpose, but never on an unpriced
+	one: a segment with no rate bills nothing."""
+	if not allow_unlisted and not frappe.db.get_value("Plan", plan, "is_active"):
+		frappe.throw(
+			frappe._("This plan is no longer offered. Choose a plan from the list."), frappe.ValidationError
+		)
+	currency = frappe.db.get_value("Billing Profile", team, "currency")
+	rate = frappe.get_doc("Plan", plan).get_rate(currency, cluster)
+	if rate is None:
+		frappe.throw(
+			frappe._("This plan has no price in {0} for this region. Choose another plan.").format(currency),
+			frappe.ValidationError,
+		)
+	return frappe.utils.flt(rate)
 
 
 def _service_subject_id(team: str, category: str, cluster: str | None) -> str:
@@ -434,6 +452,8 @@ def begin_resize(
 	if is_live and not server.atlas_vm_id:
 		frappe.throw(frappe._("This server has no verified regional identity."))
 
+	_require_resize_target(doc, server, plan, includes)
+
 	# A plan's own disk is what a new server is created with. Resize keeps the
 	# current disk, or grows it, and refuses a plan whose disk is smaller.
 	original_plan = plan
@@ -496,6 +516,35 @@ def begin_resize(
 	return {"queued": True, "resized": True, **action.customer_status()}
 
 
+def _require_resize_target(doc, server, plan: str | None, includes: list | None) -> None:
+	"""The customer names the target, so it must be one their catalog offers today, and a
+	custom shape is checked row by row before it is priced."""
+	if plan and plan != doc.plan:
+		_require_offered_plan(doc, plan, server.region if server else doc.cluster)
+	elif includes:
+		from central.billing.catalog.composition import validate_shape_rows
+
+		validate_shape_rows(includes)
+
+
+def _require_offered_plan(doc, plan: str, region: str | None) -> None:
+	"""Refuse a resize target the team's own catalog does not list for this region.
+
+	The catalog is what create offers: active server plans, priced in the team's
+	currency, allowed by its tier and within its headroom. A team keeps a retired plan it
+	already runs, but cannot move onto one."""
+	from central.billing.catalog.server_plans import get_server_plans
+
+	catalog = get_server_plans(doc.team, cluster=region, exclude_subscription=doc.name, for_resize=1)
+	offered = {row["plan"] for rows in catalog["plans"].values() for row in rows}
+	if plan not in offered:
+		frappe.throw(
+			frappe._(
+				"This plan is not available for this server. Choose a plan from the list, or contact support to review your spending limit."
+			)
+		)
+
+
 def apply_resize_billing(action) -> None:
 	"""Re-lock billing after the integration worker confirmed the target shape."""
 	configuration = action.get_resize_configuration()
@@ -545,7 +594,30 @@ def _plan_resize(doc, server, plan, includes, sub_category, override_rate=None) 
 	enforce_headroom(doc.team, new_rate, exclude=doc.name)
 	if server and server.status in ("Running", "Paused", "Stopped"):
 		_guard_disk_shrink(doc.server_id, shape)
+	_require_a_way_to_pay_for_more(doc.team, doc.name, new_rate)
 	return shape
+
+
+def _require_a_way_to_pay_for_more(team: str, subscription: str | None, new_rate) -> None:
+	"""Added spend passes the same payment gate as a new server: all of a new
+	subscription's rate, or what a change adds over the open segment. A move down adds
+	nothing, so a team behind on payment can still make one."""
+	segments = active_segments({"name": subscription}) if subscription else []
+	increase = frappe.utils.flt(new_rate) - frappe.utils.flt(segments[0].locked_rate if segments else 0)
+	if increase > 0:
+		_require_a_way_to_pay(team, increase)
+
+
+def _require_a_way_to_pay(team: str, added_rate: float) -> None:
+	"""Hold added spend to the server-create payment gate. An internal team and a staging
+	trial are not held to it, as on create."""
+	from central.billing.revenue.tax import is_internal_team
+
+	if is_internal_team(team) or frappe.db.get_value("Team", team, "is_staging_trial"):
+		return
+	from central.resource_actions import require_payment_method_or_credit
+
+	require_payment_method_or_credit(team, added_rate)
 
 
 def _resize_disk_choice(plan, includes, sub_category, disk_gigabytes):
@@ -623,24 +695,19 @@ def resize_composed_subscription(
 		frappe.throw(frappe._("A composed config needs an optimisation profile."))
 
 	rows = [dict(r) for r in includes]
-	from central.billing.catalog.composition import composition_quantities
+	from central.billing.catalog.composition import composition_quantities, validate_shape_rows
 	from central.billing.catalog.pricing import resolve_config_rate
 
+	# A preset's rows come from its own Plan; any other shape came from the customer.
+	if not preset_plan:
+		validate_shape_rows(rows)
 	_validate_resize_shape(profile, rows, doc.server_id, preset_plan)
 
 	currency = frappe.db.get_value("Billing Profile", doc.team, "currency")
-	server = (
-		frappe.db.get_value("Virtual Machine", doc.server_id, ["region"], as_dict=True)
-		if doc.server_id
-		else None
-	)
+	region = frappe.db.get_value("Virtual Machine", doc.server_id, "region") if doc.server_id else None
 	# A preset grown past its own disk keeps the bundle price plus the extra disk; a genuine
 	# composed shape is priced à la carte. The headroom check uses whichever will be billed.
-	new_rate = (
-		override_rate
-		if override_rate is not None
-		else resolve_config_rate(rows, currency, server.region if server else None)
-	)
+	new_rate = override_rate if override_rate is not None else resolve_config_rate(rows, currency, region)
 	enforce_headroom(doc.team, new_rate, exclude=subscription)
 
 	# Resizing to the identical composition already running is a no-op (no event).
@@ -1045,6 +1112,87 @@ def resume_billing(subscription: str, changed_by: str | None = None):
 	_record_change(subscription, "Resumed", old_value=0, new_value=1, changed_by=changed_by)
 	_control_subscription_server(doc, "start")
 	return doc
+
+
+def suspend_for_nonpayment(team: str) -> list[str]:
+	"""Suspend every subscription of an unpaid team and stop its running servers.
+
+	A service subscription has no server, so only its standing changes. A paused
+	subscription is included: its server is stopped, but the customer could start it.
+	Returns the subscriptions newly suspended. A server that will not stop is logged and
+	left Running; the operator alert for suspended servers that still run picks it up."""
+	rows = frappe.get_all(
+		"Subscription",
+		filters={"team": team, "account_standing": ["!=", "Suspended"]},
+		fields=["name", "server_id", "account_standing"],
+	)
+	suspended = [_suspend_one(sub) for sub in rows]
+	return [name for name in suspended if name]
+
+
+def _suspend_one(sub) -> str | None:
+	"""Suspend one subscription and return its name. One that cannot move is logged and
+	skipped, so the rest of the team is still suspended."""
+	save_point = "suspend_for_nonpayment"
+	frappe.db.savepoint(save_point)
+	try:
+		if sub.account_standing == "Current":
+			set_standing(sub.name, "Past Due", changed_by="dunning")
+		set_standing(sub.name, "Suspended", changed_by="dunning", reason="unpaid invoice")
+	except frappe.ValidationError:
+		frappe.db.rollback(save_point=save_point)
+		frappe.log_error(
+			title=f"Dunning could not suspend subscription {sub.name}",
+			reference_doctype="Subscription",
+			reference_name=sub.name,
+		)
+		return None
+
+	# The flag means dunning asked for the stop. If the stop fails, the server still runs
+	# and the start on payment is skipped, so the flag cannot start a server by mistake.
+	if _queue_power_for_billing(sub, "stop", f"Dunning could not stop server {sub.server_id}"):
+		frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 1)
+	return sub.name
+
+
+def restore_after_payment(team: str) -> list[str]:
+	"""Return a team that no longer owes anything to Current, and start what dunning stopped.
+
+	A server the customer stopped themselves stays stopped. A server that will not start
+	does not undo the payment that triggered this; it is logged and the customer can
+	start it themselves."""
+	restored = []
+	for sub in frappe.get_all(
+		"Subscription",
+		filters={"team": team, "account_standing": ["in", ["Past Due", "Suspended"]]},
+		fields=["name", "server_id", "stopped_for_nonpayment"],
+	):
+		set_standing(sub.name, "Current", changed_by="payment", reason="invoice settled")
+		restored.append(sub.name)
+		if sub.stopped_for_nonpayment:
+			frappe.db.set_value("Subscription", sub.name, "stopped_for_nonpayment", 0)
+			_queue_power_for_billing(sub, "start", f"Could not start server {sub.server_id} after payment")
+	return restored
+
+
+def _queue_power_for_billing(sub, action: str, failure_title: str) -> ActionStatus | None:
+	"""Stop or start a server for billing, as the system. Returns the queued action, or None.
+	A server in no state for the action is skipped; a refusal undoes only its own writes
+	and is logged."""
+	from central.resource_actions import submit_billing_command
+
+	status = frappe.db.get_value("Virtual Machine", sub.server_id, "status") if sub.server_id else None
+	if status not in _SERVER_ACTION_FROM[action]:
+		return None
+
+	save_point = "server_power_for_billing"
+	frappe.db.savepoint(save_point)
+	try:
+		return submit_billing_command(action, sub.server_id)
+	except Exception:
+		frappe.db.rollback(save_point=save_point)
+		frappe.log_error(title=failure_title, reference_doctype="Subscription", reference_name=sub.name)
+		return None
 
 
 # States from which a stop / start is a meaningful Atlas transition; in any other

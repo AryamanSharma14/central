@@ -243,7 +243,7 @@ flowchart LR
 ### Scheduled (`central/hooks.py` → `scheduler_events`)
 | Cadence | Entry point | Purpose |
 |---|---|---|
-| daily | `revenue.dunning.run_dunning` | Day 1/3/7 retries → past_due → suspend → terminate |
+| daily | `revenue.dunning.run_dunning` | Day 1/3/7 retries → past_due → suspend and stop servers → termination due |
 | daily | `payments.charges.cleanup_payment_logs` | prune Payment Attempt / Webhook Event |
 | daily | `projection.batch.prune` | prune old projection batches |
 | daily | `payments.emandate.run_emandate_cycle` | INR ≤₹15k pre-debit notice → debit after 24h |
@@ -528,21 +528,25 @@ stateDiagram-v2
     Day3 --> Day7: retry_payment fails
     Day7 --> PastDue: still unpaid
     PastDue --> Suspended: grace elapsed
-    Suspended --> Terminated: no recovery
+    Suspended --> Current: paid
     Day1 --> Current: paid
     Day3 --> Current: paid
     Day7 --> Current: paid
     PastDue --> Current: paid
     note right of Suspended
-        The server keeps running until the
-        issued Entitlement Token expires
+        Running servers are stopped and
+        the customer cannot start them
     end note
 ```
 ```
 daily run_dunning → process_invoice_dunning(invoice)
-  → retry_payment on Day 1/3/7 → account_standing past_due → suspend → terminate
-  → Agent/cluster enforcement: an already-issued token keeps the Virtual Machine running until expiry
+  → retry_payment on Day 1/3/7 → account_standing past_due
+  → day 14: subscriptions.suspend_for_nonpayment: every subscription Suspended, running servers stopped
+  → day 44: termination_due action; platform.alerts.termination_due pages an operator, nothing is deleted
+Invoice.on_update (settled, no other Overdue invoice) → subscriptions.restore_after_payment
+  → every subscription Current, servers dunning stopped are started
 ```
+Billing stops and starts a server as the system (`resource_actions.submit_billing_command`), because a payment can arrive by webhook as Guest. `submit_command` refuses a customer `start` while the server's subscription is Suspended.
 
 ### E. Metering
 ```

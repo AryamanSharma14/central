@@ -10,7 +10,6 @@ from frappe.tests import IntegrationTestCase
 
 from central.billing import settings
 from central.billing.catalog import subscriptions
-from central.billing.catalog.signing import generate_keypair
 from central.billing.gateways.base import PaymentResult
 from central.billing.payments import decline
 from central.billing.revenue import dunning
@@ -55,8 +54,6 @@ class DunningTestBase(BillingTestCase):
 		ensure_atlas_instance(CLUSTER)
 		make_plan(PLAN)
 		make_stripe_gateway()
-		self._priv, self._pub = generate_keypair()
-		frappe.conf.entitlement_private_key = self._priv
 		set_team_tier(TEAM, level="t1", max_spend=50000)
 
 	def _card(self):
@@ -114,10 +111,6 @@ class DunningTestBase(BillingTestCase):
 
 	def _standing(self, sub):
 		return frappe.db.get_value("Subscription", sub, "account_standing")
-
-	def _has_directive(self, field):
-		name = frappe.db.get_value("Entitlement Token", {"team": TEAM}, "name", order_by="creation desc")
-		return bool(name and frappe.db.get_value("Entitlement Token", name, field))
 
 
 class TestRetrySchedule(DunningTestBase):
@@ -192,42 +185,198 @@ class TestStagedEscalation(DunningTestBase):
 				if d <= last_day:
 					dunning.process_invoice_dunning(inv, now=day(d))
 
+	def _running(self, sub):
+		server = frappe.db.get_value("Subscription", sub, "server_id")
+		frappe.db.set_value("Virtual Machine", server, {"status": "Running", "atlas_vm_id": "vm-dunning"})
+		return server
+
 	def test_day7_overdue_pastdue_still_running(self):
 		sub = self._subscription()
+		self._running(sub)
 		inv = self._open_invoice(sub)
-		self._run_through(inv, sub, last_day=7)
+		with patch("central.resource_actions.submit_billing_command") as stop:
+			self._run_through(inv, sub, last_day=7)
 
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Overdue")
 		self.assertEqual(self._standing(sub), "Past Due")  # grace
-		self.assertFalse(self._has_directive("suspend"))  # not stopped — still running
+		stop.assert_not_called()  # late is not yet cut off
 
-	def test_day14_suspend_directive_on_token_channel(self):
+	def test_day14_suspend_stops_running_servers(self):
 		sub = self._subscription()
+		server = self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch("central.resource_actions.submit_billing_command") as stop:
+			self._run_through(inv, sub, last_day=14)
+
+		self.assertEqual(self._standing(sub), "Suspended")
+		stop.assert_called_once_with("stop", server)
+		self.assertTrue(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
+
+	def test_a_server_that_will_not_stop_stays_flagged_for_operators(self):
+		from central.billing.platform import alerts
+
+		sub = self._subscription()
+		self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch(
+			"central.resource_actions.submit_billing_command",
+			side_effect=frappe.ValidationError("region down"),
+		):
+			self._run_through(inv, sub, last_day=14)
+
+		self.assertEqual(self._standing(sub), "Suspended")
+		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
+		self.assertIn(sub, [a["subject"] for a in alerts.suspended_servers_running()])
+
+	def test_a_subscription_that_cannot_suspend_is_logged_not_raised(self):
+		sub = self._subscription()
+		real = subscriptions.set_standing
+
+		def refuse_this_one(name, standing, **kwargs):
+			if name == sub:
+				raise subscriptions.InvalidTransition("unexpected standing")
+			return real(name, standing, **kwargs)
+
+		with (
+			patch.object(subscriptions, "set_standing", side_effect=refuse_this_one),
+			patch("frappe.log_error") as logged,
+		):
+			suspended = subscriptions.suspend_for_nonpayment(TEAM)
+
+		self.assertNotIn(sub, suspended)
+		self.assertEqual(logged.call_args.kwargs["reference_name"], sub)
+
+	def test_day44_termination_is_due_and_nothing_is_deleted(self):
+		from central.billing.platform import alerts
+
+		sub = self._subscription()
+		inv = self._open_invoice(sub)
+		with (
+			patch("central.resource_actions.submit_billing_command"),
+			patch("central.api.servers.terminate_server") as end,
+		):
+			self._run_through(inv, sub, last_day=44)
+			out = dunning.process_invoice_dunning(inv, now=day(44))
+
+		self.assertIn("termination_due", out["actions"])
+		end.assert_not_called()
+		with patch("frappe.utils.nowdate", return_value=day(44)):
+			self.assertIn(inv, [a["subject"] for a in alerts.termination_due()])
+
+	def test_paying_restores_the_team_and_starts_what_dunning_stopped(self):
+		from central.billing.states import transition
+
+		sub = self._subscription()
+		server = self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch("central.resource_actions.submit_billing_command"):
+			self._run_through(inv, sub, last_day=14)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
+
+		doc = frappe.get_doc("Invoice", inv)
+		transition(doc, "Paid", reason="test payment", actor="test")
+		with patch("central.resource_actions.submit_billing_command") as start:
+			doc.save(ignore_permissions=True)
+
+		self.assertEqual(self._standing(sub), "Current")
+		start.assert_called_once_with("start", server)
+		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
+
+	def test_cancelling_an_unpaid_invoice_does_not_restore_the_team(self):
+		from central.billing.states import transition
+
+		sub = self._subscription()
+		self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch("central.resource_actions.submit_billing_command"):
+			self._run_through(inv, sub, last_day=14)
+
+		doc = frappe.get_doc("Invoice", inv)
+		transition(doc, "Cancelled", reason="reissue", actor="test")
+		with patch("central.resource_actions.submit_billing_command") as start:
+			doc.save(ignore_permissions=True)
+
+		self.assertEqual(self._standing(sub), "Suspended")
+		start.assert_not_called()
+
+	def test_a_server_stopped_for_nonpayment_cannot_be_started(self):
+		from central.resource_actions import submit_command
+
+		sub = self._subscription()
+		server = self._running(sub)
+		inv = self._open_invoice(sub)
+		with patch("central.resource_actions.submit_billing_command"):
+			self._run_through(inv, sub, last_day=14)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
+
+		with self.assertRaises(Exception) as caught:
+			submit_command("start", TEAM, server)
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_OVERDUE")
+
+	def test_a_server_the_customer_stopped_cannot_be_started_while_suspended(self):
+		from central.resource_actions import submit_command
+
+		sub = self._subscription()
+		server = self._running(sub)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
 		inv = self._open_invoice(sub)
 		self._run_through(inv, sub, last_day=14)
 
-		self.assertEqual(self._standing(sub), "Suspended")
-		self.assertTrue(self._has_directive("suspend"))  # cap-0 + suspend rides the token
+		self.assertFalse(frappe.db.get_value("Subscription", sub, "stopped_for_nonpayment"))
+		with self.assertRaises(Exception) as caught:
+			submit_command("start", TEAM, server)
+		self.assertEqual(caught.exception.envelope["code"], "PAYMENT_OVERDUE")
 
-	def test_day44_terminate_directive(self):
+	def test_a_payment_by_webhook_starts_the_servers_as_the_system(self):
+		from central.billing.states import transition
+
 		sub = self._subscription()
+		server = self._running(sub)
 		inv = self._open_invoice(sub)
-		self._run_through(inv, sub, last_day=44)
+		with patch("central.resource_actions.submit_billing_command"):
+			self._run_through(inv, sub, last_day=14)
+		frappe.db.set_value("Virtual Machine", server, "status", "Stopped")
 
-		self.assertTrue(self._has_directive("terminate"))
+		doc = frappe.get_doc("Invoice", inv)
+		transition(doc, "Paid", reason="test payment", actor="test")
+		frappe.set_user("Guest")
+		try:
+			with patch(
+				"central.infrastructure.doctype.resource_action.resource_action.ResourceAction.enqueue"
+			):
+				doc.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertTrue(frappe.db.exists("Resource Action", {"server": server, "action": "start"}))
+		self.assertFalse(frappe.db.exists("Error Log", {"reference_name": sub}))
+
+	def test_a_team_with_only_services_is_suspended(self):
+		sub = self._subscription()
+		frappe.db.set_value("Subscription", sub, {"server_id": None, "service_subject": "svc-dunning"})
+		inv = self._open_invoice(sub)
+		with declining_gateway():
+			for d in (1, 3, 7):
+				dunning.process_invoice_dunning(inv, now=day(d))
+			out = dunning.process_invoice_dunning(inv, now=day(14))
+
+		self.assertEqual(self._standing(sub), "Suspended")
+		self.assertIn("suspend", out["actions"])
 
 	def test_the_ladder_follows_billing_settings(self):
 		"""A shortened ladder escalates on its own days, not the shipped ones."""
 		sub = self._subscription()
+		self._running(sub)
 		inv = self._open_invoice(sub)
+		results = []
 		with billing_settings(dunning_retry_days="1, 2", suspend_after_days=4, terminate_after_days=6):
-			with declining_gateway():
+			with declining_gateway(), patch("central.resource_actions.submit_billing_command"):
 				for d in (1, 2, 4, 6):
-					dunning.process_invoice_dunning(inv, now=day(d))
+					results.append(dunning.process_invoice_dunning(inv, now=day(d)))
 
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Overdue")
-		self.assertTrue(self._has_directive("suspend"))
-		self.assertTrue(self._has_directive("terminate"))
+		self.assertIn("suspend", results[2]["actions"])
+		self.assertIn("termination_due", results[3]["actions"])
 
 	def test_cost_report_invoice_is_not_dunned(self):
 		sub = self._subscription()

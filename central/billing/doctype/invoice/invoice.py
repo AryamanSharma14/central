@@ -19,6 +19,8 @@ from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 
 CANCELLED = "Cancelled"
+# What a team still owes; leaving one of these is when dunning can let go.
+UNSETTLED = ("Open", "Overdue")
 
 
 def period_key_for(team: str, period_start, period_end) -> str:
@@ -66,6 +68,22 @@ class Invoice(Document):
 		if self.is_new() or not before:
 			return False
 		return _line_values(self.items) == _line_values(before.items)
+
+	def on_update(self):
+		self.restore_team_once_settled()
+
+	def restore_team_once_settled(self):
+		"""When an unpaid invoice is paid or waived, a team that owes nothing else is restored:
+		standing back to Current and the servers dunning stopped started again. A cancel does
+		not restore: it is a correction, and the reissued invoice is still owed."""
+		before = self.get_doc_before_save()
+		if not before or before.status not in UNSETTLED or self.status not in ("Paid", "Waived"):
+			return
+		from central.billing.catalog.subscriptions import restore_after_payment
+		from central.billing.payments.settlement import has_overdue_invoice
+
+		if not has_overdue_invoice(self.team):
+			restore_after_payment(self.team)
 
 	def set_period_key(self):
 		"""One live invoice per (team, period); cancelled ones step aside.
