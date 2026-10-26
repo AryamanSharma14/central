@@ -56,3 +56,5 @@ central.patches.v0_0.seed_operator_alert_channel
 central.patches.v0_0.bill_every_snapshot
 # Failure diagnostics move from Error Log links onto their records, so they outlive Error Log retention.
 central.patches.v0_0.copy_error_logs_to_diagnostics
+# A card with no mandate carries no mandate currency (it used to default to INR).
+central.patches.v0_0.clear_default_mandate_currency

@@ -167,7 +167,6 @@
    "description": "Mandate ceiling = team's trust-tier cap at authorisation time."
   },
   {
-   "default": "INR",
    "fieldname": "mandate_currency",
    "fieldtype": "Data",
    "label": "Mandate Currency"
@@ -196,7 +195,7 @@
    "link_fieldname": "payment_method"
   }
  ],
- "modified": "2026-10-24 00:00:00.000000",
+ "modified": "2026-10-26 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Payment Method",
