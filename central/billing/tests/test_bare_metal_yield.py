@@ -6,7 +6,7 @@ from unittest.mock import patch
 import frappe
 
 from central.billing.report.bare_metal_yield import bare_metal_yield
-from central.billing.tests.test_unit_economics import REGION, seed_fleet
+from central.billing.tests.test_unit_economics import REGION, make_metal_server, seed_fleet
 from central.billing.tests.utils import BillingTestCase
 
 RATES = {"vCPU": 500, "Memory (GiB)": 50, "Disk (GiB)": 1}
@@ -50,7 +50,7 @@ class TestBareMetalYield(BillingTestCase):
 		# 40,000 a month over 100 vCPUs is 400 a vCPU; the free and internal servers hold 6.
 		self.assertEqual(rows[0]["unpaid_cost"], 6 * 400)
 		self.assertLess(rows[0]["unpaid_cost"], rows[0]["unpaid"])
-		cost = next(card for card in summary if card["label"] == "Cost of Unpaid Servers (INR)")
+		cost = next(card for card in summary if card["label"] == "Cost of Servers That Pay Nothing (INR)")
 		self.assertEqual(cost["value"], 6 * 400)
 
 	def test_a_machine_row_holds_only_the_servers_on_its_host(self):
@@ -66,6 +66,16 @@ class TestBareMetalYield(BillingTestCase):
 		self.assertEqual(machine["unsold"], POTENTIAL - value(4) - value(2))
 		self.assertEqual((unplaced["potential"], unplaced["unpaid"]), (0, value(4)))
 		self.assertIn("no known machine", message)
+
+	def test_a_machine_row_prices_servers_that_pay_nothing_off_its_own_cost(self):
+		make_metal_server(name="ue-metal-2", cost=10000, vcpus=100, atlas_host_id="host-2")
+		frappe.db.set_value("Virtual Machine", "ue-free", "atlas_host_id", "host-2")
+
+		_, rows, *_ = run({"group_by": "Metal Server"})
+		machine = next(row for row in rows if row["group"] == "ue-metal-2")
+
+		# 10,000 a month over 100 vCPUs is 100 a vCPU, not the region's 250; the free server holds 2.
+		self.assertEqual(machine["unpaid_cost"], 2 * 100)
 
 	def test_usd_revenue_needs_a_rate_for_its_yield(self):
 		frappe.db.set_value("Subscription Change", {"subscription": ["is", "set"]}, "currency", "USD")
