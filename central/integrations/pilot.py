@@ -215,6 +215,17 @@ def get_site_task(server: str, site: str, task_id: str) -> dict:
 	return _request_pilot("GET", server, base_url, path)
 
 
+def get_task(server: str, task_id: str) -> dict:
+	"""Read a bench task even after its site's directory has moved."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	task = _request_pilot("GET", server, base_url, f"/api/v1/tasks/{quote(task_id, safe='')}")
+	if not isinstance(task, dict) or task.get("task_id") != task_id:
+		raise ValueError("Pilot returned a different task.")
+	if task.get("status") not in {"queued", "running", "success", "failed", "killed"}:
+		raise ValueError("Pilot returned an invalid task status.")
+	return task
+
+
 def _expected_gateway_url(server) -> str:
 	url = frappe.get_cached_doc("Region", server.region).get_vm_gateway_url(server.ipv6_address)
 	if not url:
