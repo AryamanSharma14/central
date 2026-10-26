@@ -727,6 +727,11 @@ class TestTrialRegion(IntegrationTestCase):
 class TestTrialImage(IntegrationTestCase):
 	"""A trial is the site the image carries, so the region is asked for that image alone."""
 
+	def setUp(self):
+		super().setUp()
+		frappe.db.set_single_value("Central Settings", "signup_image_minimum_age_minutes", 30)
+		self.enterContext(patch("central.site_provisioning.time.time", return_value=10000))
+
 	def images(self, count: int) -> dict:
 		return {
 			"items": [{"id": f"image-{index}", "created_at": index, "tags": {}} for index in range(count)]
@@ -751,6 +756,54 @@ class TestTrialImage(IntegrationTestCase):
 		configuration, _ = self.resolve(self.images(3))
 
 		self.assertEqual(configuration["image_id"], "image-2")
+
+	def test_the_newest_image_at_least_thirty_minutes_old_is_preferred(self):
+		page = self.images(4)
+		for image, created_at in zip(page["items"], (6000, 8200, 8201, 9900), strict=True):
+			image["created_at"] = created_at
+
+		configuration, _ = self.resolve(page)
+
+		self.assertEqual(configuration["image_id"], "image-1")
+
+	def test_the_latest_image_is_used_when_none_is_old_enough(self):
+		page = self.images(2)
+		page["items"][0]["created_at"] = 8201
+		page["items"][1]["created_at"] = 9900
+
+		configuration, _ = self.resolve(page)
+
+		self.assertEqual(configuration["image_id"], "image-1")
+
+	def test_the_configured_age_and_zero_are_used(self):
+		page = self.images(2)
+		page["items"][0]["created_at"] = 6000
+		page["items"][1]["created_at"] = 8200
+		for minimum_age, expected in ((60, "image-0"), (0, "image-1")):
+			with self.subTest(minimum_age=minimum_age):
+				frappe.db.set_single_value(
+					"Central Settings", "signup_image_minimum_age_minutes", minimum_age
+				)
+				configuration, _ = self.resolve(page)
+				self.assertEqual(configuration["image_id"], expected)
+
+	def test_an_older_product_image_can_be_on_a_later_page(self):
+		pages = [
+			{"items": [{"id": "fresh", "created_at": 9900, "tags": {"app": "raven"}}], "next_offset": 100},
+			{"items": [{"id": "cached", "created_at": 8200, "tags": {"app": "raven"}}], "next_offset": None},
+		]
+		with (
+			patch("central.site_provisioning.signup_offering", return_value="pilot"),
+			patch("central.site_provisioning.trial_regions", return_value=["par-2"]),
+			patch("central.site_provisioning.get_cheapest_trial_plan", return_value="plan-trial"),
+			patch("central.site_provisioning.list_images", side_effect=pages) as list_images,
+		):
+			configuration = trial_configuration(
+				"any-team", frappe._dict(signup_app="raven", frappe_version="version-16-hotfix")
+			)
+
+		self.assertEqual(configuration["image_id"], "cached")
+		self.assertEqual([call.kwargs["offset"] for call in list_images.call_args_list], [0, 100])
 
 	def test_an_image_with_a_signup_app_is_never_chosen(self):
 		"""The newest build can be one with an app on its site, which a trial must not get."""

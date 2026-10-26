@@ -33,6 +33,7 @@
   "server_creation_section",
   "require_payment_method",
   "included_transfer_gb",
+  "signup_image_minimum_age_minutes",
   "server_limits_section",
   "disk_iops",
   "disk_throughput_mibps",
@@ -229,6 +230,14 @@
    "fieldname": "included_transfer_gb",
    "fieldtype": "Int",
    "label": "Included Transfer (GB)",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "description": "Prefer the newest signup image at least this old, to allow host caching. Use the latest if none qualifies. 0 selects the latest.",
+   "fieldname": "signup_image_minimum_age_minutes",
+   "fieldtype": "Int",
+   "label": "Signup Image Minimum Age (Minutes)",
    "non_negative": 1
   },
   {

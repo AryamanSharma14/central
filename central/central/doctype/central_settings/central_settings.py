@@ -46,10 +46,11 @@ class CentralSettings(Document):
 		invitations_per_hour: DF.Int
 		private_network_throughput_mibps: DF.Int
 		public_network_throughput_mibps: DF.Int
+		require_payment_method: DF.Check
 		sign_in_code_attempts: DF.Int
 		sign_in_codes_per_email: DF.Int
+		signup_image_minimum_age_minutes: DF.Int
 		support_ticket_url: DF.Data | None
-		require_payment_method: DF.Check
 		trial_days: DF.Int
 		trial_deletion_days: DF.Int
 		trial_idle_shutdown_minutes: DF.Int
