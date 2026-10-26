@@ -176,6 +176,24 @@ class TestStripeTestModeIntegration(CardTestBase):
 		self.assertTrue(method.is_default)
 
 
+class TestCardWithoutMandate(CardTestBase):
+	"""A card in a currency with no recurring-debit rule is saved without a mandate."""
+
+	def setUp(self):
+		from central.billing.platform import readiness
+		from central.billing.tests.utils import complete_billing_profile
+
+		super().setUp()
+		make_stripe_gateway(currencies=(("USD", 1), ("INR", 0)))
+		complete_billing_profile(TEAM, currency="USD")
+		self.readiness = readiness
+
+	def test_a_usd_card_has_no_mandate_currency(self):
+		method = frappe.get_doc("Payment Method", self.add_active_card())
+		self.assertFalse(method.mandate_currency)
+		self.assertFalse([v for v in self.readiness.check_mandates_in_billing_currency() if v.team == TEAM])
+
+
 class TestIndianCardMandateSetup(CardTestBase):
 	"""An INR card is saved as a mandate, and the mandate the bank issues is stored
 	so later debits can quote it (ADR 0022)."""

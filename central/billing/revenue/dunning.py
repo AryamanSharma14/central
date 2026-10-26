@@ -134,12 +134,12 @@ def _overdue_message(invoice: str, mode: str | None) -> str:
 
 
 def retry_payment(invoice_name: str) -> dict:
-	"""One dunning retry: charge the next untried method (primary→backup, #28),
-	notified with the reason on failure."""
+	"""One dunning retry: a new collection round, primary→backup (#28), notified with
+	the reason on failure."""
 	from central.billing.payments import collection
 	from central.billing.platform import notifications
 
-	result = collection.collect_invoice(invoice_name)
+	result = collection.collect_invoice(invoice_name, new_round=True)
 	last = frappe.get_all(
 		"Payment Attempt", {"invoice": invoice_name}, order_by="creation desc", limit=1, pluck="name"
 	)
@@ -171,6 +171,39 @@ def _advance_standing(subscription: str, target: str):
 		return current
 
 
+def _retry_if_due(inv, schedule, now, mode: str | None) -> dict | None:
+	"""Run the collection round of the latest retry day reached, once. Returns its result.
+
+	Off-session retries only make sense for an auto-charge mode. Manual Checkout (paid
+	on-session) and Action Required (paused at the ₹15k threshold) are never silently
+	retried; dunning escalates and asks them to act (ADR 0005)."""
+	from central.billing.payments import collection
+
+	if inv.status != "Open" or mode in ("Manual Checkout", "Action Required"):
+		return None
+	if not _is_retry_due(inv.name, schedule, now):
+		return None
+	if not collection.next_method_for(inv.name, inv.team, collection.attempts_of(inv.name)):
+		return None
+	return retry_payment(inv.name)
+
+
+def _is_retry_due(invoice: str, schedule: list, now) -> bool:
+	"""A retry day has been reached and no charge was tried on or after it.
+
+	A run that missed retry days catches up with one round, not one per missed day, so a
+	backlog never charges the same card several times in one run."""
+	days = [
+		s.date
+		for s in schedule
+		if s.stage == "Retry" and frappe.utils.getdate(s.date) <= frappe.utils.getdate(now)
+	]
+	if not days:
+		return False
+	start = frappe.utils.get_datetime(frappe.utils.getdate(days[-1]))
+	return not frappe.db.exists("Payment Attempt", {"invoice": invoice, "creation": [">=", start]})
+
+
 def _active_directive(team: str, field: str) -> bool:
 	"""True if the team's latest token already carries this directive."""
 	name = frappe.db.get_value("Entitlement Token", {"team": team}, "name", order_by="creation desc")
@@ -194,7 +227,8 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 	clock_start = dunning_clock_start(inv)
 	days = (frappe.utils.getdate(now) - frappe.utils.getdate(clock_start)).days
 	policy = dunning_policy()
-	reached = stages_reached(dunning_schedule(clock_start, policy), now)
+	schedule = dunning_schedule(clock_start, policy)
+	reached = stages_reached(schedule, now)
 	if policy.retry_days and "Retry" not in reached:
 		return {"invoice": invoice_name, "days_overdue": days, "action": "none"}
 
@@ -204,19 +238,10 @@ def process_invoice_dunning(invoice_name: str, now=None) -> dict:
 	sub = frappe.get_doc("Subscription", anchor) if anchor else None
 	actions = []
 
-	# --- retries: try the next untried method, if any (escalate, don't repeat,
-	# #28). Once every method has failed there is nothing left to charge, so the
-	# stages below escalate. Credits-only teams (no methods) skip straight there.
-	from central.billing.payments import collection
-
-	# Off-session retries only make sense for an auto-charge mode. Manual Checkout
-	# (customer pays on-session) and Action Required (paused at the ₹15k threshold)
-	# are never silently retried — dunning just escalates and asks them to act
-	# (ADR 0005). Auto Charge and Prepaid retry iff a method exists.
+	# --- retries: one collection round per retry day (escalate, don't repeat, #28).
+	# Credits-only teams (no methods) skip straight to the stages below.
 	mode = _collection_mode(inv.team)
-	auto_charge = mode not in ("Manual Checkout", "Action Required")
-	if inv.status == "Open" and auto_charge and collection.next_method_for(invoice_name, inv.team):
-		retry_payment(invoice_name)
+	if _retry_if_due(inv, schedule, now, mode):
 		actions.append("retry")
 		inv.reload()
 		if inv.status == "Paid":

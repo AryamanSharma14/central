@@ -252,59 +252,56 @@ def _fan_out_emails(
 	server=None,
 	affected_user=None,
 ) -> dict:
-	"""Email each active member who has the event's capability and has email enabled.
+	"""Queue the email to each recipient, sent after the caller's transaction commits.
 
-	For ``direct_recipients = "Affected User"``, only *affected_user* gets the email, without a
-	capability check. Returns ``{"queued": N, "attempted": N, "failed": N}``."""
+	Rendering an email is slow, and the caller often holds a lock on money records, so only the
+	recipients are decided here. Returns ``{"queued": N, "attempted": N, "failed": 0}``: a send
+	fails only later, in the job, and leaves an Error Log there."""
+	recipients = _email_recipients(team, event, server=server, affected_user=affected_user)
+	if recipients:
+		# After commit only: a rollback drops the job, so no mail goes out for a change that never happened.
+		frappe.enqueue(
+			send_notification_emails,
+			queue="short",
+			enqueue_after_commit=True,
+			recipients=recipients,
+			event_type=event.name,
+			ctx=ctx,
+			message=message,
+		)
+	return {"queued": len(recipients), "attempted": len(recipients), "failed": 0}
+
+
+def _email_recipients(team, event, *, server=None, affected_user=None) -> list[str]:
+	"""The users who get this event by email.
+
+	For ``direct_recipients = "Affected User"``, only *affected_user*, without a capability check.
+	Otherwise each active member with the event's capability and email enabled."""
 	from central.iam import can
-
-	result = {"queued": 0, "attempted": 0, "failed": 0}
 
 	if event.direct_recipients == "Affected User":
 		if affected_user and _email_enabled(affected_user, team, event.category):
-			ok = _send_member_email(
-				affected_user,
-				team,
-				event,
-				ctx,
-				message=message,
-				reference_doctype=reference_doctype,
-				reference_name=reference_name,
-			)
-			result["attempted"] = 1
-			if ok:
-				result["queued"] = 1
-			else:
-				result["failed"] = 1
-		return result
+			return [affected_user]
+		return []
 
-	members = _get_active_members(team)
-	if not members:
-		return result
+	return [
+		user
+		for user in _get_active_members(team)
+		if (not event.required_cap or can(user, team, event.required_cap, server=server))
+		and _email_enabled(user, team, event.category)
+	]
 
-	for member_user in members:
-		if event.required_cap and not can(member_user, team, event.required_cap, server=server):
-			continue
 
-		if not _email_enabled(member_user, team, event.category):
-			continue
-
-		result["attempted"] += 1
-		ok = _send_member_email(
-			member_user,
-			team,
-			event,
-			ctx,
-			message=message,
-			reference_doctype=reference_doctype,
-			reference_name=reference_name,
-		)
-		if ok:
-			result["queued"] += 1
-		else:
-			result["failed"] += 1
-
-	return result
+def send_notification_emails(recipients: list[str], event_type: str, ctx: dict, message=None) -> None:
+	"""Background job: render the event's email once and send it to each recipient."""
+	event = get_event_type(event_type)
+	subject, body = _notification_email(event, ctx, message)
+	for user in recipients:
+		try:
+			frappe.sendmail(recipients=[user], subject=subject, message=body)
+		except Exception:
+			# Delivery is best effort, but a failure must leave an error log.
+			frappe.log_error(title=f"Notification email send failed: {event.name} -> {user}")
 
 
 def _get_active_members(team: str) -> list[str]:
@@ -390,22 +387,3 @@ def _get_email_site(team: str, reference_doctype: str, reference_name: str):
 		return None
 
 	return frappe.get_doc("Site", name)
-
-
-def _send_member_email(
-	user, team, event, ctx, *, message=None, reference_doctype=None, reference_name=None
-) -> bool:
-	"""Queue one notification email for *user*. Return False when queuing fails."""
-	subject, body = _notification_email(event, ctx, message)
-
-	try:
-		frappe.sendmail(
-			recipients=[user],
-			subject=subject,
-			message=body,
-		)
-		return True
-	except Exception:
-		# Delivery is best effort, but a failure must leave an error log.
-		frappe.log_error(title=f"Notification email send failed: {event.name} -> {user}")
-		return False

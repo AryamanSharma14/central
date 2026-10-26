@@ -217,7 +217,7 @@ def transition(
 
 
 def _append_event(doc, from_state, to_state, reason, actor, correlation, amount, event_type) -> None:
-	frappe.get_doc(
+	event = frappe.get_doc(
 		{
 			"doctype": "Billing Event",
 			"team": doc.get("team"),
@@ -233,7 +233,9 @@ def _append_event(doc, from_state, to_state, reason, actor, correlation, amount,
 			"reason": reason,
 			"correlation": correlation or doc.name,
 		}
-	).insert(ignore_permissions=True)
+	)
+	# The audit trail is written for whoever moved the document, and its links are copied from it.
+	event.insert(ignore_permissions=True, ignore_links=True)
 
 
 def record_event(doc, event_type: str, from_state=None, to_state=None, reason=None, amount=None) -> None:
