@@ -9,12 +9,11 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-# A Failure Percent of 100 would never hold, because a release is held only above it.
-APP_ROLLOUT_PERCENT_LIMITS = (
+# Pilot reads these steps only as whole percents.
+APP_ROLLOUT_STEP_LIMITS = (
 	("app_rollout_start_percent", 1, 100),
 	("app_rollout_step_percent", 1, 100),
 	("app_rollout_max_percent", 0, 100),
-	("app_rollout_failure_percent", 1, 99),
 )
 
 
@@ -29,12 +28,12 @@ class CentralSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		app_rollout_failure_percent: DF.Int
+		app_rollout_failure_percent: DF.Percent
 		app_rollout_interval_hours: DF.Int
-		app_rollout_max_percent: DF.Int
+		app_rollout_max_percent: DF.Percent
 		app_rollout_minimum_servers: DF.Int
-		app_rollout_start_percent: DF.Int
-		app_rollout_step_percent: DF.Int
+		app_rollout_start_percent: DF.Percent
+		app_rollout_step_percent: DF.Percent
 		central_id: DF.Int
 		common_site_config: DF.JSON | None
 		disk_iops: DF.Int
@@ -107,19 +106,23 @@ class CentralSettings(Document):
 			frappe.throw(_("Common Site Config must fit in {0} bytes.").format(MAXIMUM_METADATA_BYTES))
 
 	def validate_app_rollout(self) -> None:
-		for fieldname, lowest, highest in APP_ROLLOUT_PERCENT_LIMITS:
+		# An empty number field stays None on save.
+		for fieldname, lowest, highest in APP_ROLLOUT_STEP_LIMITS:
 			value = self.get(fieldname)
-			if not lowest <= value <= highest:
+			if value is None or value != int(value) or not lowest <= value <= highest:
 				label = _(self.meta.get_label(fieldname))
-				frappe.throw(
-					_("{0} must be between {1} and {2}, not {3}.").format(label, lowest, highest, value)
-				)
+				frappe.throw(_("{0} must be a whole number from {1} to {2}.").format(label, lowest, highest))
+
+		# A Failure Rate of 100 would never hold, because a release is held only above it.
+		failure_rate = self.app_rollout_failure_percent
+		if failure_rate is None or not 1 <= failure_rate <= 99:
+			label = _(self.meta.get_label("app_rollout_failure_percent"))
+			frappe.throw(_("{0} must be from 1 to 99.").format(label))
 
 		for fieldname in ("app_rollout_interval_hours", "app_rollout_minimum_servers"):
 			value = self.get(fieldname)
-			if value < 1:
-				label = _(self.meta.get_label(fieldname))
-				frappe.throw(_("{0} must be at least 1, not {1}.").format(label, value))
+			if value is None or value < 1:
+				frappe.throw(_("{0} must be at least 1.").format(_(self.meta.get_label(fieldname))))
 
 	def get_common_site_config(self) -> dict:
 		return frappe.parse_json(self.common_site_config or "{}")
@@ -130,10 +133,10 @@ class CentralSettings(Document):
 		from central.central.doctype.app_rollout_hold.app_rollout_hold import AppRolloutHold
 
 		return {
-			"start_percent": self.app_rollout_start_percent,
-			"step_percent": self.app_rollout_step_percent,
+			"start_percent": int(self.app_rollout_start_percent),
+			"step_percent": int(self.app_rollout_step_percent),
 			"interval_hours": self.app_rollout_interval_hours,
-			"max_percent": self.app_rollout_max_percent,
+			"max_percent": int(self.app_rollout_max_percent),
 			"held_commits": AppRolloutHold.get_held_commits(),
 		}
 

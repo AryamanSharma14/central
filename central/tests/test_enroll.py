@@ -100,8 +100,9 @@ class TestEnrollment(IntegrationTestCase):
 		set_request(
 			method="GET", path="/api/method/central.api.pilot.config", headers={"X-Pilot-Token": token}
 		)
+		app_rollout = config()["app_rollout"]
 		self.assertEqual(
-			config()["app_rollout"],
+			app_rollout,
 			{
 				"start_percent": 10,
 				"step_percent": 20,
@@ -110,3 +111,6 @@ class TestEnrollment(IntegrationTestCase):
 				"held_commits": AppRolloutHold.get_held_commits(),
 			},
 		)
+		# A Percent field reads as a float, and Pilot refuses one.
+		for key in ("start_percent", "step_percent", "max_percent"):
+			self.assertIs(type(app_rollout[key]), int)

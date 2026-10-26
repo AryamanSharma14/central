@@ -449,16 +449,16 @@
    "default": "5",
    "description": "Percent of Pilot servers that see a new app update first.",
    "fieldname": "app_rollout_start_percent",
-   "fieldtype": "Int",
-   "label": "Start Percent",
+   "fieldtype": "Percent",
+   "label": "Start At",
    "non_negative": 1
   },
   {
    "default": "5",
    "description": "Percent of Pilot servers added after each interval, until all servers see the update.",
    "fieldname": "app_rollout_step_percent",
-   "fieldtype": "Int",
-   "label": "Step Percent",
+   "fieldtype": "Percent",
+   "label": "Step Size",
    "non_negative": 1
   },
   {
@@ -473,8 +473,8 @@
    "default": "100",
    "description": "Highest percent of Pilot servers that see an update. Set 0 to stop all rollouts.",
    "fieldname": "app_rollout_max_percent",
-   "fieldtype": "Int",
-   "label": "Max Percent",
+   "fieldtype": "Percent",
+   "label": "Stop At",
    "non_negative": 1
   },
   {
@@ -487,8 +487,8 @@
    "default": "20",
    "description": "Hold a release when more than this percent of the servers that updated to it failed.",
    "fieldname": "app_rollout_failure_percent",
-   "fieldtype": "Int",
-   "label": "Failure Percent",
+   "fieldtype": "Percent",
+   "label": "Failure Rate",
    "non_negative": 1
   },
   {
@@ -504,7 +504,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-23 07:20:00.000000",
+ "modified": "2026-10-26 08:00:00.000000",
  "modified_by": "Administrator",
  "module": "Central",
  "name": "Central Settings",
