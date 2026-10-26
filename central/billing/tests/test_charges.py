@@ -263,6 +263,20 @@ class TestChargeInvoice(ChargeTestBase):
 		self.assertEqual(charges.apply_webhook(event)["reason"], "no_matching_attempt")
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
 
+	def test_a_payment_on_another_gateway_settles_nothing(self):
+		"""A transaction id stored for one gateway does not match a payment on another."""
+		from central.billing.tests.test_razorpay_adapter import make_razorpay_gateway
+
+		inv = self._open_invoice(1000)
+		with stub_adapter(success=True, txn_id="pi_other_gateway"):
+			attempt = charges.pay_invoice(inv)["attempt"]
+		frappe.db.set_value("Payment Attempt", attempt, "gateway", make_razorpay_gateway().name)
+
+		event = self._stripe_event("evt_other_gateway", "payment_intent.succeeded", "pi_other_gateway")
+
+		self.assertEqual(charges.apply_webhook(event)["reason"], "no_matching_attempt")
+		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
+
 	def test_a_short_payment_settles_nothing_and_goes_to_the_wallet(self):
 		from central.billing.revenue import credits
 

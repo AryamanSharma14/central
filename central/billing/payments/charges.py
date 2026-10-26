@@ -487,7 +487,7 @@ def apply_webhook(event_name: str) -> dict:
 		_mark_event(event, "Processed")
 		return {"handled": True, "result": "topup_credited", "team": order.team, **result}
 
-	attempt_name = _attempt_for_payment(payment)
+	attempt_name = _attempt_for_payment(payment, event.gateway)
 	if not attempt_name:
 		_mark_event(event, "Ignored")
 		return {"handled": False, "reason": "no_matching_attempt"}
@@ -556,15 +556,18 @@ def apply_webhook(event_name: str) -> dict:
 	return {"handled": True, "result": "paid", "invoice": attempt.invoice, "settled": settled}
 
 
-def _attempt_for_payment(payment) -> str | None:
+def _attempt_for_payment(payment, gateway: str) -> str | None:
 	"""The attempt a payment belongs to: by its transaction, by the order we created for
-	it, or by our own receipt where only we can set it."""
+	it, or by our own receipt where only we can set it. An attempt on another gateway is
+	not found."""
 	for filters in (
 		{"gateway_transaction_id": payment.payment_id},
 		{"gateway_order_id": payment.order_id} if payment.order_id else None,
 		{"name": payment.receipt} if payment.receipt else None,
 	):
-		if filters and (name := frappe.db.get_value("Payment Attempt", filters, "name")):
+		if filters and (
+			name := frappe.db.get_value("Payment Attempt", {**filters, "gateway": gateway}, "name")
+		):
 			return name
 	return None
 
