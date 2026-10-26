@@ -28,8 +28,10 @@ class Site(Document):
 		claimed_at: DF.Datetime | None
 		product: DF.Link | None
 		ready_at: DF.Datetime | None
+		rename_completed_at: DF.Datetime | None
 		rename_diagnostic: DF.Code | None
 		rename_error: DF.SmallText | None
+		rename_status: DF.Literal["", "queued", "running", "success", "failed", "killed"]
 		rename_task: DF.Data | None
 		renamed_at: DF.Datetime | None
 		server: DF.Link
@@ -210,14 +212,14 @@ class Site(Document):
 		)
 
 	def apply_subdomain(self) -> None:
-		"""Apply the customer's primary domain while keeping the internal site name stable."""
-		from central.integrations.pilot import set_site_primary_domain
+		"""Submit the site rename without waiting for Pilot to finish it."""
+		from central.integrations.pilot import rename_site
 
 		if not self.subdomain or self.rename_task:
 			return
 
 		try:
-			task = set_site_primary_domain(self.server, IMAGE_SITE_NAME, self.rename_target)
+			task = rename_site(self.server, IMAGE_SITE_NAME, self.rename_target, make_primary=True)
 		# This worker boundary records every failure so an operator can retry it safely.
 		except Exception:
 			self.record_rename_failure(
@@ -234,7 +236,40 @@ class Site(Document):
 			)
 			return
 
-		self.db_set({"rename_task": task_id, "rename_error": None, "rename_diagnostic": None})
+		self.db_set(
+			{
+				"rename_task": task_id,
+				"rename_status": "queued",
+				"rename_completed_at": None,
+				"rename_error": None,
+				"rename_diagnostic": None,
+			}
+		)
+
+	def record_rename_status(self) -> None:
+		"""Record Pilot's rename outcome without waiting in the signup request."""
+		from central.integrations.pilot import get_task
+
+		if not self.rename_task or self.rename_status not in {"queued", "running"}:
+			return
+		task_id = self.rename_task
+		task = get_task(self.server, task_id)
+
+		updates = {"rename_status": task["status"]}
+		if task["status"] == "success":
+			updates.update(
+				rename_completed_at=frappe.utils.now_datetime(), rename_error=None, rename_diagnostic=None
+			)
+		elif task["status"] in {"failed", "killed"}:
+			updates.update(
+				rename_error=_("Pilot did not complete the site rename. Inspect the task in Pilot."),
+				rename_diagnostic=frappe.as_json(task.get("failure")),
+			)
+		frappe.db.set_value(
+			"Site",
+			{"name": self.name, "rename_task": task_id, "rename_status": ["in", ["queued", "running"]]},
+			updates,
+		)
 
 	def record_rename_failure(self, reason: str, diagnostic: str) -> None:
 		"""Keep a safe reason and the operator diagnostic on the Site."""
@@ -398,6 +433,23 @@ def record_ready_sites() -> None:
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- keep each site's readiness if a later probe fails
 
 
+def poll_site_renames() -> None:
+	"""Record pending rename outcomes without one failed check stopping the rest."""
+	for name in frappe.get_all(
+		"Site",
+		filters={"rename_status": ["in", ["queued", "running"]], "server.status": "Running"},
+		pluck="name",
+	):
+		try:
+			frappe.get_doc("Site", name).record_rename_status()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- preserve each observed outcome
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(
+				title="Could not read Pilot rename task", reference_doctype="Site", reference_name=name
+			)
+
+
 def on_host(url: str, host: str, path: str | None = None) -> str:
 	"""The same request on another host, and on `path` when given. The scheme is always
 	https, because the public name exists only behind the regional proxy, which terminates
@@ -423,5 +475,6 @@ def on_doctype_update():
 	# The fleet reads a team's sites, then drops the machine each one already stands for.
 	frappe.db.add_index("Site", ["team", "server"])
 	frappe.db.add_index("Site", ["product"])
+	frappe.db.add_index("Site", ["rename_status", "modified"])
 	# The daily trial job reads trials by state and the day they end.
 	frappe.db.add_index("Site", ["trial_state", "trial_ends_on"])
