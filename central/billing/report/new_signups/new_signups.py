@@ -21,6 +21,7 @@ from frappe import _
 from frappe.utils import flt
 
 from central.billing.report._currency import split_currency_columns
+from central.billing.report._paging import first_rows
 
 
 def execute(filters: dict | None = None):
@@ -28,7 +29,8 @@ def execute(filters: dict | None = None):
 	columns = get_columns()
 	rows, summary = get_data(filters)
 	columns = split_currency_columns(columns, rows, ["first_payment_amount"])
-	return columns, rows, None, None, summary
+	rows, message = first_rows(rows)
+	return columns, rows, message, None, summary
 
 
 def get_columns() -> list[dict]:

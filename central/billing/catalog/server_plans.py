@@ -6,6 +6,7 @@ import frappe
 
 from central.billing.catalog.composition import (
 	COMPUTE,
+	MEMORY,
 	composition_quantities,
 	parse_vcpu_steps,
 )
@@ -77,6 +78,7 @@ def get_server_plans(
 		"current_spend": current_spend,
 		"available": available,
 		"spend_limit_enforced": is_capped,
+		"included_transfer_gb": frappe.db.get_single_value("Central Settings", "included_transfer_gb"),
 		"capacity": {"gated": False, "available": True, "unmeasured": True, "largest_vm": None},
 	}
 	# A "design your own" config needs the same three things the slider does: the
@@ -121,11 +123,15 @@ def get_server_plans(
 	rates_by_plan = _rates_by_plan(names)
 	includes_by_plan = _includes_by_plan(names)
 
+	floor = _get_trial_plan_floor(exclude_subscription)
+
 	plans = []
 	for p in candidates:
 		rate = resolve_rate(rates_by_plan.get(p.name, []), currency, cluster)
 		if rate is None:
 			continue  # not priced for this currency/cluster → not available here
+		if floor and _is_below(includes_by_plan.get(p.name, []), floor):
+			continue  # smaller than the plan the server's product trial started on
 		# Every team but an internal one is held to its trust-tier headroom, trials included.
 		if is_capped and frappe.utils.flt(rate) > available:
 			continue  # would push the team past its remaining trust-tier headroom
@@ -227,6 +233,18 @@ def _current_run_rate(team: str, exclude: str | None = None) -> float:
 	from central.billing.catalog.subscriptions import team_run_rate
 
 	return team_run_rate(team, exclude=exclude)
+
+
+def _get_trial_plan_floor(subscription: str | None) -> dict | None:
+	from central.signups.trial import get_trial_plan_floor
+
+	server = frappe.db.get_value("Subscription", subscription, "server_id") if subscription else None
+	return get_trial_plan_floor(server) if server else None
+
+
+def _is_below(includes, floor: dict) -> bool:
+	quantities = composition_quantities(includes)
+	return any(quantities.get(resource, 0.0) < floor.get(resource, 0.0) for resource in (COMPUTE, MEMORY))
 
 
 def _plan_row(plan, currency: str, cluster: str | None, rate, includes) -> dict:

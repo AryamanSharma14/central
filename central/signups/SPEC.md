@@ -47,7 +47,7 @@ Central records the site when the region first reports its machine with an addre
 | Active | Central records the site and its creation request is a free trial | Sets Trial Ends On. When the Team added a payment method before Central recorded the site, the site converts at once. |
 | Converted | Central records the site and its creation request is not a free trial | Nothing. The site is not a trial. |
 | Ended | Trial Ends On is reached | Stops the server and sets Trial Deletes On. |
-| Deleted | The server is Terminated: on Trial Deletes On, or when the customer terminates it earlier | On Trial Deletes On, asks for a normal terminate action each day until the server is Terminated. Sets the state when the server is Terminated, so the owner can start a new trial at once. |
+| Deleted | The server is Terminated: on Trial Deletes On, or when the customer terminates it earlier | On Trial Deletes On, asks for a normal terminate action each day until the server is Terminated. A server with termination protection on is kept, and Trial Error says why. Sets the state when the server is Terminated, so the owner can start a new trial at once. |
 
 The `Trial` class in `central/signups/trial.py` owns these states. Every change goes through `Trial.move_to`, which refuses a change that its transition table does not allow. The daily job `central.signups.trial.run_trials` moves each site. It sends each email once and records the last one in Trial Last Notice.
 
@@ -60,6 +60,8 @@ The `Trial` class in `central/signups/trial.py` owns these states. Every change 
 | `trial_deleted` | When the server is terminated. Its button opens the signup page of the same product. |
 | `trial_converted` | When a payment method converts the trial |
 
+The `trial_expiring`, `trial_ended` and `trial_deletion_soon` emails link to the server's Upgrade dialog (`/servers/<server>?action=resize`). That dialog adds a payment method and, for an Ended trial, keeps the site. A payment method added on Billing does not keep an Ended trial.
+
 A Product can add its own paragraph to each email and show its own logo and name. See [Product emails](doctype/product/SPEC.md#emails). These events are in the **Trial** notification category. A user can turn the email or the in-app notice for this category off in their notification settings. Each event goes to the Team members who hold `billing:view`.
 
 A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. To end a trial, Central starts the server and then stops it. An explicit stop keeps the VM down, so traffic does not wake it.
@@ -69,7 +71,7 @@ A trial server usually sleeps when idle, and Atlas does not stop a sleeping VM. 
 | Request | What Central checks |
 |---|---|
 | A trial site from the signup flow, Team that has no payment method and has never paid | The Team's owner has fewer open trial sites (Active or Ended), pending trial site creations, and provisioned trial servers whose site Central has not recorded yet, across all the owner's Teams, than Central Settings, Trial Servers Limit. A new Team gives no new trials. No credit is needed. Otherwise Central refuses with `TRIAL_IN_PROGRESS`, which names the open trial. |
-| Any other server | Credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method or pays by Manual Checkout. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
+| Any other server | A Team with an overdue invoice, or a subscription that is Past Due or Suspended, is refused with `PAYMENT_OVERDUE`. Otherwise credit covers the server's monthly rate, or the billing profile is complete and the Team has an active payment method, or the Team pays by Manual Checkout and has already paid one invoice by gateway. Otherwise Central refuses with `PAYMENT_METHOD_REQUIRED`. With Central Settings, Require Payment Method for Servers off, a complete billing profile is enough. |
 | Start an Ended trial's server | Refused. The Team adds a payment method and then chooses Keep this site, which converts the trial and starts the server. |
 | Resize a trial server | Refused, because a trial server has no subscription. The console resize dialog and the in-app plan list ask for a payment method first. `get_composed_config` returns `trial`, and `billing_api.change_plan` refuses with "Add a payment method to change this site's plan." |
 
@@ -108,15 +110,18 @@ An open trial (Active or Ended) gives the customer the site, not the server. A f
 | Web console, SSH or TTY | `central.integrations.servers.get_console_url` |
 | Pilot sign-in, also "Open server" in the site | `VirtualMachine.get_bench_login_url` |
 | Snapshot, also the final snapshot on terminate | `central.api.snapshots.take_snapshot`, `submit_command` |
+| Termination protection | `VirtualMachine.set_termination_protection` |
 | GitHub connect for the server's Pilot | `GitHubConnectionAttempt.bind` |
 
-A System Manager keeps access. A Team SSH Key sync skips a locked server, so its keys never reach it. A trial server starts with no SSH keys. Site sign-in (`claim_site`, `login_site`) stays open. The console registry returns `is_access_locked` on each server, so the console hides these actions.
+A System Manager keeps access. A Team SSH Key sync skips a locked server, so its keys never reach it. The daily automatic snapshot skips a locked server too. A trial server starts with no SSH keys. Site sign-in (`claim_site`, `login_site`) stays open. The console registry returns `is_access_locked` on each server, so the console hides these actions.
 
 `central.api.pilot.get_server_access` returns `is_locked` for the server of the calling Pilot credential. It is for Pilot, which must refuse the site's config edits and config downloads while the server is locked. A credential whose server is not linked yet reads as locked.
 
+A team with a locked server also gets no LLM and no object storage, because both cost money. `central.signups.access.require_service_access` refuses `enable_ai` and `create_bucket`, the only ways in. The console shows the refusal message. A System Manager keeps access.
+
 ### Console
 
-`central.billing.api.dashboard.account.get_billing_profile` returns `payment_method_required` and `welcome_credit` (`amount`, `currency`, `validity_days`, or null when the owner already had it). When a payment method is required, the New Server page shows a note and disables Create. Its **Add payment method** button opens the billing details dialog when they are missing, then the payment method dialog, on the same page. The welcome credit offer needs a billing currency, and the currency comes from the country (India pays in INR, every other country in USD). So the onboarding payment step asks for the billing country first and saves it to the billing profile. It fills India when the browser time zone is in India. It then names the welcome credit in that currency, says that adding a payment method does not charge it, and opens the same two dialogs, with the country already filled. On Billing, the main action for a new team is **Add card**. **Add credit** on the Wallet row tops up the prepaid wallet.
+`central.billing.api.dashboard.account.get_billing_profile` returns `payment_method_required` and `welcome_credit` (`amount`, `currency`, `validity_days`, or null when the owner already had it). It also returns `open_trial`: the team's own oldest open trial (`state`, `server`, `product`, `product_title`, `plan`), or null. `server` is null for a caller without `server:view`. The Billing page and the onboarding payment step show it: an Active trial converts when the payment method is added, and an Ended trial is kept only from the Upgrade dialog. When a payment method is required, the New Server page shows a note and disables Create. Its **Add payment method** button opens the billing details dialog when they are missing, then the payment method dialog, on the same page. The welcome credit offer needs a billing currency, and the currency comes from the country (India pays in INR, every other country in USD). So the onboarding payment step asks for the billing country first and saves it to the billing profile. It fills India when the browser time zone is in India. It then names the welcome credit in that currency, says that adding a payment method does not charge it, and opens the same two dialogs, with the country already filled. On Billing, the main action for a new team is **Add card**. **Add credit** on the Wallet row tops up the prepaid wallet.
 
 ### Billing and conversion
 
@@ -128,15 +133,23 @@ Central converts the Active trials one at a time, oldest first. Each one must fi
 
 A site becomes Converted in these steps:
 
-1. Central records Trial Cost: the plan's monthly rate from the creation request, divided by 30, for each day since Central recorded the site.
+1. Central records Trial Cost: the plan's monthly rate, divided by 30, for each day since Central recorded the site.
 2. A running or sleeping server gets its subscription now. A stopped server gets it when it starts. Until then, `get_composed_config` returns `starting`, and the console resize dialog says the server is starting on its paid plan and checks again.
 3. A background job turns idle sleep off in Atlas, and starts the server when it is Stopped. When the team pays while the trial's stop job runs, the stop job queues this job again, so the server does not stay stopped. When a resize of the server is pending, the job writes a Trial Error and stops, because both jobs change the server's power. The daily job sends the conversion again.
 
+A trial is priced at its plan's catalog rate in the team's currency and the server's region, which is the rate its subscription charges. The rate reserved on the creation request is not its price: the customer accepted no quote at signup, the currency at signup is a guess before the billing profile exists, and a subscription keeps its opening rate. The spending-limit check, the rate held for a starting server, Trial Cost and the Upgrade dialog all use this one rate (`Trial.get_monthly_rate`).
+
+After conversion, the plan menus of the server (console resize and in-app Change plan) leave out every plan with less vCPU or memory than the plan the trial was created on, because the product site needs at least that much (`get_trial_plan_floor`).
+
 A Deleted trial is not converted, because its server is gone. Its Trial Cost runs to Trial Ends On.
+
+### Upgrade dialog
+
+The console's Upgrade dialog on a trial server names the plan and its monthly rate before the customer adds a payment method. After the payment method is added, the dialog checks the trial again every 5 seconds for 2 minutes. An Active trial converts on its own plan, and the dialog then shows the resize plans under a heading that names the plan, for example "You're on the Starter plan", so the customer can choose a bigger size or close the dialog. An Ended trial is only kept: **Keep this site** starts the server on its own plan, and the resize plans show when the server runs.
 
 ### In-app status
 
-`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left` and `deletes_on`. It is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
+`central.billing.api.billing_api.get_billing_summary` returns `trial` for the site on the calling server: `state` (Active or Ended), `can_keep` (Ended, the Team has an active payment method, and the caller has `billing:manage`), `held` (Active, and the Team has an active payment method, so the spending limit holds it), `ends_on`, `days_left`, `deletes_on` and `plan`. `plan` is the plan the site converts to: `title`, `monthly_rate` (the plan's catalog rate in the team's currency and the server's region, which the subscription charges) and `currency`, or null when the site has no creation request. `trial` is null when the site has no open trial. The in-app billing panel shows it. On a server with several sites, the caller passes `site`, the Site's name. Without it, Central refuses the call.
 
 ### Desk
 
@@ -145,3 +158,7 @@ On a Site with an open trial, a System Manager has a **Trial** menu: **Extend Tr
 ### Failure
 
 When a stop, a terminate, or the conversion job fails, Central writes the reason in Trial Error on the Site and an Error Log, and the daily job tries again the next day. The daily job includes Converted sites that have a Trial Error. While a trial is Ended and its server is not Stopped, the daily job sends the stop again.
+
+### Operator alerts
+
+`central.signups.alerts.alert_failed_signups` runs every hour. When a signup site creation became Failed or Timed Out in the last hour, it sends one message that lists them, through the operator alert channel in Billing Settings (Raven, or email as a fallback). A signup should never fail, so one failure is enough. The check adds nothing to the signup path.

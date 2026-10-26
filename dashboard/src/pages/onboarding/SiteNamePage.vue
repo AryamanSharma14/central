@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Button, ErrorMessage, LoadingIndicator, TextInput } from 'frappe-ui'
+import { Button, LoadingIndicator, TextInput } from 'frappe-ui'
 import { onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { API } from '@/api/methods'
+import AuthErrorMessage from '@/components/auth/AuthErrorMessage.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import ProductLogo from '@/components/auth/ProductLogo.vue'
 import OpenTrialCard from '@/components/onboarding/OpenTrialCard.vue'
@@ -240,7 +241,12 @@ async function createSite() {
 					:loading="creating"
 					:disabled="creating || !requestKey || !availability?.available"
 				/>
-				<ErrorMessage v-if="error" :message="error" />
+				<AuthErrorMessage
+					v-if="error"
+					:message="error"
+					page="Name your site"
+					:context="{ Product: product?.title }"
+				/>
 			</form>
 		</template>
 	</AuthShell>

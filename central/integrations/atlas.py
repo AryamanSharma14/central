@@ -8,6 +8,7 @@ from urllib.parse import quote, urlsplit
 import frappe
 import requests
 from frappe import _
+from frappe.monitor import get_trace_id
 
 from central.errors import AtlasConnectionError, AtlasRejected, AtlasRequestUncertain, AtlasResourceGone
 from central.iam import can, user_has_operator_bypass
@@ -389,6 +390,8 @@ class AtlasClient:
 		headers = {
 			"Authorization": f"Bearer {token}",
 			"X-Tenant-ID": str(self.tenant_id),
+			# Atlas logs under the same trace ID as Central's Error Log. Requests drops it when None.
+			"X-Frappe-Request-Id": get_trace_id(),
 			"Accept": "application/json",
 		}
 

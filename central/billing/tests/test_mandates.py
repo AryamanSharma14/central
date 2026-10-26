@@ -29,10 +29,26 @@ def make_gateway():
 	make_razorpay_gateway([("INR", 1)])
 
 
+# The Checkout callback for the authorisation order a setup opened.
+CALLBACK = {
+	"razorpay_order_id": "order_mandate",
+	"razorpay_payment_id": "pay_mandate",
+	"razorpay_signature": "s",
+}
+
+
 @contextmanager
-def stub_adapter(signature_ok=True):
-	"""Replace the resolved GatewayAdapter with a mock so no SDK is touched."""
+def stub_adapter(signature_ok=True, token="token_live", payment=None):
+	"""Replace the resolved GatewayAdapter with a mock so no SDK is touched. The
+	authorisation payment Razorpay holds carries `token`."""
 	adapter = MagicMock()
+	adapter.get_payment.return_value = payment or {
+		"id": "pay_mandate",
+		"order_id": "order_mandate",
+		"status": "captured",
+		"token_id": token,
+		"customer_id": "cust_x",
+	}
 	adapter.setup_payment_method.return_value = {
 		"order_id": "order_mandate",
 		"customer_id": "cust_x",
@@ -79,11 +95,40 @@ class TestMandateSetup(MandateTestBase):
 			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
 			method = mandates.confirm_mandate(
 				result["payment_method"],
-				{"razorpay_token_id": "token_live", "razorpay_signature": "s"},
+				CALLBACK,
 			)
 		self.assertEqual(method.status, "Active")
 		self.assertEqual(method.gateway_method_id, "token_live")
 		self.assertTrue(method.validated_at)
+
+	def test_a_token_from_the_browser_is_never_stored(self):
+		with stub_adapter(token="token_from_razorpay"):
+			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
+			method = mandates.confirm_mandate(
+				result["payment_method"], {**CALLBACK, "razorpay_token_id": "forged"}
+			)
+		self.assertEqual(method.gateway_method_id, "token_from_razorpay")
+
+	def test_a_callback_for_another_order_fails(self):
+		with stub_adapter():
+			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
+			with self.assertRaises(frappe.ValidationError):
+				mandates.confirm_mandate(
+					result["payment_method"], {**CALLBACK, "razorpay_order_id": "order_other"}
+				)
+		self.assertEqual(frappe.db.get_value("Payment Method", result["payment_method"], "status"), "Failed")
+
+	def test_a_payment_without_a_token_fails(self):
+		payment = {
+			"id": "pay_mandate",
+			"order_id": "order_mandate",
+			"status": "captured",
+			"customer_id": "cust_x",
+		}
+		with stub_adapter(payment=payment):
+			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
+			with self.assertRaises(frappe.ValidationError):
+				mandates.confirm_mandate(result["payment_method"], CALLBACK)
 
 	def test_confirm_invalid_signature_fails(self):
 		with stub_adapter(signature_ok=False):
@@ -100,7 +145,7 @@ class TestMandateReauthorisation(MandateTestBase):
 			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
 			mandates.confirm_mandate(
 				result["payment_method"],
-				{"razorpay_token_id": "token_live", "razorpay_signature": "s"},
+				CALLBACK,
 			)
 		return result["payment_method"]
 
@@ -119,14 +164,14 @@ class TestMandateReauthorisation(MandateTestBase):
 		pm = self._active_mandate()
 		recompute_trust_tier(TEAM, paid_invoice_count=3, cumulative_paid=300)  # cap 300
 
-		with stub_adapter(signature_ok=True):
+		with stub_adapter(signature_ok=True, token="token_new"):
 			reauth = mandates.reauthorise_mandate(pm)
 			# New mandate order is requested at the raised cap.
 			new_method = frappe.get_doc("Payment Method", reauth["payment_method"])
 			self.assertEqual(new_method.mandate_max_amount, 300)
 			mandates.confirm_mandate(
 				reauth["payment_method"],
-				{"razorpay_token_id": "token_new", "razorpay_signature": "s"},
+				CALLBACK,
 			)
 
 		# Old mandate retired, new ceiling effective, no outstanding re-auth.
@@ -150,7 +195,7 @@ class TestMandateCancel(MandateTestBase):
 			result = mandates.setup_mandate(TEAM, GATEWAY, customer_id="cust_x")
 			mandates.confirm_mandate(
 				result["payment_method"],
-				{"razorpay_token_id": "token_live", "razorpay_signature": "s"},
+				CALLBACK,
 			)
 			mandates.cancel_mandate(result["payment_method"])
 			adapter.cancel_mandate.assert_called_once_with("token_live", customer_reference="cust_x")

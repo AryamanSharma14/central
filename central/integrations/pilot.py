@@ -52,10 +52,16 @@ def get_bootstrap_metadata(action) -> dict[str, str]:
 		common_site_config |= mailbox.get_site_config()
 	metadata["pilot-common-site-config"] = json.dumps(common_site_config)
 
+	common_config = {}
+	if action.requested_by:
+		if email := frappe.db.get_value("User", action.requested_by, "email"):
+			common_config["letsencrypt"] = {"email": email}
 	try:
-		metadata["pilot-common-config"] = json.dumps({"telemetry": get_telemetry_configuration(action)})
+		common_config["telemetry"] = get_telemetry_configuration(action)
 	except Exception:
 		action.record_diagnostic(frappe.get_traceback(), "Pilot telemetry configuration failed")
+	if common_config:
+		metadata["pilot-common-config"] = json.dumps(common_config)
 
 	return metadata
 
@@ -83,9 +89,10 @@ def fetch_site_login_url(
 	full_name: str | None = None,
 ) -> str | None:
 	"""Relay a Central-signed site assertion to the bench's login endpoint and return the desk
-	URL it mints (a fresh local session) for `user`, or Administrator. A 401 is retryable while
-	Pilot finishes starting. A 404 means the bench has no site by that name. Other failures
-	return None and are logged so a consistently-failing bench or Central is diagnosable."""
+	URL it mints (a fresh local session) for `user`, or Administrator. A 401 while Pilot finishes
+	starting, a rate limit, and a busy or unreachable machine are retryable. A 404 means the bench
+	has no site by that name. Other failures return None and are logged so a consistently-failing
+	bench or Central is diagnosable."""
 	try:
 		token = mint_site_login(audience_id, site, user, full_name)
 		response = requests.post(
@@ -94,7 +101,9 @@ def fetch_site_login_url(
 			timeout=SITE_LOGIN_TIMEOUT_SECONDS,
 			allow_redirects=False,
 		)
-		if response.status_code == 401:
+		# A small machine can time out the login it mints while it is busy. Minting again only
+		# starts another session, so these are safe to retry.
+		if response.status_code in (401, 429) or response.status_code >= 500:
 			raise PilotLoginPending
 		if response.status_code == 404:
 			return None
@@ -103,6 +112,8 @@ def fetch_site_login_url(
 		url = payload.get("url") if isinstance(payload, dict) else None
 	except PilotLoginPending:
 		raise
+	except (requests.ConnectionError, requests.Timeout):
+		raise PilotLoginPending from None
 	except Exception:  # minting (signing key / DB / encode) must also fall back, not 500
 		frappe.log_error(
 			title=f"Site login relay failed: {site}",
@@ -142,6 +153,18 @@ def rename_admin_domain(server: str, base_url: str | None = None, tls: bool = Tr
 	payload = {"domain": urlparse(expected).hostname, "tls": tls}
 
 	return _request_pilot("POST", server, base_url or expected, "/api/v1/settings/admin-domain", payload)
+
+
+def set_site_primary_domain(server: str, site: str, domain: str) -> dict:
+	"""Attach the customer's primary domain without moving the site's directory."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	return _request_pilot(
+		"POST",
+		server,
+		base_url,
+		f"/api/v1/sites/{quote(site, safe='')}/domains",
+		{"domain": domain, "primary": True},
+	)
 
 
 def rename_site(
@@ -196,6 +219,17 @@ def get_site_task(server: str, site: str, task_id: str) -> dict:
 	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
 	path = f"/api/v1/sites/{quote(site, safe='')}/tasks/{quote(task_id, safe='')}"
 	return _request_pilot("GET", server, base_url, path)
+
+
+def get_task(server: str, task_id: str) -> dict:
+	"""Read a bench task even after its site's directory has moved."""
+	base_url = _expected_gateway_url(frappe.get_doc("Virtual Machine", server))
+	task = _request_pilot("GET", server, base_url, f"/api/v1/tasks/{quote(task_id, safe='')}")
+	if not isinstance(task, dict) or task.get("task_id") != task_id:
+		raise ValueError("Pilot returned a different task.")
+	if task.get("status") not in {"queued", "running", "success", "failed", "killed"}:
+		raise ValueError("Pilot returned an invalid task status.")
+	return task
 
 
 def _expected_gateway_url(server) -> str:

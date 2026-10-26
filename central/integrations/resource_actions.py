@@ -478,18 +478,36 @@ def is_final_snapshot_ready(action, server: VirtualMachine, client: AtlasClient)
 	return False
 
 
+REFRESH_RETRY_SECONDS = 15
+
+
 def recover_requests() -> None:
 	"""Recover lost queue deliveries, and settle creations the region never answered.
 
 	Nothing here repeats a create: an accepted machine is read, and an unanswered request
 	is looked up by its action marker."""
-	cutoff = frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-3)
-	names = frappe.get_all(
+	now = frappe.utils.now_datetime()
+	stalled = frappe.get_all(
 		"Resource Action",
-		filters={"modified": ("<", cutoff), "status": ("in", PENDING_STATES)},
+		filters={
+			"modified": ("<", frappe.utils.add_to_date(now, minutes=-3)),
+			"status": ("in", PENDING_STATES),
+		},
 		order_by="modified asc",
 		limit=100,
 		pluck="name",
 	)
-	for name in names:
+	# A failed read only observes the region, so it is retried soon instead of after the stall cutoff.
+	refresh_due = frappe.get_all(
+		"Resource Action",
+		filters={
+			"modified": ("<", frappe.utils.add_to_date(now, seconds=-REFRESH_RETRY_SECONDS)),
+			"status": ("in", PENDING_STATES),
+			"error_code": "REFRESH_FAILED",
+		},
+		order_by="modified asc",
+		limit=100,
+		pluck="name",
+	)
+	for name in dict.fromkeys(stalled + refresh_due):
 		frappe.get_doc("Resource Action", name).enqueue()

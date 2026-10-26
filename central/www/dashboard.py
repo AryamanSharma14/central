@@ -19,7 +19,9 @@ def get_context(context):
 	boot = context.boot or frappe._dict()
 	boot["csrf_token"] = get_csrf_token()
 	boot["user_type"] = getattr(frappe.session.data, "user_type", None)
-	boot["features"] = frappe.get_cached_doc("Central Settings").feature_flags()
+	settings = frappe.get_cached_doc("Central Settings")
+	boot["features"] = settings.feature_flags()
+	boot["help_links"] = settings.help_links()
 	boot["invitation_expiry_days"] = get_expiry_days()
 	boot.update(build_auth_context())
 	# Development benches expose Socket.IO directly; production proxies it.

@@ -83,7 +83,7 @@ async function openControls(
 async function openResize(page: Page): Promise<void> {
 	await page.getByRole('button', { name: 'Resize server', exact: true }).click()
 	await expect(
-		page.getByRole('radio', { name: 'Keep 25 GB disk' }),
+		page.getByRole('radio', { name: 'Keep current 25 GB disk size' }),
 	).toBeVisible()
 }
 
@@ -247,7 +247,7 @@ test('resize controls fit a narrow screen', async ({ page }, testInfo) => {
 	await openControls(page)
 	await openResize(page)
 	await expect(
-		page.getByRole('radio', { name: 'Keep 25 GB disk' }),
+		page.getByRole('radio', { name: 'Keep current 25 GB disk size' }),
 	).toBeVisible()
 	await page.getByRole('button', { name: /0.125 vCPU/ }).click()
 	await page

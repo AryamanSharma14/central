@@ -1,5 +1,6 @@
 import type { DropdownOption, DropdownOptions } from 'frappe-ui'
 import type { VirtualMachineRow } from '@/composables/useServers'
+import { useSupport } from '@/composables/useSupport'
 import { ACCESS_LOCKED_REASON, type ServerActions } from '@/lib/capabilities'
 import { copyToClipboard } from '@/lib/clipboard'
 import { reportError, successToast } from '@/lib/feedback'
@@ -20,8 +21,8 @@ export type ServerMenuVerb =
 	| 'terminate'
 
 export interface ServerMenuOptions {
-	/** This machine carries a site. Open goes to that site, not the bench. */
-	opensSite?: boolean
+	/** The address of the site this machine carries. Open goes to that site, not the bench. */
+	site?: string | null
 	/** The caller shows Overview and Open itself, and its Settings tab offers Resize
 	 *  and Terminate, as on the server page. */
 	isOnServerPage?: boolean
@@ -68,6 +69,7 @@ export function getServerMenuGroups(
 				icon: 'lucide-copy',
 				onClick: () => copyServerId(server),
 			},
+			...getSupportItems(server, options.site),
 		],
 		isChangeable && allowed.terminate && !options.isOnServerPage
 			? [{ ...entry('terminate', 'Terminate', 'lucide-trash-2'), theme: 'red' }]
@@ -113,8 +115,9 @@ function getViewItems(
 	server: VirtualMachineRow,
 	allowed: ServerActions,
 	entry: Entry,
-	{ opensSite, isOnServerPage }: ServerMenuOptions,
+	{ site, isOnServerPage }: ServerMenuOptions,
 ): DropdownOption[] {
+	const opensSite = !!site
 	const isRunning = server.status === 'Running'
 	const isBusy = !!server.pending_action
 	const canOpen = allowed.open && !isBusy && !isSettingUp(server.status)
@@ -178,10 +181,15 @@ function lockable(
 ): DropdownOption[] {
 	if (!isServerAccess || !allowed.isAccessLocked) return [option]
 
+	// A locked row has nothing to open, so it drops its submenu and the chevron with it.
+	const { submenu: _submenu, ...row } = option as DropdownOption & {
+		submenu?: unknown
+	}
+
 	// Every menu row takes a description, but the option union does not say so.
 	return [
 		{
-			...option,
+			...row,
 			disabled: true,
 			description: ACCESS_LOCKED_REASON,
 		} as DropdownOption,
@@ -226,6 +234,20 @@ function getChangeItems(
 		)
 
 	return items
+}
+
+function getSupportItems(
+	server: VirtualMachineRow,
+	site: string | null | undefined,
+): DropdownOption[] {
+	const reference = server.title
+		? `${server.title} (${server.resource_id})`
+		: server.resource_id
+	const option = useSupport().getContactSupportOption({
+		Server: reference,
+		Site: site,
+	})
+	return option ? [option] : []
 }
 
 // One line support can paste into a ticket to find the VM in Central and in Atlas.

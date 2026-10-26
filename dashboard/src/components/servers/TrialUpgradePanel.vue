@@ -7,7 +7,7 @@ import EditBillingProfileDialog from '@/components/billing/EditBillingProfileDia
 import { useBillingSetup } from '@/composables/useBillingSetup'
 import { useSession } from '@/composables/useSession'
 import { getErrorMessage } from '@/lib/feedback'
-import { formatDate, plural } from '@/lib/format'
+import { formatDate, money, plural } from '@/lib/format'
 import type { ServerTrial } from '@/types/billing'
 
 interface Props {
@@ -31,19 +31,31 @@ const title = computed(() =>
 		: `Your free trial ends in ${plural(props.trial.days_left, 'day')}`,
 )
 
+const planName = computed(() =>
+	props.trial.plan ? `the ${props.trial.plan.title} plan` : 'its paid plan',
+)
+
 const description = computed(() => {
 	if (props.trial.state !== 'Ended' || !props.trial.deletes_on)
-		return 'Add a payment method to keep this site and choose a bigger plan.'
+		return `Add a payment method to keep this site on ${planName.value}. You can choose a bigger plan next.`
 	const deletesOn = formatDate(props.trial.deletes_on)
 	return props.trial.can_keep
-		? `This site is stopped. Keep it before ${deletesOn} to start it again on its paid plan.`
-		: `This site is stopped. Add a payment method before ${deletesOn} to keep it and choose a plan.`
+		? `This site is stopped. Keep it before ${deletesOn} to start it again on ${planName.value}.`
+		: `This site is stopped. Add a payment method before ${deletesOn} to keep it on ${planName.value}.`
+})
+
+const price = computed(() => {
+	const plan = props.trial.plan
+	if (!plan?.currency || !plan.monthly_rate) return null
+	return money(plan.monthly_rate, plan.currency, { trimTrailingZeros: true })
 })
 
 const facts = computed(() => [
 	{
 		icon: 'lucide-credit-card',
-		text: 'We charge this card for your monthly bill.',
+		text: price.value
+			? `Billing starts today at ${price.value} a month. We charge this card with your monthly invoice.`
+			: 'We charge this card for your monthly bill.',
 	},
 	{
 		icon: 'lucide-shield-check',

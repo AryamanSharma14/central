@@ -166,50 +166,63 @@ def _discard_abandoned_setups(team: str, gateway: str):
 		frappe.delete_doc("Payment Method", name, ignore_permissions=True, force=True)
 
 
-def confirm_payment_method(
-	payment_method: str,
-	gateway_method_id: str,
-	display_label: str | None = None,
-	expiry_month: int | None = None,
-	expiry_year: int | None = None,
-	gateway_customer_id: str | None = None,
-	gateway_mandate_id: str | None = None,
-	card_network: str | None = None,
-) -> dict:
-	"""Confirm a card the customer authorised on the frontend.
+class CardNotSaved(frappe.ValidationError):
+	"""The gateway has not saved the card for this setup yet."""
 
-	Stores the gateway method handle, then runs the micro-charge + auto-refund
-	validation. The method becomes `active` only on a successful micro-charge;
-	a failure (or decline) leaves it `failed`. The first active method for a
-	team becomes its default.
+
+def confirm_payment_method(payment_method: str) -> Document:
+	"""Confirm a card the customer saved at the gateway.
+
+	1. The card is read from the gateway by the setup Central stored for this method;
+	   nothing the browser sends decides the card, its label, its expiry or its mandate.
+	2. A card saved to another gateway customer fails the method.
+	3. The micro-charge validation runs; the method becomes Active only on success, and
+	   the first active method for a team becomes its default.
 	"""
 	method = frappe.get_doc("Payment Method", payment_method)
-	method.gateway_method_id = gateway_method_id
-	if gateway_customer_id:
-		method.gateway_customer_id = gateway_customer_id
-	if gateway_mandate_id:
-		method.gateway_mandate_id = gateway_mandate_id
-	if card_network:
-		# What the gateway reported the card to be. We never read the number ourselves.
-		method.card_network = card_network.title()
-	if display_label:
-		method.display_label = display_label
-	if expiry_month:
-		method.expiry_month = expiry_month
-	if expiry_year:
-		method.expiry_year = expiry_year
+	card = _adapter(method.gateway).read_saved_card(method.setup_reference) if method.setup_reference else {}
+	if not card:
+		frappe.throw(_("The card has not been saved yet. Finish adding it, then try again."), CardNotSaved)
+	if _is_saved_to_another_customer(card, method):
+		return _fail_method(method, "card saved to another gateway customer")
+
+	method.update(_saved_card_fields(card, method))
 	method.save(ignore_permissions=True)
 
 	if not _adapter(method.gateway).validate_payment_method(method):
-		transition(method, "Failed", actor=frappe.session.user, reason="validation failed")
-		method.save(ignore_permissions=True)
-		return method
+		return _fail_method(method, "validation failed")
 
 	transition(method, "Active", actor=frappe.session.user)
 	method.validated_at = frappe.utils.now_datetime()
 	method.save(ignore_permissions=True)
 	densify_priorities(method.team)
 	method.reload()  # pick up priority / is_default set by densify
+	return method
+
+
+def _is_saved_to_another_customer(card: dict, method) -> bool:
+	return bool(
+		card.get("customer") and method.gateway_customer_id and card["customer"] != method.gateway_customer_id
+	)
+
+
+def _saved_card_fields(card: dict, method) -> dict:
+	"""The method's card fields, as the gateway saved the card."""
+	brand = card.get("brand")
+	return {
+		"gateway_method_id": card["payment_method"],
+		"gateway_mandate_id": card.get("mandate") or method.gateway_mandate_id,
+		"card_network": brand,
+		"display_label": f"{brand or 'Card'} ···· {card['last4']}" if card.get("last4") else brand,
+		"expiry_month": card.get("exp_month"),
+		"expiry_year": card.get("exp_year"),
+	}
+
+
+def _fail_method(method, reason: str) -> Document:
+	transition(method, "Failed", actor=frappe.session.user, reason=reason)
+	# Only billing code changes a method's status; the caller checked billing:manage.
+	method.save(ignore_permissions=True)
 	return method
 
 
@@ -332,3 +345,55 @@ def expire_payment_methods(now=None) -> dict:
 				reference_name=m.name,
 			)
 	return {"expired": expired}
+
+
+def apply_payment_method_event(event_name: str) -> dict:
+	"""Record a card event from the gateway on the Payment Method it is about.
+
+	A card detached at the gateway can no longer be charged, so it is cancelled and
+	drops out of the charge order. A failed card setup is only noted on the card: the
+	customer can retry on the same setup, so one failed try does not fail the card.
+	"""
+	from central.billing.payments import charges
+
+	event = frappe.get_doc("Webhook Event", event_name)
+	payload = frappe.parse_json(event.raw_payload) if event.raw_payload else {}
+	gateway_object = (payload.get("data") or {}).get("object") or {}
+	is_detached = event.event_type == "payment_method.detached"
+	reference = "gateway_method_id" if is_detached else "setup_reference"
+	method = (
+		frappe.db.get_value(
+			"Payment Method", {"gateway": event.gateway, reference: gateway_object["id"]}, "name"
+		)
+		if gateway_object.get("id")
+		else None
+	)
+	if not method:
+		charges._mark_event(event, "Ignored")
+		return {"handled": False, "reason": "no_matching_method"}
+
+	event.payment_method = method
+	result = _cancel_detached(method) if is_detached else _note_setup_failure(method, gateway_object)
+	charges._mark_event(event, "Processed")
+	return {"handled": True, "result": result, "payment_method": method}
+
+
+def _cancel_detached(payment_method: str) -> str:
+	method = frappe.get_doc("Payment Method", payment_method, for_update=True)
+	if method.status not in ("Active", "Paused"):
+		return method.status
+
+	transition(method, "Cancelled", actor="webhook", reason="detached at the gateway")
+	method.is_default = 0
+	method.save(ignore_permissions=True)
+	densify_priorities(method.team)
+	return "Cancelled"
+
+
+def _note_setup_failure(payment_method: str, setup_intent: dict) -> str:
+	error = setup_intent.get("last_setup_error") or {}
+	reason = error.get("message") or error.get("code") or "no reason given"
+	frappe.get_doc("Payment Method", payment_method).add_comment(
+		"Info", f"Card setup failed at the gateway: {reason}"
+	)
+	return "noted"

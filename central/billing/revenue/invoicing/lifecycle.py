@@ -46,6 +46,8 @@ def open_and_collect(invoice: str, collect: bool = True) -> dict:
 		return {"invoice": invoice, "claimed": False}
 
 	doc = frappe.get_doc("Invoice", invoice)
+	# The run changes only status and amounts; the links were checked when it was drafted.
+	doc.flags.ignore_links = True
 
 	# A billable draft waits until it can become a correct statutory invoice. Whatever
 	# clears the hold releases it; the monthly run picks up anything a release missed.

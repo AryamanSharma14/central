@@ -42,8 +42,8 @@ class VirtualMachine(Document):
 
 		from central.infrastructure.doctype.server_ssh_key.server_ssh_key import ServerSSHKey
 
+		admin_domain_diagnostic: DF.Code | None
 		admin_domain_error: DF.SmallText | None
-		admin_domain_error_log: DF.Link | None
 		admin_domain_task: DF.Data | None
 		atlas_image_id: DF.Data | None
 		atlas_host_id: DF.Data | None
@@ -407,6 +407,7 @@ class VirtualMachine(Document):
 		self.require_live()
 		replace_server_ssh_keys(self, key_names, resolve_team_ssh_keys(self.team, key_names))
 
+	@requires_server_access
 	def set_termination_protection(self, enabled: bool) -> None:
 		"""Turn termination protection on or off. The region refuses to terminate a protected server."""
 		from central.integrations.servers import set_termination_protection
@@ -485,7 +486,7 @@ class VirtualMachine(Document):
 				{
 					"admin_domain_task": task_id,
 					"admin_domain_error": None,
-					"admin_domain_error_log": None,
+					"admin_domain_diagnostic": None,
 				}
 			)
 		else:
@@ -497,13 +498,8 @@ class VirtualMachine(Document):
 
 	def record_admin_domain_failure(self, reason: str, title: str, diagnostic: str) -> None:
 		"""Keep the admin-hostname failure beside the server a Desk operator opens."""
-		error_log = self.log_error(title=title, message=diagnostic)
-		self.db_set(
-			{
-				"admin_domain_error": reason,
-				"admin_domain_error_log": error_log.name,
-			}
-		)
+		self.log_error(title=title, message=diagnostic)
+		self.db_set({"admin_domain_error": reason, "admin_domain_diagnostic": f"{title}\n\n{diagnostic}"})
 
 	def is_newer_report(self, reported_at) -> bool:
 		"""True when `reported_at` is newer than the last applied report. A missing

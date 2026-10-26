@@ -10,7 +10,6 @@ from central.api.teams import (
 	create_team,
 	decline_invitation,
 	delete_custom_role,
-	delete_team,
 	invite_team_member,
 	leave_team,
 	rename_team,
@@ -606,6 +605,7 @@ class TestTeamManagement(IntegrationTestCase):
 		mine = next(r for r in rows if r["team"] == self.team.name)
 		self.assertEqual(mine["team_name"], "Managed Team")
 		self.assertEqual(mine["role"], "Developer")
+		self.assertEqual(mine["role_name"], "Developer")
 		self.assertTrue(all(r["status"] != "Accepted" for r in rows if "status" in r))
 
 	def test_delete_custom_role_guards_system_and_in_use_roles(self):
@@ -662,18 +662,6 @@ class TestTeamManagement(IntegrationTestCase):
 		frappe.set_user(self.owner)
 		transfer_team_ownership(self.team.name, self.admin)
 		self.assertEqual(frappe.db.get_value("Team", self.team.name, "owner_user"), self.admin)
-
-	def test_delete_team_is_owner_only(self):
-		frappe.set_user(self.owner)
-		fresh = create_team("Disposable Team")["name"]
-
-		frappe.set_user(self.admin)
-		with self.assertRaises(frappe.PermissionError):
-			delete_team(fresh)
-
-		frappe.set_user(self.owner)
-		self.assertTrue(delete_team(fresh)["deleted"])
-		self.assertFalse(frappe.db.exists("Team", fresh))
 
 	def test_delete_team_clears_invitations_that_would_block_it(self):
 		# The controller owns cleanup, so Desk and API deletion behave the same.

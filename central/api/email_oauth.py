@@ -1,6 +1,6 @@
 """Connect a mailbox in one click on a V2 site, for any OAuth mail provider in PROVIDERS.
 
-Central holds Frappe Cloud's app for each provider; a site reaches `start` and `relay_token` through its Pilot.
+Central holds Frappe Cloud's app for each provider; a site reaches `get_active_providers`, `start` and `relay_token` through its Pilot.
 """
 
 from urllib.parse import urlencode
@@ -35,6 +35,14 @@ def start(
 	return start_sign_in(
 		provider, state, code_challenge, return_url, credential.team, credential.server, login_hint
 	)
+
+
+# nosemgrep: guest-whitelisted-method -- pilot_credential_auth verifies the caller below.
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+@pilot_credential_auth
+def get_active_providers() -> list[str]:
+	"""Called by a site through its Pilot: the providers a mailbox can sign in with right now."""
+	return frappe.get_all("Email OAuth Provider", filters={"enabled": 1}, pluck="name", order_by="name")
 
 
 # nosemgrep: guest-whitelisted-method -- the provider sends the browser here; the code only goes to the site's team.

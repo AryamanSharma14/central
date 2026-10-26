@@ -22,19 +22,30 @@ from central.billing.gateways.base import (
 	NormalisedEvent,
 	PaymentResult,
 	RefundResult,
+	VerifiedPayment,
+	WebhookNotFound,
 	header_value,
 )
 
-# The charge/refund lifecycle events the webhook spine consumes (see webhooks.py).
-STRIPE_WEBHOOK_EVENTS = [
+# The events the webhook spine consumes (see webhooks.handle_webhook_event).
+STRIPE_WEBHOOK_EVENTS = (
 	"payment_intent.succeeded",
 	"payment_intent.payment_failed",
+	# An authorisation Stripe cancels, for example one that expired uncaptured.
+	"payment_intent.canceled",
 	"payment_intent.amount_capturable_updated",
+	# Recorded only; refunds made outside Central are not applied yet.
 	"charge.refunded",
+	"charge.dispute.created",
+	"charge.dispute.closed",
 	# An Indian mandate the customer or their bank revokes — the card stays valid,
 	# the permission to debit it does not.
 	"mandate.updated",
-]
+	"payment_method.detached",
+	# Recorded on the card only. The customer can retry on the same SetupIntent, so
+	# one failed try does not fail the card.
+	"setup_intent.setup_failed",
+)
 
 
 def _country_code(value) -> str | None:
@@ -95,6 +106,19 @@ def _predebit_hold(intent: dict) -> str | None:
 	return str(frappe.utils.get_datetime_str(frappe.utils.datetime.datetime.fromtimestamp(completes_at)))
 
 
+def _verified(intent: dict) -> VerifiedPayment:
+	"""A PaymentIntent, read back as what Stripe says was paid. Its metadata is set
+	only with our secret key, so its `receipt` is ours."""
+	return VerifiedPayment(
+		payment_id=intent.get("id"),
+		captured=intent.get("status") == "succeeded",
+		amount=frappe.utils.flt(intent.get("amount_received") or 0) / 100,
+		currency=(intent.get("currency") or "").upper(),
+		order_id=intent.get("id"),
+		receipt=(intent.get("metadata") or {}).get("receipt"),
+	)
+
+
 def _to_dict(obj) -> dict:
 	"""Normalise a Stripe response to a plain dict. A StripeObject (stripe v15)
 	is not a dict and exposes neither `.get()` nor direct `dict()` conversion,
@@ -121,6 +145,8 @@ class StripeAdapter(GatewayAdapter):
 	# same RBI rule as anyone else.
 	supports_off_session_charge = True
 
+	webhook_events = STRIPE_WEBHOOK_EVENTS
+
 	def _configure(self):
 		stripe.api_key = self.get_credential("api_secret")
 		# https://docs.stripe.com/rate-limits#object-lock-timeouts
@@ -144,13 +170,35 @@ class StripeAdapter(GatewayAdapter):
 	def register_webhook(self, callback_url: str, events: list[str] | None = None) -> dict:
 		"""Create a Stripe webhook endpoint; Stripe returns the `whsec_…` secret."""
 		self._configure()
-		endpoint = _to_dict(
-			stripe.WebhookEndpoint.create(
-				url=callback_url,
-				enabled_events=events or STRIPE_WEBHOOK_EVENTS,
+		with _stripe_errors():
+			endpoint = _to_dict(
+				stripe.WebhookEndpoint.create(
+					url=callback_url,
+					enabled_events=list(events or STRIPE_WEBHOOK_EVENTS),
+				)
 			)
-		)
 		return {"endpoint_id": endpoint.get("id"), "secret": endpoint.get("secret")}
+
+	def get_webhook(self, endpoint_id: str) -> dict:
+		"""Read the endpoint. Keys for another account, or another mode, cannot see it."""
+		self._configure()
+		with _stripe_errors():
+			try:
+				endpoint = _to_dict(stripe.WebhookEndpoint.retrieve(endpoint_id))
+			except stripe.error.InvalidRequestError as e:
+				if getattr(e, "code", None) == "resource_missing":
+					raise WebhookNotFound(endpoint_id) from e
+				raise
+		return {
+			"url": endpoint.get("url"),
+			"is_active": endpoint.get("status") == "enabled",
+			"events": list(endpoint.get("enabled_events") or []),
+		}
+
+	def update_webhook_events(self, endpoint_id: str, callback_url: str, events: list[str]) -> None:
+		self._configure()
+		with _stripe_errors():
+			stripe.WebhookEndpoint.modify(endpoint_id, enabled_events=list(events))
 
 	def setup_payment_method(self, team, setup_data: dict) -> dict:
 		"""Create an off-session SetupIntent; UI confirms it with the card.
@@ -361,6 +409,34 @@ class StripeAdapter(GatewayAdapter):
 			"currency": (currency or "usd").upper(),
 		}
 
+	def verify_payment(self, payment_id: str) -> VerifiedPayment:
+		return _verified(self.get_payment_intent(payment_id))
+
+	def find_order_payment(self, order_id: str) -> VerifiedPayment | None:
+		"""An in-app order is a PaymentIntent (`pi_`); a hosted one is a Checkout Session (`cs_`)."""
+		if order_id.startswith("cs_"):
+			return self.checkout_payment(order_id)
+		payment = self.verify_payment(order_id)
+		return payment if payment.captured else None
+
+	def checkout_payment(self, session_id: str) -> VerifiedPayment | None:
+		session = self.get_checkout_session(session_id)
+		if session.get("payment_status") != "paid" or not session.get("payment_intent"):
+			return None
+		return VerifiedPayment(
+			payment_id=session["payment_intent"],
+			captured=True,
+			amount=frappe.utils.flt(session.get("amount_total")) / 100,
+			currency=(session.get("currency") or "").upper(),
+			order_id=session_id,
+			receipt=(session.get("metadata") or {}).get("receipt"),
+		)
+
+	@staticmethod
+	def payment_from_event(payload: dict) -> VerifiedPayment | None:
+		obj = (payload.get("data") or {}).get("object") or {}
+		return _verified(obj) if obj.get("object") == "payment_intent" else None
+
 	def get_payment_intent(self, payment_intent_id: str) -> dict:
 		"""Retrieve a PaymentIntent so a top-up can be confirmed from what Stripe
 		actually charged (status + amount + currency), not a client-supplied figure."""
@@ -431,28 +507,27 @@ class StripeAdapter(GatewayAdapter):
 
 		return {"checkout_url": session.get("url"), "session_id": session.get("id")}
 
-	def get_setup_result(self, session_id: str) -> dict:
-		"""Read a completed setup Checkout session back to the saved card: the gateway
-		payment-method id + card display fields, or `{}` while still pending."""
+	def read_saved_card(self, setup_reference: str) -> dict:
+		"""The card a SetupIntent (`seti_`) or a setup Checkout Session (`cs_`) saved, read
+		from Stripe: payment method, customer, mandate and display fields. `{}` while the
+		customer has not finished."""
 		self._configure()
+		intent_id = setup_reference
+		if setup_reference.startswith("cs_"):
+			intent_id = _to_dict(stripe.checkout.Session.retrieve(setup_reference)).get("setup_intent")
+			if not intent_id:
+				return {}
 
-		session = _to_dict(stripe.checkout.Session.retrieve(session_id))
-
-		setup_intent_id = session.get("setup_intent")
-
-		if not setup_intent_id:
-			return {}
-
-		intent = _to_dict(stripe.SetupIntent.retrieve(setup_intent_id))
+		intent = _to_dict(stripe.SetupIntent.retrieve(intent_id))
 		method_id = intent.get("payment_method")
-
 		if intent.get("status") != "succeeded" or not method_id:
 			return {}
 
 		card = (_to_dict(stripe.PaymentMethod.retrieve(method_id)).get("card")) or {}
-
 		return {
 			"payment_method": method_id,
+			"customer": intent.get("customer"),
+			"mandate": intent.get("mandate"),
 			"brand": (card.get("brand") or "card").title(),
 			"last4": card.get("last4"),
 			"exp_month": card.get("exp_month"),

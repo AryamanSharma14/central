@@ -6,6 +6,7 @@ from frappe.model.document import Document
 
 from central.errors import AtlasConnectionError, AtlasRequestUncertain, build_envelope, to_error_response
 from central.iam import can
+from central.infrastructure.doctype.blocked_domain.blocked_domain import BlockedDomain, normalize_domain
 from central.infrastructure.doctype.pilot_credential.pilot_credential import PilotCredential
 from central.infrastructure.doctype.user_mail_account.user_mail_account import UserMailAccount
 from central.server_models import ActionStatus, ResizeConfiguration, ServerCreation, SiteCreation
@@ -87,9 +88,9 @@ class ResourceAction(Document):
 		completed_at: DF.Datetime | None
 		correlation_id: DF.Data
 		credential: DF.Link | None
+		diagnostic: DF.Code | None
 		dispatched_at: DF.Datetime | None
 		error_code: DF.Data | None
-		error_log: DF.Link | None
 		error_message: DF.SmallText | None
 		last_checked_at: DF.Datetime | None
 		is_free_trial: DF.Check
@@ -188,6 +189,12 @@ class ResourceAction(Document):
 				as_dict=True,
 			)
 			self.capture_trial_event("trial_requested", region=self.region, **first_touch)
+
+	def validate(self) -> None:
+		if self.subdomain and (self.has_value_changed("subdomain") or self.has_value_changed("region")):
+			self.subdomain = normalize_domain(self.subdomain)
+			zone = frappe.get_cached_value("Region", self.region, "proxy_domain")
+			BlockedDomain.validate_assignment(f"{self.subdomain}.{zone}")
 
 	def enqueue(self) -> None:
 		from central.integrations.resource_actions import get_job_timeout_seconds
@@ -326,8 +333,8 @@ class ResourceAction(Document):
 		self.db_set(self._diagnostic_values(detail, title), notify=True)
 
 	def _diagnostic_values(self, detail: str, title: str) -> dict:
-		error_log = self.log_error(title=title, message=detail)
-		return {"error_log": error_log.name}
+		self.log_error(title=title, message=detail)
+		return {"diagnostic": f"{title}\n\n{detail}"}
 
 	@classmethod
 	def confirm_observed_status(cls, resource_id: str, status: str) -> None:

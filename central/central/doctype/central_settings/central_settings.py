@@ -46,20 +46,24 @@ class CentralSettings(Document):
 		enable_pdf_print_service: DF.Check
 		enable_public_ipv4: DF.Check
 		enable_public_ipv6: DF.Check
+		feedback_url: DF.Data | None
 		github_app_id: DF.Data | None
 		github_app_slug: DF.Data | None
 		github_client_id: DF.Data | None
 		github_client_secret: DF.Password | None
 		github_private_key: DF.Password | None
 		github_webhook_secret: DF.Password | None
+		included_transfer_gb: DF.Int
 		invitation_expiry_days: DF.Int
 		invitation_resend_cooldown_minutes: DF.Int
 		invitations_per_hour: DF.Int
 		private_network_throughput_mibps: DF.Int
 		public_network_throughput_mibps: DF.Int
+		require_payment_method: DF.Check
 		sign_in_code_attempts: DF.Int
 		sign_in_codes_per_email: DF.Int
-		require_payment_method: DF.Check
+		signup_image_minimum_age_minutes: DF.Int
+		support_ticket_url: DF.Data | None
 		trial_days: DF.Int
 		trial_deletion_days: DF.Int
 		trial_idle_shutdown_minutes: DF.Int
@@ -74,8 +78,11 @@ class CentralSettings(Document):
 		self.validate_app_rollout()
 
 	def on_update(self) -> None:
+		from central.infrastructure.doctype.blocked_domain.blocked_domain import seed_regional_domains
 		from central.infrastructure.doctype.github_connection.github_connection import GitHubConnection
 
+		if self.has_value_changed("wildcard_domain"):
+			seed_regional_domains()
 		if self.has_value_changed("github_app_id"):
 			GitHubConnection.disable_all()
 
@@ -153,6 +160,13 @@ class CentralSettings(Document):
 			"public_ipv4": bool(self.enable_public_ipv4),
 			"public_ipv6": bool(self.enable_public_ipv6),
 			"firewall": bool(self.enable_firewall),
+		}
+
+	def help_links(self) -> dict[str, str | None]:
+		"""The console's Help menu links for window boot. An empty URL hides its menu item."""
+		return {
+			"support_ticket_url": self.support_ticket_url or None,
+			"feedback_url": self.feedback_url or None,
 		}
 
 	def require_new_server_network_options(

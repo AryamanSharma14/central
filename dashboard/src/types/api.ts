@@ -20,6 +20,10 @@ export interface Team {
 	created: string | null
 	/** The steps the caller still has to answer as owner. Empty for a team they do not own. */
 	onboarding: OnboardingStepKey[]
+	/** A suspended team is listed so the console can say why it cannot open it. */
+	status: 'Active' | 'Suspended'
+	/** Set when a System Manager opened the console as this team's owner. */
+	is_impersonated?: boolean
 }
 
 export type MemberStatus = 'Active' | 'Suspended'
@@ -100,6 +104,8 @@ export interface MyInvitation {
 	team: string
 	team_name: string
 	role: string
+	/** The role's display name; a custom role's `role` is an opaque record name. */
+	role_name: string
 	invited_by: string | null
 	expires_on: string | null
 	creation: string
@@ -153,6 +159,8 @@ export interface ProvisionablePlans {
 	/** Remaining headroom in the team's currency: a plan is offered only if it fits. */
 	available: number
 	spend_limit_enforced: boolean
+	/** The monthly transfer every server includes, from Central Settings. */
+	included_transfer_gb: number
 	plans: Record<string, Plan[]>
 	/** Per-resource component rates for "design your own" (#79). Empty when a
 	 *  component isn't priced for the team's currency — composed configs not offered. */

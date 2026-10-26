@@ -406,6 +406,18 @@ export interface BillingProfile {
 	payment_method_required?: boolean
 	/** What the team's first payment method adds, while the owner has not had it. */
 	welcome_credit?: WelcomeCredit | null
+	/** The team's open free trial, which its first payment method converts. */
+	open_trial?: TeamOpenTrial | null
+}
+
+export interface TeamOpenTrial {
+	state: 'Active' | 'Ended'
+	/** Null when the caller cannot view the server. */
+	server: string | null
+	/** Null for a plain Frappe Cloud trial. */
+	product: string | null
+	product_title: string
+	plan: TrialPlan | null
 }
 
 export interface WelcomeCredit {
@@ -635,4 +647,12 @@ export interface ServerTrial {
 	ends_on: string
 	days_left: number
 	deletes_on: string | null
+	/** The plan the site converts to, or null when Central has no creation record. */
+	plan: TrialPlan | null
+}
+
+export interface TrialPlan {
+	title: string
+	monthly_rate: number
+	currency: Currency | null
 }

@@ -121,6 +121,19 @@ WEBHOOK_EVENT = StateMachine(
 	},
 )
 
+# A wallet top-up Central asked a gateway for. A payment that lands after the order
+# expired still credits it: the money was taken.
+TOP_UP_ORDER = StateMachine(
+	"Top-up Order",
+	"status",
+	{
+		"Created": {"Credited", "Failed", "Expired"},
+		"Expired": {"Credited"},
+		"Credited": set(),  # terminal
+		"Failed": set(),  # terminal
+	},
+)
+
 # The monthly run's own progress. No money of its own, but routed through the
 # authority so the single owner rule holds with no special cases.
 BILLING_RUN = StateMachine(
@@ -165,6 +178,7 @@ _MACHINES = {
 		REFUND,
 		PAYMENT_METHOD,
 		WEBHOOK_EVENT,
+		TOP_UP_ORDER,
 		BILLING_RUN,
 		RERATING_RUN,
 		COMMITMENT,
@@ -217,7 +231,7 @@ def transition(
 
 
 def _append_event(doc, from_state, to_state, reason, actor, correlation, amount, event_type) -> None:
-	frappe.get_doc(
+	event = frappe.get_doc(
 		{
 			"doctype": "Billing Event",
 			"team": doc.get("team"),
@@ -233,7 +247,9 @@ def _append_event(doc, from_state, to_state, reason, actor, correlation, amount,
 			"reason": reason,
 			"correlation": correlation or doc.name,
 		}
-	).insert(ignore_permissions=True)
+	)
+	# The audit trail is written for whoever moved the document, and its links are copied from it.
+	event.insert(ignore_permissions=True, ignore_links=True)
 
 
 def record_event(doc, event_type: str, from_state=None, to_state=None, reason=None, amount=None) -> None:

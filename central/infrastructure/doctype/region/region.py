@@ -62,6 +62,16 @@ class Region(AtlasConnectionMixin, CargoConnectionMixin, Document):
 		self.validate_atlas_connection()
 		self.validate_cargo_connection()
 
+	def on_update(self) -> None:
+		from central.infrastructure.doctype.blocked_domain.blocked_domain import seed_for_zone
+
+		if self.has_value_changed("proxy_domain"):
+			seed_for_zone(self.proxy_domain)
+		if not self.get_doc_before_save() and frappe.db.get_single_value(
+			"Central Settings", "wildcard_domain"
+		):
+			seed_for_zone(self.get_zone(self.name))
+
 	@staticmethod
 	def get_zone(region: str) -> str:
 		"""The DNS zone of one region: `<region>.<wildcard domain>`."""

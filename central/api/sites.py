@@ -26,8 +26,8 @@ def site_domain(team: str | None = None, product: str | None = None) -> dict:
 	from central.signups.doctype.product.product import get_signup_product
 	from central.site_provisioning import trial_zone
 
-	signup_app = get_signup_product(product).signup_app if product else None
-	return {"domain": trial_zone(team, signup_app)}
+	signup_product = get_signup_product(product) if product else None
+	return {"domain": trial_zone(team, signup_product)}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -247,7 +247,8 @@ def site_state(site: Site, with_login: bool = True, product: str | None = None) 
 	if ready and with_login:
 		site.record_ready()
 	login_url = None
-	login_pending = False
+	# A busy machine can miss one probe, so a login it could not try yet is retried, not failed.
+	login_pending = with_login and not ready
 	if ready and with_login:
 		try:
 			login_url = site.get_login_url(frappe.session.user, product)

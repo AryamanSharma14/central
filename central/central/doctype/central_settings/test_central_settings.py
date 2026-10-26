@@ -32,6 +32,24 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 		flags = frappe.get_cached_doc("Central Settings").feature_flags()
 		self.assertEqual(set(flags), set(FLAG_FIELDS))
 
+	def test_signup_image_age_patch_seeds_missing_value_and_preserves_operator_settings(self):
+		from central.patches.v0_0.seed_signup_image_minimum_age import execute
+
+		frappe.db.delete(
+			"Singles", {"doctype": "Central Settings", "field": "signup_image_minimum_age_minutes"}
+		)
+		execute()
+		self.assertEqual(
+			frappe.db.get_single_value("Central Settings", "signup_image_minimum_age_minutes"), 30
+		)
+
+		for minutes in (0, 60):
+			frappe.db.set_single_value("Central Settings", "signup_image_minimum_age_minutes", minutes)
+			execute()
+			self.assertEqual(
+				frappe.db.get_single_value("Central Settings", "signup_image_minimum_age_minutes"), minutes
+			)
+
 	def test_feature_flags_reflect_the_checks(self):
 		self._set(enable_addons=1, enable_llm_service=1, enable_pdf_print_service=0)
 		flags = frappe.get_cached_doc("Central Settings").feature_flags()
@@ -69,6 +87,19 @@ class IntegrationTestCentralSettings(IntegrationTestCase):
 		settings = frappe.get_doc("Central Settings")
 		settings.common_site_config = '{"raven_push_notification_server_url": "https://relay.test"}'
 		settings.save()
+
+	def test_help_links_send_an_empty_url_as_none_so_the_console_hides_it(self):
+		url = "https://support.test/help/my-tickets/new"
+		saved = {
+			fieldname: frappe.db.get_single_value("Central Settings", fieldname)
+			for fieldname in ("support_ticket_url", "feedback_url")
+		}
+		self.addCleanup(frappe.db.set_single_value, "Central Settings", saved)
+		frappe.db.set_single_value("Central Settings", {"support_ticket_url": url, "feedback_url": ""})
+
+		links = frappe.get_cached_doc("Central Settings").help_links()
+
+		self.assertEqual(links, {"support_ticket_url": url, "feedback_url": None})
 
 	def test_app_rollout_rejects_steps_out_of_range(self):
 		for fieldname, value in (

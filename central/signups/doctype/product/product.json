@@ -19,6 +19,7 @@
   "setup_messages",
   "image_section",
   "signup_app",
+  "frappe_version",
   "landing_route",
   "trial_section",
   "trial_days",
@@ -95,6 +96,15 @@
    "reqd": 1
   },
   {
+   "default": "develop",
+   "description": "The Frappe branch of this product's trial image, such as develop, version-16 or version-16-hotfix. Cargo builds images only for the branches in Cargo Settings, so check with Preview Trial Images before you change it.",
+   "fieldname": "frappe_version",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Frappe Version",
+   "reqd": 1
+  },
+  {
    "description": "Where the owner lands after signing in to a trial site, such as /raven, so the app can run its own setup. Leave empty to open Desk.",
    "fieldname": "landing_route",
    "fieldtype": "Data",
@@ -154,7 +164,7 @@
  "index_web_pages_for_search": 1,
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-10-20 20:00:00.000000",
+ "modified": "2026-10-25 21:00:00.000000",
  "modified_by": "prathamesh@frappe.io",
  "module": "Signups",
  "name": "Product",

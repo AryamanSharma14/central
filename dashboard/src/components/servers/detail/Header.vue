@@ -159,7 +159,10 @@ const menu = computed(() => {
 		props.server,
 		props.actions,
 		(verb) => handlers[verb]?.(),
-		{ opensSite: !!props.siteUrl, isOnServerPage: true },
+		{
+			site: props.siteUrl ? new URL(props.siteUrl).host : null,
+			isOnServerPage: true,
+		},
 	)
 	if (!operatorItems.value.length) return groups
 
@@ -222,7 +225,7 @@ const menu = computed(() => {
 
 		<div class="flex shrink-0 gap-2">
 			<Button
-				v-if="details && actions.terminate"
+				v-if="details && actions.terminate && !actions.isAccessLocked"
 				variant="ghost"
 				:icon="isProtected ? 'lucide-lock' : 'lucide-lock-open'"
 				:label="protectionLabel"

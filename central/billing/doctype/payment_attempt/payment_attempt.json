@@ -20,6 +20,7 @@
   "section_break_result",
   "status",
   "gateway_transaction_id",
+  "gateway_order_id",
   "resolved_by",
   "column_break_result",
   "initiated_at",
@@ -106,6 +107,13 @@
    "search_index": 1
   },
   {
+   "fieldname": "gateway_order_id",
+   "fieldtype": "Data",
+   "label": "Gateway Order ID",
+   "description": "The Razorpay order, Stripe PaymentIntent or checkout session Central created for a payment the customer makes on-session. A payment settles this attempt only when it belongs to this id.",
+   "read_only": 1
+  },
+  {
    "fieldname": "resolved_by",
    "fieldtype": "Select",
    "label": "Resolved By",
@@ -168,9 +176,14 @@
    "group": "Adjustments",
    "link_doctype": "Refund",
    "link_fieldname": "payment_attempt"
+  },
+  {
+   "group": "Gateway",
+   "link_doctype": "Webhook Event",
+   "link_fieldname": "payment_attempt"
   }
  ],
- "modified": "2026-06-03 00:00:00.000000",
+ "modified": "2026-10-24 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Billing",
  "name": "Payment Attempt",

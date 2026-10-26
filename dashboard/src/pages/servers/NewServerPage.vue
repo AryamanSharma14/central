@@ -3,6 +3,7 @@ import { Alert, Button, Select, TabButtons, Tabs, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import PaymentMethodFlow from '@/components/billing/PaymentMethodFlow.vue'
 import ChoiceCards from '@/components/common/ChoiceCards.vue'
+import ContactSupportLink from '@/components/common/ContactSupportLink.vue'
 import CreateServerButton from '@/components/servers/CreateServerButton.vue'
 import CreationStatusPanel from '@/components/servers/CreationStatusPanel.vue'
 import ImageOfferingSelector from '@/components/servers/ImageOfferingSelector.vue'
@@ -34,6 +35,7 @@ const {
 	available,
 	currency,
 	capacity,
+	includedTransferGigabytes,
 	plansLoading,
 	plansError,
 	reloadPlans,
@@ -133,7 +135,7 @@ watch(
 				<p v-if="loading" class="text-p-sm text-ink-gray-5">Loading regions…</p>
 				<p v-else-if="!regions.length" class="text-p-sm text-ink-gray-5">
 					No regions are accepting new servers right now. Try again later, or
-					contact support.
+					<ContactSupportLink :context="{ Topic: 'New server' }" />.
 				</p>
 
 				<div v-else class="space-y-8">
@@ -326,15 +328,21 @@ watch(
 							</p>
 							<p class="mt-1 text-p-sm text-ink-gray-5">
 								No plans fit your remaining spending limit in this region.
-								Remove a server to free some up, or contact support to raise
-								your limit.
+								Remove a server to free some up, or
+								<ContactSupportLink
+									:context="{ Topic: 'Higher spending limit' }"
+								/>
+								to raise your limit.
 							</p>
 						</div>
 
 						<p v-else-if="nothingToShow" class="text-p-sm text-ink-gray-5">
 							No plans are available for this region within your current
-							spending limit. Select another region, or contact support to
-							review your limit.
+							spending limit. Select another region, or
+							<ContactSupportLink
+								:context="{ Topic: 'Higher spending limit' }"
+							/>
+							to review your limit.
 						</p>
 
 						<Tabs v-else-if="hasTabs" v-model="activeTab" :tabs="classTabs">
@@ -347,6 +355,7 @@ watch(
 									:available="available ?? 0"
 									:currency="currency ?? 'USD'"
 									:capacity="capacity"
+									:included-transfer-gigabytes="includedTransferGigabytes"
 									v-model:selected-plan="selectedPlan"
 									v-model:composed-config="composedConfig"
 								/>
@@ -361,6 +370,7 @@ watch(
 							:available="available ?? 0"
 							:currency="currency ?? 'USD'"
 							:capacity="capacity"
+							:included-transfer-gigabytes="includedTransferGigabytes"
 							v-model:selected-plan="selectedPlan"
 							v-model:composed-config="composedConfig"
 						/>

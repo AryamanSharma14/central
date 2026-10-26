@@ -132,6 +132,7 @@ jinja = {
 # only in a patch would exist on migrated sites and be silently ABSENT on fresh ones.
 # The money invariants are a property of the schema, not of a site's history (ADR 0018).
 after_install = [
+	"central.infrastructure.doctype.blocked_domain.blocked_domain.seed_regional_domains",
 	"central.infrastructure.doctype.image_offering.image_offering.ensure_default_offerings",
 	"central.billing.catalog.taxonomy_setup.ensure_catalog_masters",
 	"central.billing.settings.ensure_snapshot_settings",
@@ -225,6 +226,7 @@ scheduler_events = {
 		"*/5 * * * *": [
 			"central.infrastructure.doctype.site_domain.site_domain.retry_failed",
 			"central.infrastructure.doctype.site.site.record_ready_sites",
+			"central.infrastructure.doctype.site.site.poll_site_renames",
 			"central.infrastructure.doctype.vm_snapshot.vm_snapshot.sync_pending_snapshots",
 			"central.infrastructure.doctype.frappemail_service.frappemail_service.refill_mailboxes",
 		],
@@ -256,7 +258,9 @@ scheduler_events = {
 		"central.billing.revenue.invoicing.collect_due_invoices",
 		"central.billing.ingester.erpnext_sync.retry_failed_syncs",
 		"central.billing.payments.reconciliation.run_reconciliation",
+		"central.billing.payments.webhooks.retry_failed_webhooks",
 		"central.billing.platform.alerts.run_operator_alerts",
+		"central.signups.alerts.alert_failed_signups",
 	],
 	"monthly": [
 		"central.billing.revenue.invoicing.draft_monthly_invoices",
@@ -265,6 +269,7 @@ scheduler_events = {
 }
 
 after_migrate = [
+	"central.infrastructure.doctype.blocked_domain.blocked_domain.seed_regional_domains",
 	"central.billing.catalog.taxonomy_setup.ensure_catalog_masters",
 	"central.billing.settings.ensure_snapshot_settings",
 	"central.billing.platform.constraints.ensure_constraints",

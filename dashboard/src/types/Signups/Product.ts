@@ -25,6 +25,8 @@ export interface Product {
 	setup_messages?: string
 	/**	Signup App : Data - The app Cargo installs on this product's image, such as raven. A trial starts the newest signup image whose app tag has this value.	*/
 	signup_app: string
+	/**	Frappe Version : Data - The Frappe branch of this product's trial image, such as develop or version-16. Cargo builds images only for the branches in Cargo Settings, so check with Preview Trial Images before you change it.	*/
+	frappe_version: string
 	/**	Landing Route : Data - Where the owner lands after signing in to a trial site, such as /raven, so the app can run its own setup. Leave empty to open Desk.	*/
 	landing_route?: string
 	/**	Trial Days : Int - Days a trial site of this product runs from when it is first ready. 0 uses Central Settings.	*/
