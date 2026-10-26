@@ -165,10 +165,11 @@ class TestMetalServerProfitability(BillingTestCase):
 		with patch("central.integrations.atlas.AtlasClient.list_hosts", return_value=hosts):
 			self.assertEqual(machine.link_atlas_host(), "host-9")
 
-	def test_a_server_on_an_unknown_host_is_found(self):
-		found = {v.subject for v in invariants.audit(only="R2", checks=readiness.CHECKS)}
-		self.assertIn("ue-internal", found)
-		self.assertNotIn("ue-paid", found)
+	def test_servers_on_an_unknown_host_are_found_once_per_region(self):
+		[found] = [v for v in invariants.audit(only="R2", checks=readiness.CHECKS) if v.subject == REGION]
+		self.assertIn("ue-internal", found.detail)
+		self.assertNotIn("ue-paid", found.detail)
+		self.assertEqual(found.actual, 1)
 
 
 class TestRegionMetalReadiness(BillingTestCase):

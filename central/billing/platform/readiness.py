@@ -466,18 +466,24 @@ def check_servers_have_a_known_host() -> list[Violation]:
 	servers = frappe.get_all(
 		"Virtual Machine",
 		filters={"status": ["not in", ("Terminated", "Failed")], "region": ["in", list(hosts)]},
-		fields=["name", "team", "region", "atlas_host_id"],
+		fields=["name", "region", "atlas_host_id"],
+		order_by="name asc",
 	)
+	unplaced = {}
+	for server in servers:
+		if not server.atlas_host_id or server.atlas_host_id not in hosts[server.region]:
+			unplaced.setdefault(server.region, []).append(server.name)
+	# One row per region: a region with no linked machine would otherwise alert once per server.
 	return [
 		Violation(
 			check="R2",
-			team=server.team,
-			subject_doctype="Virtual Machine",
-			subject=server.name,
-			detail="Runs on no known Metal Server, so its machine's profitability leaves it out.",
+			subject_doctype="Region",
+			subject=region,
+			actual=len(names),
+			detail=f"{len(names)} server(s) run on no known Metal Server, so machine profitability "
+			f"leaves them out. For example: {', '.join(names[:5])}.",
 		)
-		for server in servers
-		if not server.atlas_host_id or server.atlas_host_id not in hosts[server.region]
+		for region, names in unplaced.items()
 	]
 
 
