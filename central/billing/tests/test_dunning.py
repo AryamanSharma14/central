@@ -31,10 +31,14 @@ DUE = "2026-06-01"
 
 
 @contextmanager
-def declining_gateway():
+def declining_gateway(failure_code="card_declined", decline_code=None):
 	adapter = MagicMock()
 	adapter.charge.return_value = PaymentResult(
-		success=False, status="Failed", failure_code="card_declined", failure_reason="Card declined"
+		success=False,
+		status="Failed",
+		failure_code=failure_code,
+		decline_code=decline_code,
+		failure_reason="Card declined",
 	)
 	with patch("central.billing.gateways.registry.get_adapter", return_value=adapter):
 		yield adapter
@@ -116,28 +120,36 @@ class DunningTestBase(BillingTestCase):
 
 
 class TestRetrySchedule(DunningTestBase):
-	def test_failed_method_is_not_retried_on_later_days(self):
-		"""Escalate, don't repeat (#28): a method that failed once is never retried.
-		With a single card the Day 1 attempt is the only charge; Day 3/7 escalate."""
-		sub = self._subscription()
-		inv = self._open_invoice(sub)
-		with declining_gateway():
-			dunning.process_invoice_dunning(inv, now=day(1))
-			self.assertEqual(self._attempts(inv), 1)
-			dunning.process_invoice_dunning(inv, now=day(3))
-			self.assertEqual(self._attempts(inv), 1)  # not repeated
-			dunning.process_invoice_dunning(inv, now=day(7))
-			self.assertEqual(self._attempts(inv), 1)
+	"""Each retry day is a new collection round: a card whose decline can clear is
+	charged again, once per round. A hard decline is never charged again."""
 
-		notes = frappe.get_all(
-			"Comment",
-			{"reference_doctype": "Invoice", "reference_name": inv, "comment_type": "Info"},
-			pluck="content",
-		)
-		self.assertEqual(sum("retry" in n for n in notes), 1)
+	def _dun(self, inv, n):
+		with self.freeze_time(f"{day(n)} 03:00:00"):
+			dunning.process_invoice_dunning(inv, now=day(n))
 
-	def test_backup_method_is_tried_once(self):
-		"""A backup is charged after the primary fails, then neither is retried."""
+	def test_a_declined_card_is_retried_on_each_retry_day(self):
+		inv = self._open_invoice(self._subscription())
+		with declining_gateway(decline_code="insufficient_funds"):
+			for n, attempts in ((1, 1), (2, 1), (3, 2), (7, 3)):
+				self._dun(inv, n)
+				self.assertEqual(self._attempts(inv), attempts, f"day {n}")
+
+	def test_a_hard_decline_is_not_retried(self):
+		inv = self._open_invoice(self._subscription())
+		with declining_gateway(decline_code="stolen_card"):
+			self._dun(inv, 1)
+			self._dun(inv, 3)
+			self._dun(inv, 7)
+		self.assertEqual(self._attempts(inv), 1)
+
+	def test_an_expired_card_is_not_retried(self):
+		inv = self._open_invoice(self._subscription())
+		with declining_gateway(failure_code="expired_card"):
+			self._dun(inv, 1)
+			self._dun(inv, 3)
+		self.assertEqual(self._attempts(inv), 1)
+
+	def test_each_round_tries_the_primary_then_the_backup_once(self):
 		sub = self._subscription()  # primary card pm_x (priority 0)
 		frappe.get_doc(
 			{
@@ -153,17 +165,22 @@ class TestRetrySchedule(DunningTestBase):
 		).insert(ignore_permissions=True)
 		inv = self._open_invoice(sub)
 		with declining_gateway():
-			dunning.process_invoice_dunning(inv, now=day(1))
-			self.assertEqual(self._attempts(inv), 2)  # primary then backup, one each
-			dunning.process_invoice_dunning(inv, now=day(3))
-			self.assertEqual(self._attempts(inv), 2)  # both exhausted, no repeat
+			self._dun(inv, 1)
+			self.assertEqual(self._attempts(inv), 2)
+			self._dun(inv, 3)
+			self.assertEqual(self._attempts(inv), 4)
+
+	def test_a_round_charges_a_card_once_whatever_the_clock_says(self):
+		inv = self._open_invoice(self._subscription())
+		with declining_gateway(decline_code="insufficient_funds"):
+			dunning.process_invoice_dunning(inv, now="2030-01-01")
+		self.assertEqual(self._attempts(inv), 1)
 
 	def test_same_day_rerun_does_not_double_retry(self):
-		sub = self._subscription()
-		inv = self._open_invoice(sub)
+		inv = self._open_invoice(self._subscription())
 		with declining_gateway():
-			dunning.process_invoice_dunning(inv, now=day(1))
-			dunning.process_invoice_dunning(inv, now=day(1))  # idempotent
+			self._dun(inv, 1)
+			self._dun(inv, 1)
 		self.assertEqual(self._attempts(inv), 1)
 
 
