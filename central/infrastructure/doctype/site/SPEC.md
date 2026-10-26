@@ -2,6 +2,8 @@
 
 ## Purpose
 
+Customer names obey the scoped [blocked domains](../blocked_domain/SPEC.md). Central checks signup availability, queued creation requests, Site saves, and Site renames on the server.
+
 A `Site` record is the site a Pilot image already carries, on the machine that runs it. Central builds no site: [Cargo](../../../../../cargo/docs/image.md) bakes one bench into every Pilot image, and one site into an image tagged `has_site=1`. That image answers for the site on a `site-*` hostname alias. A bench-only image, tagged `has_site=0`, has no site and gets no `Site` record. Starting a trial therefore starts a machine, and nothing else.
 
 That is why a trial is one record and not two. A trial customer buys a site, the site is the machine, and the console shows one row for the pair.

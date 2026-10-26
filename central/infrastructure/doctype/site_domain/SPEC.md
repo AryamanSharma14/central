@@ -23,7 +23,7 @@ Central reaches each regional service at `<service>.<region>.<wildcard domain>`,
 | `erp.in-mumbai.frappe.dev` | Site | `erp`, in `/v1/sites` |
 | `www.example.com` | Domain | `www.example.com`, in `/v1/domains` |
 
-Central refuses the regional zone itself, a name 2 or more labels below the zone, a wildcard, and the reserved site names `proxy`, `proxy-*`, `atlas`, and `cargo`. The server must belong to the team and the region of the record. The optional `site` link must belong to the team. A Pilot registration fills it from the Site on the server of the Pilot. The `record_server_has_site` patch clears this link before it removes a Site from a bench-only server. The route stays, because it targets the server. See [Trial sites](../site/SPEC.md#migration).
+Central refuses the regional zone itself, a name 2 or more labels below the zone, and a wildcard. New assignments also obey the scoped [blocked domains](../blocked_domain/SPEC.md), including custom domains. The server must belong to the team and the region of the record. The optional `site` link must belong to the team. A Pilot registration fills it from the Site on the server of the Pilot. The `record_server_has_site` patch clears this link before it removes a Site from a bench-only server. The route stays, because it targets the server. See [Trial sites](../site/SPEC.md#migration).
 
 ## Routed names
 
