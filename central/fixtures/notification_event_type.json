@@ -113,7 +113,7 @@
  },
  {
   "action_label": "Upgrade",
-  "action_route": "/billing",
+  "action_route": "/servers/{{ server }}?action=resize",
   "category": "Trial",
   "create_in_app": 1,
   "direct_recipients": "None",
@@ -122,7 +122,7 @@
   "event_type": "trial_expiring",
   "in_app_body": "Your free trial of {{ context.address }} ends on {{ context.ends_on }}. Upgrade to keep the site.",
   "in_app_title": "Your {{ context.product }} trial ends on {{ context.ends_on }}",
-  "modified": "2026-10-23 10:00:00",
+  "modified": "2026-10-26 00:00:00",
   "name": "trial_expiring",
   "required_cap": "billing:view",
   "severity": "Warning"
@@ -503,13 +503,13 @@
   "direct_recipients": "None",
   "docstatus": 0,
   "doctype": "Notification Event Type",
-  "modified": "2026-10-22 20:00:00",
+  "modified": "2026-10-26 00:00:00",
   "required_cap": "billing:view",
   "severity": "Error",
   "in_app_title": "Your {{ context.product }} trial has ended",
   "in_app_body": "{{ context.address }} is stopped. Upgrade before {{ context.deletes_on }} to keep it. After that date, the site and its data are deleted.",
   "action_label": "Upgrade",
-  "action_route": "/billing"
+  "action_route": "/servers/{{ server }}?action=resize"
  },
  {
   "name": "trial_deletion_soon",
@@ -519,13 +519,13 @@
   "direct_recipients": "None",
   "docstatus": 0,
   "doctype": "Notification Event Type",
-  "modified": "2026-10-22 00:00:00",
+  "modified": "2026-10-26 00:00:00",
   "required_cap": "billing:view",
   "severity": "Error",
   "in_app_title": "{{ context.address }} is deleted on {{ context.deletes_on }}",
   "in_app_body": "Your {{ context.product }} trial has ended. Upgrade before {{ context.deletes_on }} to keep the site and its data.",
   "action_label": "Upgrade",
-  "action_route": "/billing"
+  "action_route": "/servers/{{ server }}?action=resize"
  },
  {
   "name": "trial_deleted",
