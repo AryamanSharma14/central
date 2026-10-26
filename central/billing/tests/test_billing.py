@@ -144,6 +144,34 @@ class TestDraftGeneration(BillingTestBase):
 		daily_days = sum(li.days for li in inv.items if li.unit == "day")
 		self.assertEqual(daily_days, 28)  # 30 days − Jun 10 − Jun 11
 
+	def test_a_mid_day_start_bills_that_day_by_the_hour(self):
+		add_segment(self.sub, "Created", 3000, "2026-06-05 14:00:00")
+		inv = frappe.get_doc(
+			"Invoice", invoicing.generate_draft_invoice(self.sub, "2026-06-01", "2026-06-30")
+		)
+		self.assertEqual(
+			sorted((li.unit, li.days or li.hours) for li in inv.items), [("day", 25), ("hour", 10.0)]
+		)
+		self.assertEqual(inv.subtotal, round(25 * 3000 / 30, 2) + round(10 * 3000 / 720, 2))
+
+	def test_a_mid_day_stop_bills_that_day_by_the_hour(self):
+		add_segment(self.sub, "Created", 3000, "2026-06-01 00:00:00")
+		add_segment(self.sub, "Cancelled", None, "2026-06-20 12:00:00")
+		inv = frappe.get_doc(
+			"Invoice", invoicing.generate_draft_invoice(self.sub, "2026-06-01", "2026-06-30")
+		)
+		self.assertEqual(
+			sorted((li.unit, li.days or li.hours) for li in inv.items), [("day", 19), ("hour", 12.0)]
+		)
+
+	def test_a_mid_day_resize_still_gives_the_day_to_the_new_plan(self):
+		add_segment(self.sub, "Created", 1000, "2026-06-01 00:00:00")
+		add_segment(self.sub, "Plan Changed", 2000, "2026-06-10 15:00:00")
+		inv = frappe.get_doc(
+			"Invoice", invoicing.generate_draft_invoice(self.sub, "2026-06-01", "2026-06-30")
+		)
+		self.assertEqual(sorted((li.rate, li.days) for li in inv.items), [(1000.0, 9), (2000.0, 21)])
+
 	def test_partial_first_month_billed_for_join_window(self):
 		add_segment(self.sub, "Created", 3000, "2026-06-15 00:00:00")
 		name = invoicing.generate_draft_invoice(self.sub, "2026-06-01", "2026-06-30")
