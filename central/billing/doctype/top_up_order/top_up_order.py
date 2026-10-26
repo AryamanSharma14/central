@@ -101,12 +101,34 @@ class TopupOrder(Document):
 			gateway=adapter_key,
 			credit=self.credit or None,
 		)
+		self._credit_surplus(payment, adapter_key)
 		transition(self, "Credited", actor="gateway", correlation=self.team, amount=self.total)
 		self.gateway_payment_id = payment.payment_id
 		self.ledger_entry = result["ledger_entry"]
 		# A verified gateway payment credits it, often from a Guest webhook.
 		self.save(ignore_permissions=True)
 		return result
+
+	def _credit_surplus(self, payment: VerifiedPayment, adapter_key: str | None) -> None:
+		"""Keep anything paid above the order total as wallet credit, and tell an operator."""
+		from central.billing.revenue import credits
+
+		surplus = frappe.utils.flt(frappe.utils.flt(payment.amount) - frappe.utils.flt(self.total), 2)
+		if surplus <= 0:
+			return
+
+		credits.purchase(
+			self.team,
+			surplus,
+			self.currency,
+			reference_name=payment.payment_id,
+			note=f"Payment for top-up {self.name} above its total",
+			gateway_payment_id=f"{payment.payment_id}:surplus",
+			gateway=adapter_key,
+		)
+		message = f"Payment {payment.payment_id} of {payment.currency} {payment.amount} paid {surplus} above the total; credited to the wallet."
+		self.add_comment("Info", message)
+		frappe.log_error(title=f"Payment needs review on {self.name}", message=message)
 
 	def _require_covering(self, payment: VerifiedPayment) -> None:
 		if payment.order_id != self.gateway_order_id and payment.receipt != self.name:

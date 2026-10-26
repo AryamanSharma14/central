@@ -270,6 +270,20 @@ class TestWalletTopupWebhookBackstop(IntegrationTestCase):
 		self.assertEqual(len(self._credits_for(pid)), 0)
 		self.assertEqual(frappe.db.get_value("Top-up Order", self.order.name, "status"), "Created")
 
+	def test_a_payment_above_the_total_credits_the_surplus_once(self):
+		pid = "pay_backstop_8"
+		charges.apply_webhook(self._store_event(pid, amount_paisa=150000).name)
+		charges.apply_webhook(self._store_event(pid, amount_paisa=150000).name)  # duplicate delivery
+
+		self.assertEqual(len(self._credits_for(pid)), 1)
+		surplus = frappe.get_all(
+			"Credit Ledger Entry",
+			filters={"gateway_payment_id": f"Razorpay:{pid}:surplus"},
+			fields=["amount", "tax_amount"],
+		)
+		self.assertEqual(len(surplus), 1)
+		self.assertEqual(surplus[0].amount + surplus[0].tax_amount, 500.0)
+
 	def test_a_short_payment_credits_nothing(self):
 		pid = "pay_backstop_6"
 		with self.assertRaises(frappe.ValidationError):
