@@ -277,3 +277,8 @@ def on_doctype_update() -> None:
 	# Run rate, the billing run and the inventory reports look subscriptions up by server and state.
 	frappe.db.add_index("Subscription", ["server_id"])
 	frappe.db.add_index("Subscription", ["enabled", "account_standing"])
+	# Every server state report looks up the public IP and snapshot subscriptions of its server,
+	# and a metered report the subscription of its subject.
+	frappe.db.add_index("Subscription", ["public_ip_server"])
+	frappe.db.add_index("Subscription", ["vm_snapshot"])
+	frappe.db.add_index("Subscription", ["service_subject"])
