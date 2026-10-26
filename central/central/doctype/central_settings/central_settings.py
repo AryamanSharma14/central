@@ -64,8 +64,11 @@ class CentralSettings(Document):
 		self.validate_common_site_config()
 
 	def on_update(self) -> None:
+		from central.infrastructure.doctype.blocked_domain.blocked_domain import seed_regional_domains
 		from central.infrastructure.doctype.github_connection.github_connection import GitHubConnection
 
+		if self.has_value_changed("wildcard_domain"):
+			seed_regional_domains()
 		if self.has_value_changed("github_app_id"):
 			GitHubConnection.disable_all()
 

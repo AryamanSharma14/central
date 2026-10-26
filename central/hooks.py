@@ -122,6 +122,7 @@ jinja = {
 # only in a patch would exist on migrated sites and be silently ABSENT on fresh ones.
 # The money invariants are a property of the schema, not of a site's history (ADR 0018).
 after_install = [
+	"central.infrastructure.doctype.blocked_domain.blocked_domain.seed_regional_domains",
 	"central.infrastructure.doctype.image_offering.image_offering.ensure_default_offerings",
 	"central.billing.catalog.taxonomy_setup.ensure_catalog_masters",
 	"central.billing.settings.ensure_snapshot_settings",
@@ -257,6 +258,7 @@ scheduler_events = {
 }
 
 after_migrate = [
+	"central.infrastructure.doctype.blocked_domain.blocked_domain.seed_regional_domains",
 	"central.billing.catalog.taxonomy_setup.ensure_catalog_masters",
 	"central.billing.settings.ensure_snapshot_settings",
 	"central.billing.platform.constraints.ensure_constraints",

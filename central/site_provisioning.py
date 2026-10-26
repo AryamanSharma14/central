@@ -9,6 +9,7 @@ from central.billing.catalog.server_plans import get_server_plans
 from central.billing.catalog.trials import trial_plan_names
 from central.iam import get_user_team_names, resolve_team
 from central.identity.doctype.team.team import Team
+from central.infrastructure.doctype.blocked_domain.blocked_domain import BlockedDomain, normalize_domain
 from central.integrations.images import list_images
 from central.resource_actions import submit_request
 from central.server_models import DNS_LABEL, SiteCreation
@@ -23,8 +24,6 @@ SIGNUP_IMAGE_TAGS = {"has_site": "1", "frappe_version": "version-16-hotfix"}
 # its app. A plain trial starts on the bare site, and the region cannot filter on a missing
 # tag, so Central drops tagged images itself.
 SIGNUP_APP_TAG = "app"
-# One DNS label: what a customer may name a site, and all the proxy will route.
-RESERVED_SUBDOMAINS = frozenset({"admin", "atlas", "cargo", "proxy", "site", "www"})
 
 
 def create_trial_site(team: str | None, subdomain: str, request_key: str, product: str) -> dict:
@@ -96,12 +95,15 @@ def validated_subdomain(subdomain: str) -> str:
 def subdomain_availability(subdomain: str) -> dict:
 	"""Whether a name is free. It is checked in every trial zone, because the region a trial
 	lands in is chosen only when it is created."""
-	subdomain = (subdomain or "").strip().lower()
+	subdomain = normalize_domain(subdomain)
 	answer = {"subdomain": subdomain}
 
 	if not DNS_LABEL.fullmatch(subdomain):
 		reason = _("Use lowercase letters, numbers and hyphens, starting and ending with one.")
-	elif subdomain in RESERVED_SUBDOMAINS:
+	elif any(
+		BlockedDomain.is_blocked(f"{subdomain}.{frappe.get_cached_value('Region', region, 'proxy_domain')}")
+		for region in trial_regions()
+	):
 		reason = _("That name is reserved. Please choose another.")
 	elif is_subdomain_taken(subdomain):
 		reason = _("That name is taken. Please choose another.")

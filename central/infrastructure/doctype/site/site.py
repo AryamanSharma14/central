@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from central.infrastructure.doctype.blocked_domain.blocked_domain import BlockedDomain, normalize_domain
 from central.signups.funnel import capture_trial_event
 
 if TYPE_CHECKING:
@@ -129,6 +130,16 @@ class Site(Document):
 
 		Trial(self).start()
 
+	def validate(self) -> None:
+		if self.has_value_changed("site_name"):
+			BlockedDomain.validate_assignment(self.site_name)
+		if self.subdomain and (self.has_value_changed("subdomain") or self.has_value_changed("site_name")):
+			self.subdomain = normalize_domain(self.subdomain)
+			BlockedDomain.validate_assignment(self.rename_target)
+
+	def before_rename(self, old_name: str, new_name: str, merge: bool = False) -> None:
+		BlockedDomain.validate_assignment(new_name)
+
 	def after_insert(self) -> None:
 		from central.signups.trial import Trial
 
@@ -216,6 +227,12 @@ class Site(Document):
 		from central.integrations.pilot import rename_site
 
 		if not self.subdomain or self.rename_task:
+			return
+
+		try:
+			BlockedDomain.validate_assignment(self.rename_target)
+		except frappe.ValidationError as exception:
+			self.record_rename_failure(str(exception), frappe.get_traceback(with_context=False))
 			return
 
 		try:
