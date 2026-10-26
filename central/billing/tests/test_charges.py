@@ -288,6 +288,9 @@ class TestChargeInvoice(ChargeTestBase):
 		self.assertEqual(frappe.db.get_value("Invoice", inv, "status"), "Open")
 		# The money was captured, so it must reach a ledger: 1.00 in major units.
 		self.assertEqual(frappe.utils.flt(credits.get_balance(TEAM)["balance"]), 1)
+		# The short capture no longer holds the invoice, so it can still be paid.
+		self.assertIsNone(charges.in_flight_attempt(inv))
+		self.assertTrue(charges._claim_on_session_attempt(inv, GATEWAY)["created"])
 
 	def test_a_capture_on_a_paid_invoice_goes_to_the_wallet(self):
 		from central.billing.revenue import credits

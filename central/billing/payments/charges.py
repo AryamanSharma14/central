@@ -22,9 +22,6 @@ from central.billing.doctype.payment_attempt.payment_attempt import idempotency_
 from central.billing.gateways.base import GatewayTimeout
 from central.billing.states import transition
 
-# An attempt occupying the invoice — a second charge must not start beside it.
-_IN_FLIGHT = ("Initiated", "Authorised", "Captured")
-
 # The unique idempotency key rejected the insert: this charge is already claimed.
 _ALREADY_CLAIMED = (frappe.UniqueValidationError, frappe.DuplicateEntryError)
 
@@ -101,11 +98,8 @@ def _claim_attempt(invoice: str, payment_method: str | None, gateway: str | None
 	if frappe.utils.flt(inv.expected_collection) <= 0:
 		return {"charged": False, "reason": "nothing_due"}
 
-	in_flight = frappe.get_all(
-		"Payment Attempt", {"invoice": invoice, "status": ["in", _IN_FLIGHT]}, pluck="name"
-	)
-	if in_flight:
-		return {"charged": False, "reason": "attempt_in_flight", "attempt": in_flight[0]}
+	if in_flight := in_flight_attempt(invoice):
+		return {"charged": False, "reason": "attempt_in_flight", "attempt": in_flight}
 
 	method_name, gateway_name = _resolve_method(inv, payment_method, gateway)
 	adapter = _adapter_for(gateway_name)
@@ -316,6 +310,25 @@ def store_gateway_order(attempt, order_id: str) -> None:
 	_persist()
 
 
+def in_flight_attempt(invoice: str) -> str | None:
+	"""An attempt occupying the invoice, so a second charge must not start beside it.
+
+	A capture still waiting for its settlement counts. A capture already settled does not:
+	if the invoice is still unpaid, that payment did not cover it and went to the wallet."""
+	attempt = frappe.qb.DocType("Payment Attempt")
+	rows = (
+		frappe.qb.from_(attempt)
+		.select(attempt.name)
+		.where(attempt.invoice == invoice)
+		.where(
+			attempt.status.isin(["Initiated", "Authorised"])
+			| ((attempt.status == "Captured") & attempt.completed_at.isnull())
+		)
+		.limit(1)
+	).run(pluck=True)
+	return rows[0] if rows else None
+
+
 def _claim_on_session_attempt(invoice: str, gateway: str | None) -> dict:
 	"""Lock the invoice, check it can be paid, and commit an Initiated attempt for it."""
 	invoice_tbl = frappe.qb.DocType("Invoice")
@@ -328,11 +341,8 @@ def _claim_on_session_attempt(invoice: str, gateway: str | None) -> dict:
 		return {"created": False, "reason": "not_open"}
 	if frappe.utils.flt(inv.expected_collection) <= 0:
 		return {"created": False, "reason": "nothing_due"}
-	in_flight = frappe.get_all(
-		"Payment Attempt", {"invoice": invoice, "status": ["in", _IN_FLIGHT]}, pluck="name"
-	)
-	if in_flight:
-		return {"created": False, "reason": "attempt_in_flight", "attempt": in_flight[0]}
+	if in_flight := in_flight_attempt(invoice):
+		return {"created": False, "reason": "attempt_in_flight", "attempt": in_flight}
 
 	attempt = frappe.get_doc(
 		{

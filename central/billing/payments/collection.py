@@ -110,13 +110,8 @@ def collect_invoice(invoice: str, new_round: bool = False) -> dict:
 	earlier = attempts_of(invoice) if new_round else None
 
 	while True:
-		in_flight = frappe.get_all(
-			"Payment Attempt",
-			filters={"invoice": invoice, "status": ["in", charges._IN_FLIGHT]},
-			pluck="name",
-		)
-		if in_flight:
-			return {"collected": False, "reason": "attempt_in_flight", "attempt": in_flight[0]}
+		if in_flight := charges.in_flight_attempt(invoice):
+			return {"collected": False, "reason": "attempt_in_flight", "attempt": in_flight}
 
 		method = next_method_for(invoice, inv.team, earlier)
 		if not method:

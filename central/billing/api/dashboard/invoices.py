@@ -339,14 +339,12 @@ def get_invoice(name: str) -> dict:
 	team = frappe.db.get_value("Invoice", name, "team")
 	_require_view(team)
 	doc = frappe.get_doc("Invoice", name)
-	from central.billing.payments.charges import _IN_FLIGHT
+	from central.billing.payments.charges import in_flight_attempt
 
 	# An attempt already charging (or captured and awaiting the settlement webhook)
 	# means the money is moving — the UI must show a "settling" state, not a Pay
 	# button, so the customer can't fire a second charge (#10).
-	payment_in_progress = bool(
-		frappe.db.exists("Payment Attempt", {"invoice": name, "status": ["in", _IN_FLIGHT]})
-	)
+	payment_in_progress = bool(in_flight_attempt(name))
 
 	# Which method settled it — a quiet receipt line on the paid invoice. Read
 	# from the capturing attempt (not the team's current default), so history
