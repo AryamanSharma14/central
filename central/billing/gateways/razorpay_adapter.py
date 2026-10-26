@@ -190,8 +190,7 @@ class RazorpayAdapter(GatewayAdapter):
 			raise GatewayError("A Razorpay charge needs the order prepare_charge created and Central stored.")
 		client = self._client()
 		try:
-			existing = (client.order.payments(order_id) or {}).get("items") or []
-			if earlier := _settled_or_live(existing):
+			if earlier := _settled_or_live(_order_payments(client, order_id)):
 				return earlier
 			payment = client.payment.createRecurring(_recurring_charge(invoice, payment_method, order_id))
 		except razorpay.errors.BadRequestError as e:
@@ -281,7 +280,7 @@ class RazorpayAdapter(GatewayAdapter):
 		if order_id.startswith("plink_"):
 			return self.checkout_payment(order_id)
 		try:
-			payments = (self._client().order.payments(order_id) or {}).get("items") or []
+			payments = _order_payments(self._client(), order_id)
 		except _TRANSIENT as e:
 			raise GatewayTimeout(str(e)) from e
 		captured = next((p for p in payments if p.get("status") == "captured"), None)
@@ -433,6 +432,10 @@ def _verified(payment: dict) -> VerifiedPayment:
 		currency=(payment.get("currency") or "").upper(),
 		order_id=payment.get("order_id"),
 	)
+
+
+def _order_payments(client, order_id: str) -> list[dict]:
+	return (client.order.payments(order_id) or {}).get("items") or []
 
 
 def _settled_or_live(payments: list[dict]) -> PaymentResult | None:
